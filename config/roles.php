@@ -47,12 +47,14 @@ return [
     |--------------------------------------------------------------------------
     */
     'seed' => [
-        'roles' => ['super-admin', 'admin', 'manager', 'user'],
-        'permissions' => [
-            // 'users.view','users.create','users.update','users.delete'
+        'roles' => ['manager'], // additional roles to seed
+        'permission_groups' => [
+            'users' => ['list', 'create', 'update', 'delete', 'restore', 'force-delete'],
+            'roles' => ['list','create','update','delete' , 'restore', 'force-delete'],
         ],
         'map' => [
-            // 'super-admin' => ['*']
+            'super-admin' => ['*'],
+            'admin' => ['users.*'],
         ],
     ],
 ];

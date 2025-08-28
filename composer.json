@@ -10,9 +10,16 @@
     "spatie/laravel-permission": "^6.0",
     "spatie/laravel-package-tools": "^1.16"
   },
+  "suggest": {
+    "stancl/tenancy": "Needed only when using multi-database tenancy mode"
+  },
   "autoload": {
-    "psr-4": { "Enadabuzaid\\LaravelRoles\\": "src/" },
-    "files": ["src/Support/helpers.php"]
+    "psr-4": { 
+      "Enadabuzaid\\LaravelRoles\\": "src/",
+      "Enadabuzaid\\LaravelRoles\\Database\\Seeders\\": "database/seeders/"
+    },
+    "files": ["src/Support/helpers.php"],
+    "classmap": ["database/seeders/"]
   },
   "extra": {
     "laravel": {
