@@ -33,7 +33,6 @@ class ComposerStaticInit4c0ce669c029a15bc5d98e3b47705d53
         '37a3dc5111fe8f707ab4c132ef1dbc62' => __DIR__ . '/..' . '/guzzlehttp/guzzle/src/functions_include.php',
         'e39a8b23c42d4e1452234d762b03835a' => __DIR__ . '/..' . '/ramsey/uuid/src/functions.php',
         '377b22b161c09ed6e5152de788ca020a' => __DIR__ . '/..' . '/spatie/laravel-permission/src/helpers.php',
-        '07661672cbf897269bf5032d55fa2321' => __DIR__ . '/../..' . '/src/Support/helpers.php',
     );
 
     public static $prefixLengthsPsr4 = array (
@@ -124,6 +123,7 @@ class ComposerStaticInit4c0ce669c029a15bc5d98e3b47705d53
         ),
         'E' => 
         array (
+            'Enadabuzaid\\LaravelRoles\\Database\\Seeders\\' => 42,
             'Enadabuzaid\\LaravelRoles\\' => 25,
         ),
         'D' => 
@@ -378,6 +378,10 @@ class ComposerStaticInit4c0ce669c029a15bc5d98e3b47705d53
         array (
             0 => __DIR__ . '/..' . '/fruitcake/php-cors/src',
         ),
+        'Enadabuzaid\\LaravelRoles\\Database\\Seeders\\' => 
+        array (
+            0 => __DIR__ . '/../..' . '/database/seeders',
+        ),
         'Enadabuzaid\\LaravelRoles\\' => 
         array (
             0 => __DIR__ . '/../..' . '/src',
@@ -413,6 +417,7 @@ class ComposerStaticInit4c0ce669c029a15bc5d98e3b47705d53
         'DateObjectError' => __DIR__ . '/..' . '/symfony/polyfill-php83/Resources/stubs/DateObjectError.php',
         'DateRangeError' => __DIR__ . '/..' . '/symfony/polyfill-php83/Resources/stubs/DateRangeError.php',
         'Deprecated' => __DIR__ . '/..' . '/symfony/polyfill-php84/Resources/stubs/Deprecated.php',
+        'Enadabuzaid\\LaravelRoles\\Database\\Seeders\\RolesSeeder' => __DIR__ . '/../..' . '/database/seeders/RolesSeeder.php',
         'NoDiscard' => __DIR__ . '/..' . '/symfony/polyfill-php85/Resources/stubs/NoDiscard.php',
         'Normalizer' => __DIR__ . '/..' . '/symfony/polyfill-intl-normalizer/Resources/stubs/Normalizer.php',
         'Override' => __DIR__ . '/..' . '/symfony/polyfill-php83/Resources/stubs/Override.php',
