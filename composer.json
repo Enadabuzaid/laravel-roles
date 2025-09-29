@@ -1,5 +1,5 @@
 {
-  "name": "enadabuzaid/laravel-roles",
+  "name": "enadstack/laravel-roles",
   "description": "Reusable Roles & Permissions (single or multi-tenant teams) on spatie/laravel-permission",
   "type": "library",
   "license": "MIT",
