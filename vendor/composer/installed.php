@@ -427,15 +427,6 @@
                 0 => '4.9.1',
             ),
         ),
-        'spatie/laravel-package-tools' => array(
-            'pretty_version' => '1.92.7',
-            'version' => '1.92.7.0',
-            'reference' => 'f09a799850b1ed765103a4f0b4355006360c49a5',
-            'type' => 'library',
-            'install_path' => __DIR__ . '/../spatie/laravel-package-tools',
-            'aliases' => array(),
-            'dev_requirement' => false,
-        ),
         'spatie/laravel-permission' => array(
             'pretty_version' => '6.21.0',
             'version' => '6.21.0.0',

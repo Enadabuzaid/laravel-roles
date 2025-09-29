@@ -71,7 +71,6 @@ class ComposerStaticInit4c0ce669c029a15bc5d98e3b47705d53
             'Symfony\\Component\\Console\\' => 26,
             'Symfony\\Component\\Clock\\' => 24,
             'Spatie\\Permission\\' => 18,
-            'Spatie\\LaravelPackageTools\\' => 27,
         ),
         'R' => 
         array (
@@ -123,8 +122,8 @@ class ComposerStaticInit4c0ce669c029a15bc5d98e3b47705d53
         ),
         'E' => 
         array (
-            'Enadabuzaid\\LaravelRoles\\Database\\Seeders\\' => 42,
-            'Enadabuzaid\\LaravelRoles\\' => 25,
+            'Enadstack\\LaravelRoles\\Database\\Seeders\\' => 40,
+            'Enadstack\\LaravelRoles\\' => 23,
         ),
         'D' => 
         array (
@@ -250,10 +249,6 @@ class ComposerStaticInit4c0ce669c029a15bc5d98e3b47705d53
         array (
             0 => __DIR__ . '/..' . '/spatie/laravel-permission/src',
         ),
-        'Spatie\\LaravelPackageTools\\' => 
-        array (
-            0 => __DIR__ . '/..' . '/spatie/laravel-package-tools/src',
-        ),
         'Ramsey\\Uuid\\' => 
         array (
             0 => __DIR__ . '/..' . '/ramsey/uuid/src',
@@ -378,11 +373,11 @@ class ComposerStaticInit4c0ce669c029a15bc5d98e3b47705d53
         array (
             0 => __DIR__ . '/..' . '/fruitcake/php-cors/src',
         ),
-        'Enadabuzaid\\LaravelRoles\\Database\\Seeders\\' => 
+        'Enadstack\\LaravelRoles\\Database\\Seeders\\' => 
         array (
             0 => __DIR__ . '/../..' . '/database/seeders',
         ),
-        'Enadabuzaid\\LaravelRoles\\' => 
+        'Enadstack\\LaravelRoles\\' => 
         array (
             0 => __DIR__ . '/../..' . '/src',
         ),
