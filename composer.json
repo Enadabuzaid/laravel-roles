@@ -18,7 +18,6 @@
       "Enadabuzaid\\LaravelRoles\\": "src/",
       "Enadabuzaid\\LaravelRoles\\Database\\Seeders\\": "database/seeders/"
     },
-    "files": ["src/Support/helpers.php"],
     "classmap": ["database/seeders/"]
   },
   "extra": {

@@ -27,7 +27,8 @@ class InstallCommand extends Command
 
         // 1) Publish vendor files
         $this->components->info('Publishing Spatie Permission config & migrations…');
-        $this->callSilent('vendor:publish', ['--provider' => 'Spatie\\Permission\\PermissionServiceProvider']);
+        $this->callSilently('vendor:publish', ['--provider' => 'Spatie\\Permission\\PermissionServiceProvider']);
+
 
         $this->components->info('Publishing roles.php config…');
         // Tag comes from package-tools: name('laravel-roles')->hasConfigFile('roles')
@@ -162,7 +163,7 @@ class InstallCommand extends Command
                 $this->line("Seeding into tenant_id: {$seedTenantId}");
             }
             $this->components->info('Seeding roles & permissions…');
-            $this->call('db:seed', ['Enadabuzaid\\LaravelRoles\\Database\\Seeders\\RolesSeeder']);
+            $this->call('db:seed', ['--class' => \Enadabuzaid\LaravelRoles\Database\Seeders\RolesSeeder::class]);
         }
 
         $this->components->info('laravel-roles installed ✅');
