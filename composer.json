@@ -11,6 +11,9 @@
   "suggest": {
     "stancl/tenancy": "Needed only when using multi-database tenancy mode"
   },
+  "require-dev": {
+    "orchestra/testbench": "^10.0"
+  },
   "autoload": {
     "psr-4": { 
       "Enadstack\\LaravelRoles\\": "src/",
