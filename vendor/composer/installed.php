@@ -1,6 +1,6 @@
 <?php return array(
     'root' => array(
-        'name' => 'enadabuzaid/laravel-roles',
+        'name' => 'enadstack/laravel-roles',
         'pretty_version' => '0.1.0',
         'version' => '0.1.0.0',
         'reference' => null,
@@ -37,7 +37,7 @@
             'aliases' => array(),
             'dev_requirement' => false,
         ),
-        'enadabuzaid/laravel-roles' => array(
+        'enadstack/laravel-roles' => array(
             'pretty_version' => '0.1.0',
             'version' => '0.1.0.0',
             'reference' => null,

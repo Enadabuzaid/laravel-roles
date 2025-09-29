@@ -3,7 +3,6 @@
   "description": "Reusable Roles & Permissions (single or multi-tenant teams) on spatie/laravel-permission",
   "type": "library",
   "license": "MIT",
-  "version": "0.1.0",
   "require": {
     "php": ">=8.2",
     "illuminate/support": "^12.0",
