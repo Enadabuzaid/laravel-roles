@@ -1,6 +1,6 @@
 <?php
 
-namespace Enadabuzaid\LaravelRoles\Commands;
+namespace Enadstack\LaravelRoles\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Filesystem\Filesystem;
