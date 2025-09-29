@@ -1,6 +1,6 @@
 <?php
 
-namespace Enadabuzaid\LaravelRoles\Models;
+namespace Enadstack\LaravelRoles\Models;
 
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Permission\Models\Role as SpatieRole;
