@@ -9,11 +9,21 @@ class Permission extends SpatiePermission
 {
     use SoftDeletes;
 
-    protected $casts = [
-        'label'        => 'array', // {"en":"Create user","ar":"إضافة مستخدم"}
-        'description'  => 'array',
-        'group_label'  => 'array', // {"en":"Users","ar":"المستخدمون"}
-    ];
+    public function __construct(array $attributes = [])
+    {
+        parent::__construct($attributes);
+        if (config('roles.i18n.enabled')) {
+            $this->casts = [
+                'label'        => 'array',
+                'description'  => 'array',
+                'group_label'  => 'array',
+            ];
+        } else {
+            $this->casts = [
+                'description'  => 'string',
+            ];
+        }
+    }
 
     public static function findByName(string $name, $guardName = null): self
     {

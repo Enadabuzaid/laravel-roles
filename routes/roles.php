@@ -8,7 +8,7 @@ use Enadstack\LaravelRoles\Http\Controllers\PermissionController;
 $guard = config('roles.guard', config('auth.defaults.guard', 'web'));
 
 // Example: protect with the configured guard
-Route::middleware(['web', 'auth:' . $guard])
+Route::middleware(config('roles.routes.middleware', ['api']))
     ->prefix(config('roles.routes.prefix', 'admin/acl'))
     ->name('roles.')
     ->group(function () {
@@ -26,6 +26,6 @@ Route::middleware(['web', 'auth:' . $guard])
         Route::put('/permissions/{permission}', [PermissionController::class, 'update'])->name('permissions.update');
         Route::delete('/permissions/{permission}', [PermissionController::class, 'destroy'])->name('permissions.destroy');
 
-        // Utility: list grouped permissions for UI
+        // Utility: grouped permissions
         Route::get('/permission-groups', [PermissionController::class, 'groups'])->name('permissions.groups');
     });

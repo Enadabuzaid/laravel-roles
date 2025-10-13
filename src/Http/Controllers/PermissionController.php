@@ -5,12 +5,47 @@ namespace Enadstack\LaravelRoles\Http\Controllers;
 use Illuminate\Routing\Controller;
 use Enadstack\LaravelRoles\Models\Permission;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
+
 
 class PermissionController extends Controller
 {
-    public function index() {
-        return Permission::query()->latest('id')->paginate(20);
+    public function index(Request $request)
+    {
+        $q       = trim((string) $request->query('q', ''));
+        $group   = $request->query('group');
+        $sort    = in_array($request->query('sort'), ['id','name','group','created_at'], true) ? $request->query('sort') : 'id';
+        $dir     = strtolower($request->query('dir')) === 'asc' ? 'asc' : 'desc';
+        $perPage = (int) $request->query('per_page', 20);
+        $perPage = ($perPage > 0 && $perPage <= 100) ? $perPage : 20;
+        $guard   = $request->query('guard', config('roles.guard', config('auth.defaults.guard')));
+
+        $query = Permission::query()->where('guard_name', $guard);
+
+        if ($q !== '') {
+            $query->where(function ($sub) use ($q) {
+                $sub->where('name', 'like', "%{$q}%");
+                if (Schema::hasColumn('permissions', 'description')) {
+                    $sub->orWhere('description', 'like', "%{$q}%");
+                }
+                if (Schema::hasColumn('permissions', 'label')) {
+                    $sub->orWhere('label', 'like', "%{$q}%");
+                }
+                if (Schema::hasColumn('permissions', 'group')) {
+                    $sub->orWhere('group', 'like', "%{$q}%");
+                }
+            });
+        }
+
+        if ($group && Schema::hasColumn('permissions', 'group')) {
+            $query->where('group', $group);
+        }
+
+        $query->orderBy($sort, $dir);
+
+        return $query->paginate($perPage);
     }
+
 
     public function store(Request $request) {
         $data = $request->validate([
