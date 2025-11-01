@@ -12,20 +12,44 @@ Route::middleware(config('roles.routes.middleware', ['api']))
     ->prefix(config('roles.routes.prefix', 'admin/acl'))
     ->name('roles.')
     ->group(function () {
-        // Roles
+        // Roles - CRUD
         Route::get('/roles', [RoleController::class, 'index'])->name('index');
         Route::post('/roles', [RoleController::class, 'store'])->name('store');
         Route::get('/roles/{role}', [RoleController::class, 'show'])->name('show');
         Route::put('/roles/{role}', [RoleController::class, 'update'])->name('update');
         Route::delete('/roles/{role}', [RoleController::class, 'destroy'])->name('destroy');
 
-        // Permissions
+        // Roles - Advanced operations
+        Route::post('/roles/{id}/restore', [RoleController::class, 'restore'])->name('restore');
+        Route::delete('/roles/{role}/force', [RoleController::class, 'forceDelete'])->name('force-delete');
+        Route::post('/roles/bulk-delete', [RoleController::class, 'bulkDelete'])->name('bulk-delete');
+        Route::post('/roles/bulk-restore', [RoleController::class, 'bulkRestore'])->name('bulk-restore');
+        
+        // Roles - Data endpoints
+        Route::get('/roles-recent', [RoleController::class, 'recent'])->name('recent');
+        Route::get('/roles-stats', [RoleController::class, 'stats'])->name('stats');
+        
+        // Roles - Permission assignment
+        Route::post('/roles/{role}/permissions', [RoleController::class, 'assignPermissions'])->name('assign-permissions');
+        Route::get('/roles/{id}/permissions', [RoleController::class, 'permissions'])->name('permissions');
+        Route::get('/roles-permissions', [RoleController::class, 'permissionsGroupedByRole'])->name('permissions-grouped');
+
+        // Permissions - CRUD
         Route::get('/permissions', [PermissionController::class, 'index'])->name('permissions.index');
         Route::post('/permissions', [PermissionController::class, 'store'])->name('permissions.store');
         Route::get('/permissions/{permission}', [PermissionController::class, 'show'])->name('permissions.show');
         Route::put('/permissions/{permission}', [PermissionController::class, 'update'])->name('permissions.update');
         Route::delete('/permissions/{permission}', [PermissionController::class, 'destroy'])->name('permissions.destroy');
 
+        // Permissions - Advanced operations
+        Route::post('/permissions/{id}/restore', [PermissionController::class, 'restore'])->name('permissions.restore');
+        Route::delete('/permissions/{permission}/force', [PermissionController::class, 'forceDelete'])->name('permissions.force-delete');
+        
+        // Permissions - Data endpoints
+        Route::get('/permissions-recent', [PermissionController::class, 'recent'])->name('permissions.recent');
+        Route::get('/permissions-stats', [PermissionController::class, 'stats'])->name('permissions.stats');
+        Route::get('/permissions-matrix', [PermissionController::class, 'matrix'])->name('permissions.matrix');
+        
         // Utility: grouped permissions
         Route::get('/permission-groups', [PermissionController::class, 'groups'])->name('permissions.groups');
     });
