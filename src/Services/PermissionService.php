@@ -39,9 +39,12 @@ class PermissionService
             $query->where('group', $filters['group']);
         }
 
-        // Sorting
-        $sort = $filters['sort'] ?? 'id';
-        $dir = $filters['direction'] ?? 'desc';
+        // Sorting with whitelist validation
+        $allowedSorts = ['id', 'name', 'group', 'guard_name', 'created_at', 'updated_at'];
+        $sort = in_array($filters['sort'] ?? 'id', $allowedSorts, true) 
+            ? $filters['sort'] ?? 'id' 
+            : 'id';
+        $dir = strtolower($filters['direction'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
         $query->orderBy($sort, $dir);
 
         return $query->paginate($perPage);
@@ -151,11 +154,24 @@ class PermissionService
      */
     public function getGroupedPermissions(): Collection
     {
-        return Permission::query()
-            ->select(['group', 'group_label', 'name', 'label', 'id'])
-            ->orderBy('group')
-            ->orderBy('name')
-            ->get()
+        $selectFields = ['name', 'label', 'id'];
+        
+        if (Schema::hasColumn('permissions', 'group')) {
+            $selectFields[] = 'group';
+        }
+        if (Schema::hasColumn('permissions', 'group_label')) {
+            $selectFields[] = 'group_label';
+        }
+        
+        $query = Permission::query()->select($selectFields);
+        
+        if (Schema::hasColumn('permissions', 'group')) {
+            $query->orderBy('group')->orderBy('name');
+        } else {
+            $query->orderBy('name');
+        }
+        
+        return $query->get()
             ->groupBy('group')
             ->map(fn($items) => [
                 'label' => optional($items->first())->group_label,
@@ -175,6 +191,12 @@ class PermissionService
         $roles = Role::with('permissions')->get();
         $permissions = Permission::all();
 
+        // Create a lookup map for faster permission checks (O(1) instead of O(n))
+        $rolePermissionsMap = [];
+        foreach ($roles as $role) {
+            $rolePermissionsMap[$role->id] = $role->permissions->pluck('id')->flip()->toArray();
+        }
+
         $matrix = [];
         
         foreach ($permissions as $permission) {
@@ -189,7 +211,7 @@ class PermissionService
             foreach ($roles as $role) {
                 $permissionRow['roles'][$role->name] = [
                     'role_id' => $role->id,
-                    'has_permission' => $role->permissions->contains('id', $permission->id)
+                    'has_permission' => isset($rolePermissionsMap[$role->id][$permission->id])
                 ];
             }
 

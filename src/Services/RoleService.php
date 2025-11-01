@@ -29,9 +29,12 @@ class RoleService
             $query->where('guard_name', $filters['guard']);
         }
 
-        // Sorting
-        $sort = $filters['sort'] ?? 'id';
-        $dir = $filters['direction'] ?? 'desc';
+        // Sorting with whitelist validation
+        $allowedSorts = ['id', 'name', 'guard_name', 'created_at', 'updated_at'];
+        $sort = in_array($filters['sort'] ?? 'id', $allowedSorts, true) 
+            ? $filters['sort'] ?? 'id' 
+            : 'id';
+        $dir = strtolower($filters['direction'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
         $query->orderBy($sort, $dir);
 
         return $query->paginate($perPage);
@@ -100,19 +103,25 @@ class RoleService
     {
         $results = ['success' => [], 'failed' => []];
 
-        foreach ($ids as $id) {
-            try {
-                $role = Role::find($id);
-                if ($role) {
-                    $role->delete();
-                    $results['success'][] = $id;
-                } else {
+        DB::transaction(function () use ($ids, &$results) {
+            $roles = Role::whereIn('id', $ids)->get();
+            $foundIds = $roles->pluck('id')->toArray();
+            
+            foreach ($ids as $id) {
+                if (!in_array($id, $foundIds)) {
                     $results['failed'][] = ['id' => $id, 'reason' => 'Not found'];
                 }
-            } catch (\Exception $e) {
-                $results['failed'][] = ['id' => $id, 'reason' => $e->getMessage()];
             }
-        }
+            
+            foreach ($roles as $role) {
+                try {
+                    $role->delete();
+                    $results['success'][] = $role->id;
+                } catch (\Exception $e) {
+                    $results['failed'][] = ['id' => $role->id, 'reason' => $e->getMessage()];
+                }
+            }
+        });
 
         return $results;
     }
@@ -124,19 +133,29 @@ class RoleService
     {
         $results = ['success' => [], 'failed' => []];
 
-        foreach ($ids as $id) {
-            try {
-                $role = Role::withTrashed()->find($id);
-                if ($role && $role->trashed()) {
-                    $role->restore();
-                    $results['success'][] = $id;
-                } else {
-                    $results['failed'][] = ['id' => $id, 'reason' => 'Not found or not deleted'];
+        DB::transaction(function () use ($ids, &$results) {
+            $roles = Role::withTrashed()->whereIn('id', $ids)->get();
+            $foundIds = $roles->pluck('id')->toArray();
+            
+            foreach ($ids as $id) {
+                if (!in_array($id, $foundIds)) {
+                    $results['failed'][] = ['id' => $id, 'reason' => 'Not found'];
                 }
-            } catch (\Exception $e) {
-                $results['failed'][] = ['id' => $id, 'reason' => $e->getMessage()];
             }
-        }
+            
+            foreach ($roles as $role) {
+                try {
+                    if ($role->trashed()) {
+                        $role->restore();
+                        $results['success'][] = $role->id;
+                    } else {
+                        $results['failed'][] = ['id' => $role->id, 'reason' => 'Not deleted'];
+                    }
+                } catch (\Exception $e) {
+                    $results['failed'][] = ['id' => $role->id, 'reason' => $e->getMessage()];
+                }
+            }
+        });
 
         return $results;
     }
