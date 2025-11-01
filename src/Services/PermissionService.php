@@ -6,6 +6,7 @@ use Enadstack\LaravelRoles\Models\Permission;
 use Enadstack\LaravelRoles\Models\Role;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class PermissionService
@@ -41,9 +42,8 @@ class PermissionService
 
         // Sorting with whitelist validation
         $allowedSorts = ['id', 'name', 'group', 'guard_name', 'created_at', 'updated_at'];
-        $sort = in_array($filters['sort'] ?? 'id', $allowedSorts, true) 
-            ? $filters['sort'] ?? 'id' 
-            : 'id';
+        $requestedSort = $filters['sort'] ?? 'id';
+        $sort = in_array($requestedSort, $allowedSorts, true) ? $requestedSort : 'id';
         $dir = strtolower($filters['direction'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
         $query->orderBy($sort, $dir);
 
@@ -142,7 +142,7 @@ class PermissionService
         }
 
         return Permission::query()
-            ->selectRaw('`group`, COUNT(*) as count')
+            ->select('group', DB::raw('COUNT(*) as count'))
             ->whereNotNull('group')
             ->groupBy('group')
             ->pluck('count', 'group')
