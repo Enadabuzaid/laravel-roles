@@ -24,7 +24,8 @@ Route::middleware(config('roles.routes.middleware', ['api']))
         Route::delete('/roles/{role}/force', [RoleController::class, 'forceDelete'])->name('force-delete');
         Route::post('/roles/bulk-delete', [RoleController::class, 'bulkDelete'])->name('bulk-delete');
         Route::post('/roles/bulk-restore', [RoleController::class, 'bulkRestore'])->name('bulk-restore');
-        
+        Route::post('/roles/bulk-force-delete', [RoleController::class, 'bulkForceDelete'])->name('bulk-force-delete');
+
         // Roles - Data endpoints
         Route::get('/roles-recent', [RoleController::class, 'recent'])->name('recent');
         Route::get('/roles-stats', [RoleController::class, 'stats'])->name('stats');
@@ -44,7 +45,8 @@ Route::middleware(config('roles.routes.middleware', ['api']))
         // Permissions - Advanced operations
         Route::post('/permissions/{id}/restore', [PermissionController::class, 'restore'])->name('permissions.restore');
         Route::delete('/permissions/{permission}/force', [PermissionController::class, 'forceDelete'])->name('permissions.force-delete');
-        
+        Route::post('/permissions/bulk-force-delete', [PermissionController::class, 'bulkForceDelete'])->name('permissions.bulk-force-delete');
+
         // Permissions - Data endpoints
         Route::get('/permissions-recent', [PermissionController::class, 'recent'])->name('permissions.recent');
         Route::get('/permissions-stats', [PermissionController::class, 'stats'])->name('permissions.stats');
@@ -52,4 +54,16 @@ Route::middleware(config('roles.routes.middleware', ['api']))
         
         // Utility: grouped permissions
         Route::get('/permission-groups', [PermissionController::class, 'groups'])->name('permissions.groups');
+
+        // Optional: endpoints for current user's ACL snapshot
+        if (config('roles.routes.expose_me')) {
+            Route::get('/me/roles', [\Enadstack\LaravelRoles\Http\Controllers\SelfAclController::class, 'roles'])->name('me.roles');
+            Route::get('/me/permissions', [\Enadstack\LaravelRoles\Http\Controllers\SelfAclController::class, 'permissions'])->name('me.permissions');
+            Route::get('/me/abilities', [\Enadstack\LaravelRoles\Http\Controllers\SelfAclController::class, 'abilities'])->name('me.abilities');
+        }
+
+        // Roles - Fine-grained permission ops and cloning
+        Route::post('/roles/{role}/permission', [RoleController::class, 'addPermission'])->name('permission.attach');
+        Route::delete('/roles/{role}/permission', [RoleController::class, 'removePermission'])->name('permission.detach');
+        Route::post('/roles/{role}/clone', [RoleController::class, 'clone'])->name('clone');
     });

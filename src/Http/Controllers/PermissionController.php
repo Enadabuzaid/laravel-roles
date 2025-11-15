@@ -5,6 +5,11 @@ namespace Enadstack\LaravelRoles\Http\Controllers;
 use Illuminate\Routing\Controller;
 use Enadstack\LaravelRoles\Models\Permission;
 use Enadstack\LaravelRoles\Services\PermissionService;
+use Enadstack\LaravelRoles\Http\Requests\PermissionStoreRequest;
+use Enadstack\LaravelRoles\Http\Requests\PermissionUpdateRequest;
+use Enadstack\LaravelRoles\Http\Requests\BulkOperationRequest;
+use Enadstack\LaravelRoles\Http\Resources\PermissionResource;
+use Enadstack\LaravelRoles\Http\Resources\PermissionMatrixResource;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
@@ -25,49 +30,34 @@ class PermissionController extends Controller
             'guard' => $request->query('guard', config('roles.guard', config('auth.defaults.guard'))),
             'sort' => in_array($request->query('sort'), ['id','name','group','created_at'], true) ? $request->query('sort') : 'id',
             'direction' => strtolower($request->query('dir', $request->query('direction', 'desc'))) === 'asc' ? 'asc' : 'desc',
+            'with_trashed' => $request->boolean('with_trashed'),
+            'only_trashed' => $request->boolean('only_trashed'),
         ];
         $perPage = (int) $request->query('per_page', 20);
         $perPage = ($perPage > 0 && $perPage <= 100) ? $perPage : 20;
 
-        return $this->permissionService->list($filters, $perPage);
+        return PermissionResource::collection($this->permissionService->list($filters, $perPage));
     }
 
-    public function store(Request $request)
+    public function store(PermissionStoreRequest $request)
     {
-        $data = $request->validate([
-            'name' => ['required','string','max:255'],
-            'guard_name' => ['nullable','string'],
-            'group' => ['nullable','string','max:255'],
-            'label' => ['nullable','array'],
-            'description' => ['nullable','array'],
-            'group_label' => ['nullable','array'],
-        ]);
-        
-        return $this->permissionService->create($data);
+        return new PermissionResource($this->permissionService->create($request->validated()));
     }
 
     public function show(Permission $permission)
     {
-        return $permission;
+        return new PermissionResource($permission);
     }
 
-    public function update(Request $request, Permission $permission)
+    public function update(PermissionUpdateRequest $request, Permission $permission)
     {
-        $data = $request->validate([
-            'name' => ['sometimes','string','max:255'],
-            'group' => ['nullable','string','max:255'],
-            'label' => ['nullable','array'],
-            'description' => ['nullable','array'],
-            'group_label' => ['nullable','array'],
-        ]);
-        
-        return $this->permissionService->update($permission, $data);
+        return new PermissionResource($this->permissionService->update($permission, $request->validated()));
     }
 
     public function destroy(Permission $permission)
     {
         $this->permissionService->delete($permission);
-        return response()->noContent();
+        return response()->json(['message' => 'Permission deleted successfully'], 200);
     }
 
     public function restore(Request $request, int $id): JsonResponse
@@ -87,10 +77,20 @@ class PermissionController extends Controller
         return response()->json(['message' => 'Permission permanently deleted']);
     }
 
+    public function bulkForceDelete(BulkOperationRequest $request): JsonResponse
+    {
+        $results = $this->permissionService->bulkForceDelete($request->validated()['ids']);
+
+        return response()->json([
+            'message' => 'Bulk force delete completed',
+            'results' => $results,
+        ]);
+    }
+
     public function recent(Request $request)
     {
         $limit = (int) $request->query('limit', 10);
-        return $this->permissionService->recent($limit);
+        return PermissionResource::collection($this->permissionService->recent($limit));
     }
 
     public function stats(): JsonResponse
@@ -101,11 +101,12 @@ class PermissionController extends Controller
     // helpful for UI: return groups with their permissions
     public function groups()
     {
-        return $this->permissionService->getGroupedPermissions();
+        return response()->json($this->permissionService->getGroupedPermissions());
     }
 
     public function matrix(): JsonResponse
     {
-        return response()->json($this->permissionService->getPermissionMatrix());
+        return new PermissionMatrixResource($this->permissionService->getPermissionMatrix());
     }
 }
+

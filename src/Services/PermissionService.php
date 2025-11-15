@@ -4,9 +4,12 @@ namespace Enadstack\LaravelRoles\Services;
 
 use Enadstack\LaravelRoles\Models\Permission;
 use Enadstack\LaravelRoles\Models\Role;
+use Enadstack\LaravelRoles\Events\PermissionCreated;
+use Enadstack\LaravelRoles\Events\PermissionUpdated;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 
 class PermissionService
@@ -18,6 +21,12 @@ class PermissionService
     {
         $guard = $filters['guard'] ?? config('roles.guard', config('auth.defaults.guard', 'web'));
         $query = Permission::query()->where('guard_name', $guard);
+
+        if (!empty($filters['with_trashed'])) {
+            $query->withTrashed();
+        } elseif (!empty($filters['only_trashed'])) {
+            $query->onlyTrashed();
+        }
 
         // Search filter
         if (!empty($filters['search'])) {
@@ -64,15 +73,26 @@ class PermissionService
     public function create(array $data): Permission
     {
         $data['guard_name'] = $data['guard_name'] ?? config('roles.guard', config('auth.defaults.guard', 'web'));
-        return Permission::create($data);
+        $perm = Permission::create($data);
+        $this->flushCaches();
+
+        event(new PermissionCreated($perm));
+
+        return $perm;
     }
 
+    /**
+     * Update an existing permission
     /**
      * Update an existing permission
      */
     public function update(Permission $permission, array $data): Permission
     {
         $permission->update($data);
+        $this->flushCaches();
+
+        event(new PermissionUpdated($permission));
+
         return $permission->refresh();
     }
 
@@ -81,7 +101,9 @@ class PermissionService
      */
     public function delete(Permission $permission): bool
     {
-        return $permission->delete();
+        $ok = $permission->delete();
+        $this->flushCaches();
+        return $ok;
     }
 
     /**
@@ -89,7 +111,9 @@ class PermissionService
      */
     public function forceDelete(Permission $permission): bool
     {
-        return $permission->forceDelete();
+        $ok = $permission->forceDelete();
+        $this->flushCaches();
+        return $ok;
     }
 
     /**
@@ -103,7 +127,9 @@ class PermissionService
             return false;
         }
 
-        return $permission->restore();
+        $ok = $permission->restore();
+        $this->flushCaches();
+        return $ok;
     }
 
     /**
@@ -150,81 +176,163 @@ class PermissionService
     }
 
     /**
-     * Get permissions grouped by group
+     * Get permissions grouped by group (cached)
      */
-    public function getGroupedPermissions(): Collection
+    public function getGroupedPermissions(): \Illuminate\Support\Collection
     {
-        $selectFields = ['name', 'label', 'id'];
-        
-        if (Schema::hasColumn('permissions', 'group')) {
-            $selectFields[] = 'group';
+        $cacheOn = (bool) config('roles.cache.enabled', true);
+        $ttl = (int) config('roles.cache.ttl', 300);
+        $key = config('roles.cache.keys.grouped_permissions', 'laravel_roles.grouped_permissions');
+
+        $compute = function () {
+            $selectFields = ['name', 'id'];
+
+            // Only select label if i18n is enabled and column exists
+            if (Schema::hasColumn('permissions', 'label')) {
+                $selectFields[] = 'label';
+            }
+
+            if (Schema::hasColumn('permissions', 'group')) {
+                $selectFields[] = 'group';
+            }
+            if (Schema::hasColumn('permissions', 'group_label')) {
+                $selectFields[] = 'group_label';
+            }
+
+            $query = Permission::query()->select($selectFields);
+
+            if (Schema::hasColumn('permissions', 'group')) {
+                $query->orderBy('group')->orderBy('name');
+            } else {
+                $query->orderBy('name');
+            }
+
+            return $query->get()
+                ->groupBy('group')
+                ->map(fn($items) => [
+                    'label' => optional($items->first())->group_label ?? null,
+                    'permissions' => $items->map(fn($p) => [
+                        'id' => $p->id,
+                        'name' => $p->name,
+                        'label' => $p->label ?? null
+                    ])->values()
+                ]);
+        };
+
+        if (! $cacheOn) {
+            return $compute();
         }
-        if (Schema::hasColumn('permissions', 'group_label')) {
-            $selectFields[] = 'group_label';
+
+        $store = Cache::getStore();
+        if (method_exists($store, 'tags')) {
+            return Cache::tags(['laravel_roles'])->remember($key, $ttl, $compute);
         }
-        
-        $query = Permission::query()->select($selectFields);
-        
-        if (Schema::hasColumn('permissions', 'group')) {
-            $query->orderBy('group')->orderBy('name');
-        } else {
-            $query->orderBy('name');
-        }
-        
-        return $query->get()
-            ->groupBy('group')
-            ->map(fn($items) => [
-                'label' => optional($items->first())->group_label,
-                'permissions' => $items->map(fn($p) => [
-                    'id' => $p->id,
-                    'name' => $p->name, 
-                    'label' => $p->label
-                ])->values()
-            ]);
+        return Cache::remember($key, $ttl, $compute);
     }
 
     /**
-     * Generate permission matrix (roles x permissions)
+     * Generate permission matrix (roles x permissions) (cached)
      */
     public function getPermissionMatrix(): array
     {
-        $roles = Role::with('permissions')->get();
-        $permissions = Permission::all();
+        $cacheOn = (bool) config('roles.cache.enabled', true);
+        $ttl = (int) config('roles.cache.ttl', 300);
+        $key = config('roles.cache.keys.permission_matrix', 'laravel_roles.permission_matrix');
 
-        // Create a lookup map for faster permission checks (O(1) instead of O(n))
-        $rolePermissionsMap = [];
-        foreach ($roles as $role) {
-            $rolePermissionsMap[$role->id] = $role->permissions->pluck('id')->flip()->toArray();
-        }
+        $compute = function () {
+            $roles = Role::with('permissions')->get();
+            $permissions = Permission::all();
 
-        $matrix = [];
-        
-        foreach ($permissions as $permission) {
-            $permissionRow = [
-                'permission_id' => $permission->id,
-                'permission_name' => $permission->name,
-                'permission_label' => $permission->label ?? null,
-                'permission_group' => $permission->group ?? null,
-                'roles' => []
-            ];
-
+            // Create a lookup map for faster permission checks (O(1) instead of O(n))
+            $rolePermissionsMap = [];
             foreach ($roles as $role) {
-                $permissionRow['roles'][$role->name] = [
-                    'role_id' => $role->id,
-                    'has_permission' => isset($rolePermissionsMap[$role->id][$permission->id])
-                ];
+                $rolePermissionsMap[$role->id] = $role->permissions->pluck('id')->flip()->toArray();
             }
 
-            $matrix[] = $permissionRow;
+            $matrix = [];
+
+            foreach ($permissions as $permission) {
+                $permissionRow = [
+                    'permission_id' => $permission->id,
+                    'permission_name' => $permission->name,
+                    'permission_label' => $permission->label ?? null,
+                    'permission_group' => $permission->group ?? null,
+                    'roles' => []
+                ];
+
+                foreach ($roles as $role) {
+                    $permissionRow['roles'][$role->name] = [
+                        'role_id' => $role->id,
+                        'has_permission' => isset($rolePermissionsMap[$role->id][$permission->id])
+                    ];
+                }
+
+                $matrix[] = $permissionRow;
+            }
+
+            return [
+                'roles' => $roles->map(fn($r) => [
+                    'id' => $r->id,
+                    'name' => $r->name,
+                    'label' => $r->label ?? null
+                ])->values()->toArray(),
+                'matrix' => $matrix
+            ];
+        };
+
+        if (! $cacheOn) {
+            return $compute();
         }
 
-        return [
-            'roles' => $roles->map(fn($r) => [
-                'id' => $r->id,
-                'name' => $r->name,
-                'label' => $r->label ?? null
-            ])->values()->toArray(),
-            'matrix' => $matrix
-        ];
+        $store = Cache::getStore();
+        if (method_exists($store, 'tags')) {
+            return Cache::tags(['laravel_roles'])->remember($key, $ttl, $compute);
+        }
+        return Cache::remember($key, $ttl, $compute);
+    }
+
+    /**
+     * Bulk force delete permissions
+     */
+    public function bulkForceDelete(array $ids): array
+    {
+        $results = ['success' => [], 'failed' => []];
+
+        DB::transaction(function () use ($ids, &$results) {
+            $perms = Permission::withTrashed()->whereIn('id', $ids)->get();
+            $found = $perms->pluck('id')->all();
+
+            foreach ($ids as $id) {
+                if (! in_array($id, $found, true)) {
+                    $results['failed'][] = ['id' => $id, 'reason' => 'Not found'];
+                }
+            }
+
+            foreach ($perms as $perm) {
+                try {
+                    $perm->forceDelete();
+                    $results['success'][] = $perm->id;
+                } catch (\Throwable $e) {
+                    $results['failed'][] = ['id' => $perm->id, 'reason' => $e->getMessage()];
+                }
+            }
+        });
+
+        $this->flushCaches();
+        return $results;
+    }
+
+    /**
+     * Flush package caches
+     */
+    protected function flushCaches(): void
+    {
+        $store = Cache::getStore();
+        if (method_exists($store, 'tags')) {
+            Cache::tags(['laravel_roles'])->flush();
+        } else {
+            Cache::forget(config('roles.cache.keys.grouped_permissions', 'laravel_roles.grouped_permissions'));
+            Cache::forget(config('roles.cache.keys.permission_matrix', 'laravel_roles.permission_matrix'));
+        }
     }
 }

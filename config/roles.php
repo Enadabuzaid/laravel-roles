@@ -1,7 +1,6 @@
 <?php
 
 return [
-
     /*
     |--------------------------------------------------------------------------
     | i18n (Languages)
@@ -46,6 +45,25 @@ return [
         'prefix' => 'admin/acl', // acl : Access Control List
         'middleware' => ['api', 'auth:sanctum'], // add your 'is_admin' middleware too if needed
         'guard' => env('ROLES_GUARD', 'web'), // guard for the routes
+        // Expose handy endpoints for the authenticated user's roles/permissions
+        'expose_me' => true,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Cache
+    |--------------------------------------------------------------------------
+    |
+    | Cache heavy computations like grouped permissions and permission matrix.
+    | If your cache driver supports tags, they will be used automatically.
+    */
+    'cache' => [
+        'enabled' => true,
+        'ttl' => 300, // seconds
+        'keys' => [
+            'grouped_permissions' => 'laravel_roles.grouped_permissions',
+            'permission_matrix' => 'laravel_roles.permission_matrix',
+        ],
     ],
 
     /*

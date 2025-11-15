@@ -4,25 +4,45 @@ namespace Enadstack\LaravelRoles\Models;
 
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Permission\Models\Permission as SpatiePermission;
+use Illuminate\Support\Facades\Cache;
 
 class Permission extends SpatiePermission
 {
     use SoftDeletes;
 
-    public function __construct(array $attributes = [])
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
     {
-        parent::__construct($attributes);
-        if (config('roles.i18n.enabled')) {
-            $this->casts = [
-                'label'        => 'array',
-                'description'  => 'array',
-                'group_label'  => 'array',
-            ];
-        } else {
-            $this->casts = [
-                'description'  => 'string',
-            ];
+        $casts = parent::casts();
+
+        if (config('roles.i18n.enabled', false)) {
+            $casts['label'] = 'array';
+            $casts['description'] = 'array';
+            $casts['group_label'] = 'array';
         }
+
+        return $casts;
+    }
+
+    protected static function booted(): void
+    {
+        $flush = function () {
+            $store = Cache::getStore();
+            if (method_exists($store, 'tags')) {
+                Cache::tags(['laravel_roles'])->flush();
+            } else {
+                Cache::forget(config('roles.cache.keys.grouped_permissions', 'laravel_roles.grouped_permissions'));
+                Cache::forget(config('roles.cache.keys.permission_matrix', 'laravel_roles.permission_matrix'));
+            }
+        };
+
+        static::saved($flush);
+        static::deleted($flush);
+        static::restored($flush);
     }
 
     public static function findByName(string $name, $guardName = null): self
