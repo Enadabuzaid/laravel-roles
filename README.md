@@ -882,9 +882,9 @@ This package is open-source software licensed under the [MIT license](LICENSE).
 
 ## 📧 Support
 
-- **Issues:** [GitHub Issues](https://github.com/yourusername/laravel-roles/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/yourusername/laravel-roles/discussions)
-- **Email:** your.email@example.com
+- **Issues:** [GitHub Issues](https://github.com/Enadabuzaid/laravel-roles/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/Enadabuzaid/laravel-roles/discussions)
+- **Email:** enad.abuzaid15@gmail.com
 
 ---
 
@@ -894,7 +894,7 @@ If you find this package helpful, please consider giving it a star on GitHub!
 
 ---
 
-**Version:** 1.0.0  
+**Version:** 1.1.0  
 **Status:** Production Ready ✅  
 **Tests:** 32/32 Passing (100%) 🎊
 
