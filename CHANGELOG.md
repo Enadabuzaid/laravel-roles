@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2025-11-15
+
+### Fixed - Critical Config File Bug
+- **CRITICAL FIX**: Config file `config/roles.php` was being overwritten with minimal structure
+  - Fixed `InstallCommand::writeConfigRoles()` method using `var_export()` 
+  - Now preserves original config file structure and comments
+  - Uses regex replacements to update only specific configuration values
+  - Prevents loss of comments, formatting, and default values
+
+### Added
+- Config existence check in install command to prevent accidental overwrites
+- Warning prompt when attempting to reconfigure existing installation
+- Upgrade instructions section in README
+- Clear documentation about when to run `php artisan roles:install`
+
+### Changed
+- Install command now asks for confirmation before reconfiguring existing setup
+- README now clearly states `roles:install` should only be run on initial installation
+- Added troubleshooting steps for accidental config overwrites
+
+### Important
+⚠️ **This release fixes a critical bug** where running `composer update` could result in users accidentally re-running the install command and getting a corrupted `config/roles.php` file with only `'provider' => null`.
+
+**Upgrade from v1.1.0:**
+```bash
+composer update enadstack/laravel-roles
+# Your config/roles.php is now safe and preserved!
+```
+
 ## [1.1.0] - 2025-11-15
 
 ### Added - Documentation Enhancement Release
