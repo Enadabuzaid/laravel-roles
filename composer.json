@@ -1,5 +1,6 @@
 {
   "name": "enadstack/laravel-roles",
+  "version": "1.1.0",
   "description": "Reusable Roles & Permissions (single or multi-tenant teams) on spatie/laravel-permission",
   "type": "library",
   "license": "MIT",
