@@ -13,6 +13,7 @@ class SyncCommand extends Command
 {
     protected $signature = 'roles:sync
         {--guard= : Override guard (default from config)}
+        {--team-id= : When team_scoped, run sync against a specific tenant/team id}
         {--no-map : Seed roles/permissions but skip mapping}
         {--prune : Remove DB permissions not present in config}
         {--dry-run : Show what would change without writing}
@@ -24,6 +25,14 @@ class SyncCommand extends Command
     {
         $guard = $this->option('guard') ?: config('roles.guard', 'web');
         $dry   = (bool) $this->option('dry-run');
+
+        // Team/Tenancy context (Spatie teams)
+        $teamId = $this->option('team-id');
+        $isTeamScoped = config('roles.tenancy.mode') === 'team_scoped';
+        if ($isTeamScoped && $teamId !== null) {
+            app()->instance('permission.team_id', $teamId);
+            $this->components->info("Syncing under team_id={$teamId}");
+        }
 
         // 1) Seed/create/update (idempotent) using your existing logic
         if ($dry) {
@@ -83,13 +92,32 @@ class SyncCommand extends Command
         }
 
         foreach ($toDelete as $name) {
-            /** @var Permission|null $perm */
-            $perm = Permission::where('guard_name', $guard)->where('name', $name)->first();
+            $permissionClass = config('permission.models.permission', Permission::class);
+            $perm = $permissionClass::where('guard_name', $guard)->where('name', $name)->first();
             if (! $perm) continue;
 
-            // detach from roles then delete
-            $perm->roles()->detach();
-            $perm->delete();
+            // Try to delete with relationship detach first
+            try {
+                if (method_exists($perm, 'roles')) {
+                    $perm->roles()->detach();
+                }
+                $perm->delete();
+            } catch (\Throwable $e) {
+                // If normal delete fails (relationship issues), try force delete
+                try {
+                    $perm->forceDelete();
+                } catch (\Throwable $e2) {
+                    // Last resort: direct DB delete
+                    try {
+                        \DB::table('permissions')
+                            ->where('id', $perm->id)
+                            ->delete();
+                    } catch (\Throwable $e3) {
+                        $this->warn("Could not delete permission '{$name}': {$e3->getMessage()}");
+                        continue;
+                    }
+                }
+            }
         }
 
         $this->components->info('Prune complete.');

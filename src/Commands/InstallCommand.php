@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
+use Enadstack\LaravelRoles\Database\Seeders\RolesSeeder as PackageRolesSeeder;
 
 use function Laravel\Prompts\select;
 use function Laravel\Prompts\multiselect;
@@ -31,8 +32,8 @@ class InstallCommand extends Command
 
 
         $this->components->info('Publishing roles.php config…');
-        // Tag comes from package-tools: name('laravel-roles')->hasConfigFile('roles')
-        $this->callSilent('vendor:publish', ['--tag' => 'laravel-roles-config']);
+        // Use the correct publish tag as defined in the service provider
+        $this->callSilent('vendor:publish', ['--tag' => 'roles-config']);
 
         $rolesConfig = config('roles', []) ?: [];
 
@@ -127,7 +128,9 @@ class InstallCommand extends Command
         } else { // multi_database
             $this->enableTeams(false);
 
-            $provider = class_exists(\Stancl\Tenancy\TenancyServiceProvider::class)
+            // Determine tenancy provider safely
+            $stanclClass = '\\Stancl\\Tenancy\\TenancyServiceProvider';
+            $provider = class_exists($stanclClass)
                 ? 'stancl/tenancy'
                 : select(
                     label: 'Tenancy provider (install in the app if needed)',
@@ -163,7 +166,7 @@ class InstallCommand extends Command
                 $this->line("Seeding into tenant_id: {$seedTenantId}");
             }
             $this->components->info('Seeding roles & permissions…');
-            $this->call('db:seed', ['--class' => \Enadabuzaid\LaravelRoles\Database\Seeders\RolesSeeder::class]);
+            $this->call('db:seed', ['--class' => PackageRolesSeeder::class]);
         }
 
         $this->components->info('laravel-roles installed ✅');
@@ -215,3 +218,4 @@ PHP;
         $fs->put($target, $php);
     }
 }
+
