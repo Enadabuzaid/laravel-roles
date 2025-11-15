@@ -26,14 +26,27 @@ class InstallCommand extends Command
         $fs = new Filesystem;
         $seedTenantId = null;
 
+        // Check if config already exists
+        $configExists = file_exists(config_path('roles.php'));
+
+        if ($configExists) {
+            $this->components->warn('config/roles.php already exists!');
+            if (!confirm('Do you want to reconfigure it? (This will update your settings)', false)) {
+                $this->components->info('Installation cancelled. Your existing config is preserved.');
+                return self::SUCCESS;
+            }
+        }
+
         // 1) Publish vendor files
         $this->components->info('Publishing Spatie Permission config & migrations…');
         $this->callSilently('vendor:publish', ['--provider' => 'Spatie\\Permission\\PermissionServiceProvider']);
 
-
         $this->components->info('Publishing roles.php config…');
-        // Use the correct publish tag as defined in the service provider
-        $this->callSilent('vendor:publish', ['--tag' => 'roles-config']);
+        // Publish the config file
+        $this->call('vendor:publish', ['--tag' => 'roles-config', '--force' => $configExists]);
+
+        // Refresh config after publishing
+        $this->call('config:clear');
 
         $rolesConfig = config('roles', []) ?: [];
 
@@ -204,18 +217,91 @@ class InstallCommand extends Command
 
     /**
      * Write back config/roles.php with updated array.
+     * This reads the original config template and updates only the specific values
+     * while preserving all comments and structure.
      */
     protected function writeConfigRoles(Filesystem $fs, array $config): void
     {
         $target = config_path('roles.php');
-        $export = var_export($config, true);
-        $php = <<<PHP
-<?php
+        $source = __DIR__ . '/../../config/roles.php';
 
-return {$export};
+        // Read the original config file to preserve comments and formatting
+        if (!file_exists($target)) {
+            // If config doesn't exist yet, copy the original
+            $fs->copy($source, $target);
+        }
 
-PHP;
-        $fs->put($target, $php);
+        $content = $fs->get($target);
+
+        // Update specific values while preserving the rest
+
+        // Update i18n settings
+        if (isset($config['i18n'])) {
+            $enabled = $config['i18n']['enabled'] ? 'true' : 'false';
+            $content = preg_replace(
+                "/'enabled'\s*=>\s*(true|false)/",
+                "'enabled' => {$enabled}",
+                $content
+            );
+
+            if (isset($config['i18n']['locales'])) {
+                $locales = json_encode($config['i18n']['locales']);
+                $locales = str_replace('"', "'", $locales);
+                $content = preg_replace(
+                    "/'locales'\s*=>\s*\[.*?]/",
+                    "'locales' => {$locales}",
+                    $content
+                );
+            }
+
+            if (isset($config['i18n']['default'])) {
+                $content = preg_replace(
+                    "/'default'\s*=>\s*'[^']*'/",
+                    "'default' => '{$config['i18n']['default']}'",
+                    $content,
+                    1
+                );
+            }
+
+            if (isset($config['i18n']['fallback'])) {
+                $content = preg_replace(
+                    "/'fallback'\s*=>\s*'[^']*'/",
+                    "'fallback' => '{$config['i18n']['fallback']}'",
+                    $content,
+                    1
+                );
+            }
+        }
+
+        // Update tenancy settings
+        if (isset($config['tenancy'])) {
+            if (isset($config['tenancy']['mode'])) {
+                $content = preg_replace(
+                    "/'mode'\s*=>\s*'[^']*'/",
+                    "'mode' => '{$config['tenancy']['mode']}'",
+                    $content
+                );
+            }
+
+            if (isset($config['tenancy']['team_foreign_key'])) {
+                $content = preg_replace(
+                    "/'team_foreign_key'\s*=>\s*'[^']*'/",
+                    "'team_foreign_key' => '{$config['tenancy']['team_foreign_key']}'",
+                    $content
+                );
+            }
+
+            if (isset($config['tenancy']['provider'])) {
+                $provider = $config['tenancy']['provider'] === null ? 'null' : "'{$config['tenancy']['provider']}'";
+                $content = preg_replace(
+                    "/'provider'\s*=>\s*(null|'[^']*')/",
+                    "'provider' => {$provider}",
+                    $content
+                );
+            }
+        }
+
+        $fs->put($target, $content);
     }
 }
 

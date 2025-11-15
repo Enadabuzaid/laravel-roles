@@ -84,11 +84,16 @@ A complete, production-ready Laravel package for managing roles and permissions 
 composer require enadstack/laravel-roles
 ```
 
-### Step 2: Run the Interactive Installer
+### Step 2: Run the Interactive Installer (First Time Only!)
 
 ```bash
 php artisan roles:install
 ```
+
+> **⚠️ IMPORTANT**: Only run `php artisan roles:install` during **initial installation**. 
+> When upgrading from an older version (e.g., `composer update`), do NOT re-run this command 
+> as it will ask to reconfigure your `config/roles.php` file. Your existing configuration 
+> will be preserved automatically during upgrades.
 
 The installer will:
 1. ✅ Publish Spatie Permission config and migrations
@@ -142,6 +147,46 @@ return [
     ],
 ];
 ```
+
+---
+
+## 🔄 Upgrading from Previous Versions
+
+### Upgrading to v1.1.0 from v1.0.x
+
+```bash
+# Update the package
+composer update enadstack/laravel-roles
+
+# Clear caches
+php artisan config:clear
+php artisan cache:clear
+php artisan permission:cache-reset
+```
+
+> **✅ That's it!** No additional steps needed. Your `config/roles.php` will be preserved.
+> Do NOT run `php artisan roles:install` again unless you want to reconfigure.
+
+### What Changes in v1.1.0
+- ✅ Enhanced documentation (no code changes)
+- ✅ All existing functionality works exactly the same
+- ✅ No breaking changes
+- ✅ Your config file is preserved
+
+### If You Accidentally Ran `roles:install`
+
+If you accidentally ran `php artisan roles:install` and your config was modified:
+
+1. **Restore from Git** (if you have version control):
+   ```bash
+   git checkout config/roles.php
+   ```
+
+2. **Or manually republish** the original config:
+   ```bash
+   php artisan vendor:publish --tag=roles-config --force
+   # Then reconfigure your settings in config/roles.php
+   ```
 
 ---
 
