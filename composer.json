@@ -12,7 +12,10 @@
     "stancl/tenancy": "Needed only when using multi-database tenancy mode"
   },
   "require-dev": {
-    "orchestra/testbench": "^10.0"
+    "orchestra/testbench": "^10.0",
+    "phpunit/phpunit": "^11.5",
+    "pestphp/pest": "^3.0",
+    "pestphp/pest-plugin-laravel": "^3.0"
   },
   "autoload": {
     "psr-4": { 
@@ -20,6 +23,11 @@
       "Enadstack\\LaravelRoles\\Database\\Seeders\\": "database/seeders/"
     },
     "classmap": ["database/seeders/"]
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Tests\\": "tests/"
+    }
   },
   "extra": {
     "laravel": {
@@ -30,5 +38,13 @@
   },
   "minimum-stability": "stable",
   "prefer-stable": true,
-  "authors": [{ "name": "Enad Abuzaid", "email": "enad.abuzaid15@gmail.com" }]
+  "authors": [{ "name": "Enad Abuzaid", "email": "enad.abuzaid15@gmail.com" }],
+  "scripts": {
+    "test": "pest"
+  },
+  "config": {
+    "allow-plugins": {
+      "pestphp/pest-plugin": true
+    }
+  }
 }

@@ -107,7 +107,7 @@ function remote(Closure|array|string $command, array|string $env = [], ?bool $tt
         package_path(), $env, $tty
     );
 
-    $binary = \defined('TESTBENCH_DUSK') ? 'testbench-dusk' : 'testbench';
+    $binary = Sidekick\is_testbench_cli(dusk: true) ? 'testbench-dusk' : 'testbench';
 
     $commander = is_file($vendorBinary = package_path('vendor', 'bin', $binary))
         ? $vendorBinary
@@ -121,9 +121,11 @@ function remote(Closure|array|string $command, array|string $env = [], ?bool $tt
  *
  * @api
  *
- * @param  \Illuminate\Contracts\Foundation\Application  $app
- * @param  string  $name
- * @param  (\Closure(object, \Illuminate\Contracts\Foundation\Application):(mixed))|null  $callback
+ * @template TLaravel of \Illuminate\Contracts\Foundation\Application
+ *
+ * @param  TLaravel  $app
+ * @param  class-string|string  $name
+ * @param  (\Closure(object, TLaravel):(mixed))|null  $callback
  * @return void
  */
 function after_resolving(ApplicationContract $app, string $name, ?Closure $callback = null): void

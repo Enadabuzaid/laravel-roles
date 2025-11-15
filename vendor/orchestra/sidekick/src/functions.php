@@ -5,6 +5,7 @@ namespace Orchestra\Sidekick;
 use BackedEnum;
 use Closure;
 use Illuminate\Foundation\Application;
+use Illuminate\Support\Arr;
 use PHPUnit\Runner\Version;
 use RuntimeException;
 use UnitEnum;
@@ -134,6 +135,25 @@ if (! \function_exists('Orchestra\Sidekick\is_symlink')) {
     }
 }
 
+if (! \function_exists('Orchestra\Sidekick\is_testbench_cli')) {
+    /**
+     * Determine if command executed via Testbench CLI.
+     *
+     * @api
+     */
+    function is_testbench_cli(?bool $dusk = null): bool
+    {
+        $usingTestbench = \defined('TESTBENCH_CORE');
+        $usingTestbenchDusk = \defined('TESTBENCH_DUSK');
+
+        return match ($dusk) {
+            false => $usingTestbench === true && $usingTestbenchDusk === false,
+            true => $usingTestbench === true && $usingTestbenchDusk === true,
+            default => $usingTestbench === true,
+        };
+    }
+}
+
 if (! \function_exists('Orchestra\Sidekick\transform_relative_path')) {
     /**
      * Transform relative path.
@@ -145,6 +165,24 @@ if (! \function_exists('Orchestra\Sidekick\transform_relative_path')) {
         return str_starts_with($path, './')
             ? rtrim($workingPath, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.mb_substr($path, 2)
             : $path;
+    }
+}
+
+if (! \function_exists('Orchestra\Sidekick\working_path')) {
+    /**
+     * Get the working path.
+     *
+     * @api
+     *
+     * @no-named-arguments
+     *
+     * @param  array<int, string|null>|string  ...$path
+     */
+    function working_path(array|string $path = ''): string
+    {
+        return is_testbench_cli() && \function_exists('Orchestra\Testbench\package_path')
+            ? \Orchestra\Testbench\package_path($path)
+            : base_path(join_paths(...Arr::wrap(\func_num_args() > 1 ? \func_get_args() : $path)));
     }
 }
 
