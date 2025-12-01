@@ -90,22 +90,152 @@ return [
             'manager'     => 'Operations management',
         ],
         'permission_descriptions' => [
-            'roles.list' => 'Allow listing of roles',
-            'roles.create' => 'Allow creating new roles',
-            'roles.show' => 'Allow viewing role details',
-            'roles.update' => 'Allow updating existing roles',
-            'roles.delete' => 'Allow deleting roles',
-            'roles.restore' => 'Allow restoring deleted roles',
-            'roles.force-delete' => 'Allow permanently deleting roles',
-            'users.list' => 'Allow listing of users',
-            'users.create' => 'Allow creating new users',
-            'users.show' => 'Allow viewing user details',
-            'users.update' => 'Allow updating existing users',
-            'users.delete' => 'Allow deleting users',
-            'users.restore' => 'Allow restoring deleted users',
-            'users.force-delete' => 'Allow permanently deleting users',
-            'permissions.list' => 'Allow listing of permissions',
-            'permissions.show' => 'Allow viewing permission details',
+            // Single language: use string
+            // Multi language (i18n): use array with locale keys
+            'roles.list' => [
+                'en' => 'Allow listing of roles',
+                'ar' => 'السماح بعرض قائمة الأدوار',
+            ],
+            'roles.create' => [
+                'en' => 'Allow creating new roles',
+                'ar' => 'السماح بإنشاء أدوار جديدة',
+            ],
+            'roles.show' => [
+                'en' => 'Allow viewing role details',
+                'ar' => 'السماح بعرض تفاصيل الدور',
+            ],
+            'roles.update' => [
+                'en' => 'Allow updating existing roles',
+                'ar' => 'السماح بتحديث الأدوار الموجودة',
+            ],
+            'roles.delete' => [
+                'en' => 'Allow deleting roles',
+                'ar' => 'السماح بحذف الأدوار',
+            ],
+            'roles.restore' => [
+                'en' => 'Allow restoring deleted roles',
+                'ar' => 'السماح باستعادة الأدوار المحذوفة',
+            ],
+            'roles.force-delete' => [
+                'en' => 'Allow permanently deleting roles',
+                'ar' => 'السماح بحذف الأدوار نهائياً',
+            ],
+            'users.list' => [
+                'en' => 'Allow listing of users',
+                'ar' => 'السماح بعرض قائمة المستخدمين',
+            ],
+            'users.create' => [
+                'en' => 'Allow creating new users',
+                'ar' => 'السماح بإنشاء مستخدمين جدد',
+            ],
+            'users.show' => [
+                'en' => 'Allow viewing user details',
+                'ar' => 'السماح بعرض تفاصيل المستخدم',
+            ],
+            'users.update' => [
+                'en' => 'Allow updating existing users',
+                'ar' => 'السماح بتحديث المستخدمين الموجودين',
+            ],
+            'users.delete' => [
+                'en' => 'Allow deleting users',
+                'ar' => 'السماح بحذف المستخدمين',
+            ],
+            'users.restore' => [
+                'en' => 'Allow restoring deleted users',
+                'ar' => 'السماح باستعادة المستخدمين المحذوفين',
+            ],
+            'users.force-delete' => [
+                'en' => 'Allow permanently deleting users',
+                'ar' => 'السماح بحذف المستخدمين نهائياً',
+            ],
+            'permissions.list' => [
+                'en' => 'Allow listing of permissions',
+                'ar' => 'السماح بعرض قائمة الصلاحيات',
+            ],
+            'permissions.show' => [
+                'en' => 'Allow viewing permission details',
+                'ar' => 'السماح بعرض تفاصيل الصلاحية',
+            ],
+        ],
+        'permission_labels' => [
+            'roles.list' => [
+                'en' => 'List Roles',
+                'ar' => 'عرض الأدوار',
+            ],
+            'roles.create' => [
+                'en' => 'Create Role',
+                'ar' => 'إنشاء دور',
+            ],
+            'roles.show' => [
+                'en' => 'View Role',
+                'ar' => 'عرض الدور',
+            ],
+            'roles.update' => [
+                'en' => 'Update Role',
+                'ar' => 'تحديث الدور',
+            ],
+            'roles.delete' => [
+                'en' => 'Delete Role',
+                'ar' => 'حذف الدور',
+            ],
+            'roles.restore' => [
+                'en' => 'Restore Role',
+                'ar' => 'استعادة الدور',
+            ],
+            'roles.force-delete' => [
+                'en' => 'Force Delete Role',
+                'ar' => 'حذف الدور نهائياً',
+            ],
+            'users.list' => [
+                'en' => 'List Users',
+                'ar' => 'عرض المستخدمين',
+            ],
+            'users.create' => [
+                'en' => 'Create User',
+                'ar' => 'إنشاء مستخدم',
+            ],
+            'users.show' => [
+                'en' => 'View User',
+                'ar' => 'عرض المستخدم',
+            ],
+            'users.update' => [
+                'en' => 'Update User',
+                'ar' => 'تحديث المستخدم',
+            ],
+            'users.delete' => [
+                'en' => 'Delete User',
+                'ar' => 'حذف المستخدم',
+            ],
+            'users.restore' => [
+                'en' => 'Restore User',
+                'ar' => 'استعادة المستخدم',
+            ],
+            'users.force-delete' => [
+                'en' => 'Force Delete User',
+                'ar' => 'حذف المستخدم نهائياً',
+            ],
+            'permissions.list' => [
+                'en' => 'List Permissions',
+                'ar' => 'عرض الصلاحيات',
+            ],
+            'permissions.show' => [
+                'en' => 'View Permission',
+                'ar' => 'عرض الصلاحية',
+            ],
+        ],
+        'permission_group_labels' => [
+            'roles' => [
+                'en' => 'Roles',
+                'ar' => 'الأدوار',
+            ],
+            'users' => [
+                'en' => 'Users',
+                'ar' => 'المستخدمين',
+            ],
+            'permissions' => [
+                'en' => 'Permissions',
+                'ar' => 'الصلاحيات',
+            ],
         ],
     ],
 ];

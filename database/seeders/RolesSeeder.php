@@ -99,25 +99,37 @@ class RolesSeeder extends Seeder
 
         // description
         if ($this->colExists('permissions', 'description')) {
-            // Default description: humanized name or group.action
-            $defaultDesc = $group ? ucfirst($group) . ' ' . ucfirst(basename(str_replace('.', '/', $name))) : ucfirst(basename(str_replace('.', '/', $name)));
-            $attrs['description'] = $multi
-                ? $this->asJsonValue(config("roles.seed.permission_descriptions.{$name}", ['en' => $defaultDesc]))
-                : (string) config("roles.seed.permission_descriptions.{$name}", $defaultDesc);
+            $descConfig = config("roles.seed.permission_descriptions.{$name}");
+            $defaultDesc = $group
+                ? ucfirst($group) . ' ' . ucfirst(basename(str_replace('.', '/', $name)))
+                : ucfirst(basename(str_replace('.', '/', $name)));
+
+            if ($multi) {
+                // For multi-language, ensure it's an array
+                $attrs['description'] = $this->asJsonValue($descConfig ?: ['en' => $defaultDesc]);
+            } else {
+                // For single language, extract string value if array provided
+                $attrs['description'] = is_array($descConfig)
+                    ? ($descConfig['en'] ?? $descConfig[config('roles.i18n.default', 'en')] ?? $defaultDesc)
+                    : ($descConfig ?: $defaultDesc);
+            }
         }
 
         // labels (multi only)
         if ($multi && $this->colExists('permissions', 'label')) {
+            $labelConfig = config("roles.seed.permission_labels.{$name}");
             $defaultLabel = ['en' => ucfirst(basename(str_replace('.', '/', $name)))];
-            $attrs['label'] = $this->asJsonValue(config("roles.seed.permission_labels.{$name}", $defaultLabel));
+            $attrs['label'] = $this->asJsonValue($labelConfig ?: $defaultLabel);
         }
 
         // group_label (multi only)
         if ($multi && $group && $this->colExists('permissions', 'group_label')) {
-            $attrs['group_label'] = $this->asJsonValue(config("roles.seed.permission_group_labels.{$group}", ['en' => ucfirst($group)]));
+            $groupLabelConfig = config("roles.seed.permission_group_labels.{$group}");
+            $attrs['group_label'] = $this->asJsonValue($groupLabelConfig ?: ['en' => ucfirst($group)]);
         }
 
-        Permission::firstOrCreate(
+        // Use updateOrCreate to ensure descriptions are updated if they change in config
+        Permission::updateOrCreate(
             ['name' => $name, 'guard_name' => $guard],
             $attrs
         );

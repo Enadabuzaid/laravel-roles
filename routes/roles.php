@@ -4,7 +4,7 @@
 use Illuminate\Support\Facades\Route;
 use Enadstack\LaravelRoles\Http\Controllers\RoleController;
 use Enadstack\LaravelRoles\Http\Controllers\PermissionController;
-
+// Package routes
 $guard = config('roles.guard', config('auth.defaults.guard', 'web'));
 
 // Example: protect with the configured guard
@@ -42,8 +42,9 @@ Route::middleware(config('roles.routes.middleware', ['api']))
         Route::put('/permissions/{permission}', [PermissionController::class, 'update'])->name('permissions.update');
         Route::delete('/permissions/{permission}', [PermissionController::class, 'destroy'])->name('permissions.destroy');
 
-        // Permissions - Advanced operations
         Route::post('/permissions/{id}/restore', [PermissionController::class, 'restore'])->name('permissions.restore');
+        Route::post('/permissions/bulk-delete', [PermissionController::class, 'bulkDelete'])->name('permissions.bulk-delete');
+        Route::post('/permissions/bulk-restore', [PermissionController::class, 'bulkRestore'])->name('permissions.bulk-restore');
         Route::delete('/permissions/{permission}/force', [PermissionController::class, 'forceDelete'])->name('permissions.force-delete');
         Route::post('/permissions/bulk-force-delete', [PermissionController::class, 'bulkForceDelete'])->name('permissions.bulk-force-delete');
 

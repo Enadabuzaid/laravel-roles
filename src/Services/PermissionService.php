@@ -83,8 +83,6 @@ class PermissionService
 
     /**
      * Update an existing permission
-    /**
-     * Update an existing permission
      */
     public function update(Permission $permission, array $data): Permission
     {
@@ -323,7 +321,73 @@ class PermissionService
     }
 
     /**
-     * Flush package caches
+     * Bulk delete permissions (soft delete)
+     */
+    public function bulkDelete(array $ids): array
+    {
+        $results = ['success' => [], 'failed' => []];
+
+        DB::transaction(function () use ($ids, &$results) {
+            $perms = Permission::whereIn('id', $ids)->get();
+            $found = $perms->pluck('id')->all();
+
+            foreach ($ids as $id) {
+                if (! in_array($id, $found, true)) {
+                    $results['failed'][] = ['id' => $id, 'reason' => 'Not found'];
+                }
+            }
+
+            foreach ($perms as $perm) {
+                try {
+                    $perm->delete();
+                    $results['success'][] = $perm->id;
+                } catch (\Throwable $e) {
+                    $results['failed'][] = ['id' => $perm->id, 'reason' => $e->getMessage()];
+                }
+            }
+        });
+
+        $this->flushCaches();
+        return $results;
+    }
+
+    /**
+     * Bulk restore permissions
+     */
+    public function bulkRestore(array $ids): array
+    {
+        $results = ['success' => [], 'failed' => []];
+
+        DB::transaction(function () use ($ids, &$results) {
+            $perms = Permission::withTrashed()->whereIn('id', $ids)->get();
+            $found = $perms->pluck('id')->all();
+
+            foreach ($ids as $id) {
+                if (! in_array($id, $found, true)) {
+                    $results['failed'][] = ['id' => $id, 'reason' => 'Not found'];
+                }
+            }
+
+            foreach ($perms as $perm) {
+                try {
+                    if ($perm->trashed()) {
+                        $perm->restore();
+                        $results['success'][] = $perm->id;
+                    } else {
+                        $results['failed'][] = ['id' => $perm->id, 'reason' => 'Not deleted'];
+                    }
+                } catch (\Throwable $e) {
+                    $results['failed'][] = ['id' => $perm->id, 'reason' => $e->getMessage()];
+                }
+            }
+        });
+
+        $this->flushCaches();
+        return $results;
+    }
+
+    /**
+     * Flush caches
      */
     protected function flushCaches(): void
     {
@@ -336,3 +400,4 @@ class PermissionService
         }
     }
 }
+

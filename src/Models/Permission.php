@@ -4,11 +4,14 @@ namespace Enadstack\LaravelRoles\Models;
 
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Permission\Models\Permission as SpatiePermission;
+use Spatie\Permission\Exceptions\PermissionDoesNotExist;
 use Illuminate\Support\Facades\Cache;
+use Enadstack\LaravelRoles\Traits\HasTenantScope;
 
 class Permission extends SpatiePermission
 {
     use SoftDeletes;
+    use HasTenantScope;
 
     /**
      * Get the attributes that should be cast.
@@ -54,7 +57,7 @@ class Permission extends SpatiePermission
             ->where('guard_name', $guardName);
 
         if (config('roles.tenancy.mode') === 'team_scoped') {
-            $tenantId = app('permission.team_id', null);
+            $tenantId = app()->bound('permission.team_id') ? app('permission.team_id') : null;
             $query->where(function ($q) use ($tenantId) {
                 $q->whereNull(config('permission.team_foreign_key', 'team_id'))
                     ->orWhere(config('permission.team_foreign_key', 'team_id'), $tenantId);
@@ -66,7 +69,7 @@ class Permission extends SpatiePermission
         $perm = $query->first();
 
         if (! $perm) {
-            throw SpatiePermission::getPermissionNotFoundException($name, $guardName);
+            throw PermissionDoesNotExist::create($name, $guardName);
         }
 
         return $perm;

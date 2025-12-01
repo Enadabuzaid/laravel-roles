@@ -4,11 +4,14 @@ namespace Enadstack\LaravelRoles\Models;
 
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Permission\Models\Role as SpatieRole;
+use Spatie\Permission\Exceptions\RoleDoesNotExist;
 use Illuminate\Support\Facades\Cache;
+use Enadstack\LaravelRoles\Traits\HasTenantScope;
 
 class Role extends SpatieRole
 {
     use SoftDeletes;
+    use HasTenantScope;
 
     /**
      * Get the attributes that should be cast.
@@ -67,7 +70,7 @@ class Role extends SpatieRole
         $role = $query->first();
 
         if (! $role) {
-            throw SpatieRole::getRoleClass()::getRoleNotFoundException($name, $guardName);
+            throw RoleDoesNotExist::named($name, $guardName);
         }
 
         return $role;

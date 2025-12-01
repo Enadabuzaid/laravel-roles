@@ -87,10 +87,24 @@ class PermissionController extends Controller
         ]);
     }
 
-    public function recent(Request $request)
+    public function bulkDelete(BulkOperationRequest $request): JsonResponse
     {
-        $limit = (int) $request->query('limit', 10);
-        return PermissionResource::collection($this->permissionService->recent($limit));
+        $results = $this->permissionService->bulkDelete($request->validated()['ids']);
+
+        return response()->json([
+            'message' => 'Bulk delete completed',
+            'results' => $results,
+        ]);
+    }
+
+    public function bulkRestore(BulkOperationRequest $request): JsonResponse
+    {
+        $results = $this->permissionService->bulkRestore($request->validated()['ids']);
+
+        return response()->json([
+            'message' => 'Bulk restore completed',
+            'results' => $results,
+        ]);
     }
 
     public function stats(): JsonResponse
@@ -98,15 +112,24 @@ class PermissionController extends Controller
         return response()->json($this->permissionService->stats());
     }
 
-    // helpful for UI: return groups with their permissions
-    public function groups()
+    public function recent(Request $request): JsonResponse
+    {
+        $limit = (int) $request->query('limit', 10);
+        $limit = ($limit > 0 && $limit <= 100) ? $limit : 10;
+
+        return response()->json([
+            'data' => PermissionResource::collection($this->permissionService->recent($limit))
+        ]);
+    }
+
+    public function groups(): JsonResponse
     {
         return response()->json($this->permissionService->getGroupedPermissions());
     }
 
     public function matrix(): JsonResponse
     {
-        return new PermissionMatrixResource($this->permissionService->getPermissionMatrix());
+        return response()->json($this->permissionService->getPermissionMatrix());
     }
 }
 

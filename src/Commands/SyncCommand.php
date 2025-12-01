@@ -2,12 +2,14 @@
 
 namespace Enadstack\LaravelRoles\Commands;
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Console\Command;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Enadstack\LaravelRoles\Database\Seeders\RolesSeeder;
+use Throwable;
 
 class SyncCommand extends Command
 {
@@ -39,7 +41,7 @@ class SyncCommand extends Command
             $this->components->info('Dry-run: would execute RolesSeeder (create/ensure roles & permissions).');
         } else {
             $this->callSilent('db:seed', [
-                '--class' => \Enadstack\LaravelRoles\Database\Seeders\RolesSeeder::class,
+                '--class' => RolesSeeder::class,
             ]);
         }
 
@@ -102,17 +104,17 @@ class SyncCommand extends Command
                     $perm->roles()->detach();
                 }
                 $perm->delete();
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 // If normal delete fails (relationship issues), try force delete
                 try {
                     $perm->forceDelete();
-                } catch (\Throwable $e2) {
+                } catch (Throwable $e2) {
                     // Last resort: direct DB delete
                     try {
-                        \DB::table('permissions')
+                        DB::table('permissions')
                             ->where('id', $perm->id)
                             ->delete();
-                    } catch (\Throwable $e3) {
+                    } catch (Throwable $e3) {
                         $this->warn("Could not delete permission '{$name}': {$e3->getMessage()}");
                         continue;
                     }
