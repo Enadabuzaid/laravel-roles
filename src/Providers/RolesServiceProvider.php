@@ -5,6 +5,14 @@ namespace Enadstack\LaravelRoles\Providers;
 use Enadstack\LaravelRoles\Commands\InstallCommand;
 use Enadstack\LaravelRoles\Commands\SyncCommand;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\Event;
+use Enadstack\LaravelRoles\Listeners\ClearPermissionCache;
+use Enadstack\LaravelRoles\Events\PermissionsAssignedToRole;
+use Enadstack\LaravelRoles\Events\RoleCreated;
+use Enadstack\LaravelRoles\Events\RoleUpdated;
+use Enadstack\LaravelRoles\Events\RoleDeleted;
+use Enadstack\LaravelRoles\Events\PermissionCreated;
+use Enadstack\LaravelRoles\Events\PermissionUpdated;
 
 class RolesServiceProvider extends  ServiceProvider
 {
@@ -53,5 +61,16 @@ class RolesServiceProvider extends  ServiceProvider
         // ], 'roles-views');
 
         // Routes (package API)
-        $this->loadRoutesFrom(__DIR__ . '/../../routes/roles.php');    }
+        $this->loadRoutesFrom(__DIR__ . '/../../routes/roles.php');
+
+        // Register event listeners for cache clearing and permission cache reset
+        Event::listen([
+            PermissionsAssignedToRole::class,
+            RoleCreated::class,
+            RoleUpdated::class,
+            RoleDeleted::class,
+            PermissionCreated::class,
+            PermissionUpdated::class,
+        ], ClearPermissionCache::class);
+    }
 }

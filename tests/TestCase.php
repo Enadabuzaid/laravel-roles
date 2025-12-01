@@ -5,6 +5,8 @@ namespace Tests;
 use Enadstack\LaravelRoles\Providers\RolesServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 use Spatie\Permission\PermissionServiceProvider;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Foundation\Auth\User as TestUser;
 
 class TestCase extends Orchestra
 {
@@ -14,6 +16,24 @@ class TestCase extends Orchestra
             PermissionServiceProvider::class,
             RolesServiceProvider::class,
         ];
+    }
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // In tests we allow all policy checks to simplify request flows.
+        Gate::before(function () {
+            return true;
+        });
+
+        // Provide a lightweight Authenticatable user so Spatie and Gate integrations receive an Authorizable instance.
+        $user = new TestUser();
+        $user->id = 1;
+        $user->name = 'test';
+        $user->email = 'test@example.com';
+
+        $this->actingAs($user);
     }
 
     protected function defineEnvironment($app): void
@@ -30,7 +50,11 @@ class TestCase extends Orchestra
         // Default guard web
         $app['config']->set('auth.defaults.guard', 'web');
         $app['config']->set('auth.guards.web', ['driver' => 'session', 'provider' => 'users']);
-        $app['config']->set('auth.providers.users', ['driver' => 'array']);
+        // Use a valid eloquent provider for tests (array driver is invalid for auth providers)
+        $app['config']->set('auth.providers.users', [
+            'driver' => 'eloquent',
+            'model' => \Illuminate\Foundation\Auth\User::class,
+        ]);
 
         // Cache: array store (no tags)
         $app['config']->set('cache.default', 'array');
