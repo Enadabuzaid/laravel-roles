@@ -31,8 +31,12 @@ class PermissionController extends Controller
             'search' => $request->query('q', $request->query('search')),
             'group' => $request->query('group'),
             'guard' => $request->query('guard', config('roles.guard', config('auth.defaults.guard'))),
+            'status' => $request->query('status'),
             'sort' => in_array($request->query('sort'), ['id','name','group','created_at'], true) ? $request->query('sort') : 'id',
             'direction' => strtolower($request->query('dir', $request->query('direction', 'desc'))) === 'asc' ? 'asc' : 'desc',
+            'only_deleted' => $request->boolean('only_deleted'),
+            'with_deleted' => $request->boolean('with_deleted'),
+            // Backward compatibility
             'with_trashed' => $request->boolean('with_trashed'),
             'only_trashed' => $request->boolean('only_trashed'),
         ];

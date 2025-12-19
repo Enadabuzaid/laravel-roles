@@ -66,10 +66,18 @@ Complete status management implementation for both roles and permissions with au
 - Permission stats now include: `active`, `inactive`, `deleted`, `by_status`
 - Growth statistics continue to track all status changes
 
-**7. Filtering**
-- Added status filtering to role list: `?status=active|inactive|deleted`
-- Added status filtering to permission list: `?status=active|inactive|deleted`
+**7. Enhanced Filtering**
+- Added `only_deleted` filter - Show only soft-deleted records
+- Added `with_deleted` filter - Show both active and soft-deleted records  
+- Added status-based filtering: `?status=active|inactive|deleted`
 - Added status to allowed sort fields
+- Backward compatibility: `only_trashed` and `with_trashed` still work
+
+**8. Unit Tests**
+- **RoleServiceTest** - Comprehensive unit tests for RoleService (20+ tests)
+- **PermissionServiceTest** - Comprehensive unit tests for PermissionService (20+ tests)
+- Full test coverage for all service methods
+- Tests for filtering, CRUD, status management, bulk operations
 
 ---
 
@@ -80,6 +88,10 @@ Complete status management implementation for both roles and permissions with au
 2. `src/Observers/RoleObserver.php` - Role model observer
 3. `src/Observers/PermissionObserver.php` - Permission model observer
 4. `database/migrations/2025_12_19_000000_add_status_to_roles_and_permissions.php` - Migration
+
+### Test Files
+5. `tests/Unit/RoleServiceTest.php` - RoleService unit tests
+6. `tests/Unit/PermissionServiceTest.php` - PermissionService unit tests
 
 ---
 
@@ -207,6 +219,18 @@ Response:
 ```bash
 GET /admin/acl/roles?status=active
 GET /admin/acl/permissions?status=inactive
+```
+
+### Filter Deleted Records
+```bash
+# Show only deleted records
+GET /admin/acl/roles?only_deleted=true
+
+# Show both active and deleted records
+GET /admin/acl/roles?with_deleted=true
+
+# Default: show only non-deleted records
+GET /admin/acl/roles
 ```
 
 ---
@@ -376,6 +400,70 @@ public function test_can_filter_roles_by_status()
     
     $response->assertOk()
         ->assertJsonCount(1, 'data');
+}
+```
+
+---
+
+## 🧪 Testing
+
+### Run Unit Tests
+```bash
+# Run all tests
+./vendor/bin/pest
+
+# Run only RoleService tests
+./vendor/bin/pest tests/Unit/RoleServiceTest.php
+
+# Run only PermissionService tests
+./vendor/bin/pest tests/Unit/PermissionServiceTest.php
+
+# Run with coverage
+./vendor/bin/pest --coverage
+```
+
+### Test Observer Behavior
+```php
+public function test_role_status_changes_on_delete()
+{
+    $role = Role::create(['name' => 'test-role']);
+    
+    $this->assertEquals('active', $role->status);
+    
+    $role->delete();
+    $this->assertEquals('deleted', $role->fresh()->status);
+    
+    $role->restore();
+    $this->assertEquals('active', $role->fresh()->status);
+}
+```
+
+### Test Status Filtering
+```php
+public function test_can_filter_roles_by_status()
+{
+    Role::factory()->create(['status' => 'active']);
+    Role::factory()->create(['status' => 'inactive']);
+    
+    $response = $this->getJson('/api/roles?status=active');
+    
+    $response->assertOk()
+        ->assertJsonCount(1, 'data');
+}
+```
+
+### Test Only Deleted Filter
+```php
+public function test_can_filter_only_deleted()
+{
+    $role1 = Role::create(['name' => 'admin']);
+    $role2 = Role::create(['name' => 'editor']);
+    
+    $role1->delete();
+    
+    $result = $roleService->list(['only_deleted' => true]);
+    
+    $this->assertCount(1, $result->items());
 }
 ```
 

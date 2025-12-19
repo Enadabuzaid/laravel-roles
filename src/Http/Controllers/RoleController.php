@@ -33,8 +33,12 @@ class RoleController extends Controller
         $filters = [
             'search' => $request->query('search'),
             'guard' => $request->query('guard'),
+            'status' => $request->query('status'),
             'sort' => $request->query('sort', 'id'),
             'direction' => $request->query('direction', 'desc'),
+            'only_deleted' => $request->boolean('only_deleted'),
+            'with_deleted' => $request->boolean('with_deleted'),
+            // Backward compatibility
             'with_trashed' => $request->boolean('with_trashed'),
             'only_trashed' => $request->boolean('only_trashed'),
         ];

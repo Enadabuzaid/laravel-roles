@@ -63,24 +63,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Status breakdown in statistics response
 
 #### 🔍 Enhanced Filtering
-- Added status filter to role list: `?status=active|inactive|deleted`
-- Added status filter to permission list: `?status=active|inactive|deleted`
+- Added `only_deleted` filter - Show only soft-deleted records
+- Added `with_deleted` filter - Show both active and soft-deleted records
+- Added status filter: `?status=active|inactive|deleted`
 - Added `status` to allowed sort fields
+- Backward compatibility maintained for `only_trashed` and `with_trashed`
+
+#### 🧪 Unit Tests
+- **RoleServiceTest** - Comprehensive unit tests for RoleService
+  - 20+ test cases covering all service methods
+  - Tests for filtering, CRUD operations, status management
+  - Tests for bulk operations and statistics
+- **PermissionServiceTest** - Comprehensive unit tests for PermissionService
+  - 20+ test cases covering all service methods
+  - Tests for filtering, CRUD operations, status management
+  - Tests for grouped permissions and permission matrix
 
 ### Changed
+- `RoleService::list()` - Enhanced with `only_deleted` and `with_deleted` filters
+- `PermissionService::list()` - Enhanced with `only_deleted` and `with_deleted` filters
 - `RoleService::stats()` - Now includes status-based statistics
 - `PermissionService::stats()` - Now includes status-based statistics
-- `RoleService::list()` - Added status filtering support
-- `PermissionService::list()` - Added status filtering support
+- `RoleController::index()` - Added support for new filter parameters
+- `PermissionController::index()` - Added support for new filter parameters
 - Models now have `status` in fillable fields
 
 ### Technical Details
-- **New Files (4):**
+- **New Files (6):**
   - `src/Enums/RolePermissionStatusEnum.php`
   - `src/Observers/RoleObserver.php`
   - `src/Observers/PermissionObserver.php`
   - `database/migrations/2025_12_19_000000_add_status_to_roles_and_permissions.php`
-- **Modified Files (9):**
+  - `tests/Unit/RoleServiceTest.php`
+  - `tests/Unit/PermissionServiceTest.php`
+- **Modified Files (11):**
   - Services, Controllers, Models, Routes, Provider updated
 - **Breaking Changes:** None - Fully backward compatible ✅
 

@@ -23,11 +23,21 @@ class PermissionService extends BaseService
         $guard = $filters['guard'] ?? config('roles.guard', config('auth.defaults.guard', 'web'));
         $query = Permission::query()->where('guard_name', $guard);
 
-        if (!empty($filters['with_trashed'])) {
+        // Trash filters
+        if (!empty($filters['only_deleted'])) {
+            // Show only soft-deleted records (with status 'deleted')
+            $query->onlyTrashed();
+        } elseif (!empty($filters['with_deleted'])) {
+            // Show both active and soft-deleted records
+            $query->withTrashed();
+        } elseif (!empty($filters['with_trashed'])) {
+            // Backward compatibility: with_trashed same as with_deleted
             $query->withTrashed();
         } elseif (!empty($filters['only_trashed'])) {
+            // Backward compatibility: only_trashed same as only_deleted
             $query->onlyTrashed();
         }
+        // Default: show only non-deleted records
 
         // Search filter
         if (!empty($filters['search'])) {
