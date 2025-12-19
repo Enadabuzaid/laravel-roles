@@ -178,6 +178,22 @@ class PermissionService extends BaseService
     }
 
     /**
+     * Alias for stats() method - backward compatibility
+     */
+    public function getStats(): array
+    {
+        return $this->stats();
+    }
+
+    /**
+     * Alias for recent() method - backward compatibility
+     */
+    public function getRecent(int $limit = 10): Collection
+    {
+        return $this->recent($limit);
+    }
+
+    /**
      * Get statistics by group
      */
     protected function getStatsByGroup(): array

@@ -255,6 +255,22 @@ class RoleService extends BaseService
     }
 
     /**
+     * Alias for stats() method - backward compatibility
+     */
+    public function getStats(): array
+    {
+        return $this->stats();
+    }
+
+    /**
+     * Alias for recent() method - backward compatibility
+     */
+    public function getRecent(int $limit = 10): EloquentCollection
+    {
+        return $this->recent($limit);
+    }
+
+    /**
      * Get role statistics with growth data
      */
     public function stats(): array
