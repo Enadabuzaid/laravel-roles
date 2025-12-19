@@ -67,4 +67,16 @@ Route::middleware(config('roles.routes.middleware', ['api']))
         Route::post('/roles/{role}/permission', [RoleController::class, 'addPermission'])->name('permission.attach');
         Route::delete('/roles/{role}/permission', [RoleController::class, 'removePermission'])->name('permission.detach');
         Route::post('/roles/{role}/clone', [RoleController::class, 'clone'])->name('clone');
+
+        // Roles - Status management
+        Route::patch('/roles/{role}/status', [RoleController::class, 'changeStatus'])->name('change-status');
+        Route::post('/roles/{role}/activate', [RoleController::class, 'activate'])->name('activate');
+        Route::post('/roles/{role}/deactivate', [RoleController::class, 'deactivate'])->name('deactivate');
+        Route::post('/roles/bulk-change-status', [RoleController::class, 'bulkChangeStatus'])->name('bulk-change-status');
+
+        // Permissions - Status management
+        Route::patch('/permissions/{permission}/status', [PermissionController::class, 'changeStatus'])->name('permissions.change-status');
+        Route::post('/permissions/{permission}/activate', [PermissionController::class, 'activate'])->name('permissions.activate');
+        Route::post('/permissions/{permission}/deactivate', [PermissionController::class, 'deactivate'])->name('permissions.deactivate');
+        Route::post('/permissions/bulk-change-status', [PermissionController::class, 'bulkChangeStatus'])->name('permissions.bulk-change-status');
     });

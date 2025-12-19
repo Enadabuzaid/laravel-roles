@@ -8,6 +8,7 @@ use Enadstack\LaravelRoles\Events\RoleCreated;
 use Enadstack\LaravelRoles\Events\RoleUpdated;
 use Enadstack\LaravelRoles\Events\RoleDeleted;
 use Enadstack\LaravelRoles\Events\PermissionsAssignedToRole;
+use Enadstack\LaravelRoles\Enums\RolePermissionStatusEnum;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -35,6 +36,13 @@ class RoleService extends BaseService
             $query->where('guard_name', $filters['guard']);
         }
 
+        // Status filter
+        if (!empty($filters['status'])) {
+            if (in_array($filters['status'], RolePermissionStatusEnum::values(), true)) {
+                $query->where('status', $filters['status']);
+            }
+        }
+
         if (!empty($filters['with_trashed'])) {
             $query->withTrashed();
         } elseif (!empty($filters['only_trashed'])) {
@@ -42,7 +50,7 @@ class RoleService extends BaseService
         }
 
         // Sorting with whitelist validation
-        $allowedSorts = ['id', 'name', 'guard_name', 'created_at', 'updated_at'];
+        $allowedSorts = ['id', 'name', 'guard_name', 'status', 'created_at', 'updated_at'];
         $requestedSort = $filters['sort'] ?? 'id';
         $sort = in_array($requestedSort, $allowedSorts, true) ? $requestedSort : 'id';
         $dir = strtolower($filters['direction'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
@@ -243,12 +251,86 @@ class RoleService extends BaseService
     {
         return [
             'total' => Role::count(),
-            'active' => Role::whereNull('deleted_at')->count(),
-            'deleted' => Role::onlyTrashed()->count(),
+            'active' => Role::where('status', RolePermissionStatusEnum::ACTIVE->value)->count(),
+            'inactive' => Role::where('status', RolePermissionStatusEnum::INACTIVE->value)->count(),
+            'deleted' => Role::where('status', RolePermissionStatusEnum::DELETED->value)->count(),
             'with_permissions' => Role::has('permissions')->count(),
             'without_permissions' => Role::doesntHave('permissions')->count(),
+            'by_status' => $this->getStatsByStatus(),
             'growth' => $this->calculateGrowth(Role::class, 'created_at'),
         ];
+    }
+
+    /**
+     * Get statistics grouped by status
+     */
+    protected function getStatsByStatus(): array
+    {
+        return Role::query()
+            ->select('status', DB::raw('COUNT(*) as count'))
+            ->groupBy('status')
+            ->pluck('count', 'status')
+            ->toArray();
+    }
+
+    /**
+     * Change role status
+     */
+    public function changeStatus(Role $role, RolePermissionStatusEnum $status): Role
+    {
+        $role->update(['status' => $status->value]);
+        $this->flushCaches();
+
+        event(new RoleUpdated($role));
+
+        return $role->refresh();
+    }
+
+    /**
+     * Activate role
+     */
+    public function activate(Role $role): Role
+    {
+        return $this->changeStatus($role, RolePermissionStatusEnum::ACTIVE);
+    }
+
+    /**
+     * Deactivate role
+     */
+    public function deactivate(Role $role): Role
+    {
+        return $this->changeStatus($role, RolePermissionStatusEnum::INACTIVE);
+    }
+
+    /**
+     * Bulk change status
+     */
+    public function bulkChangeStatus(array $ids, RolePermissionStatusEnum $status): array
+    {
+        $results = ['success' => [], 'failed' => []];
+
+        DB::transaction(function () use ($ids, $status, &$results) {
+            $roles = Role::whereIn('id', $ids)->get();
+            $foundIds = $roles->pluck('id')->toArray();
+
+            foreach ($ids as $id) {
+                if (!in_array($id, $foundIds)) {
+                    $results['failed'][] = ['id' => $id, 'reason' => 'Not found'];
+                }
+            }
+
+            foreach ($roles as $role) {
+                try {
+                    $role->update(['status' => $status->value]);
+                    $results['success'][] = $role->id;
+                } catch (\Exception $e) {
+                    $results['failed'][] = ['id' => $role->id, 'reason' => $e->getMessage()];
+                }
+            }
+        });
+
+        $this->flushCaches();
+        return $results;
     }
 
     /**

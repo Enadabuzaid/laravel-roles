@@ -215,4 +215,73 @@ class RoleController extends Controller
             'Role cloned successfully'
         );
     }
+
+    /**
+     * Change role status
+     */
+    public function changeStatus(Request $request, Role $role): JsonResponse
+    {
+        $this->authorize('update', $role);
+
+        $data = $request->validate([
+            'status' => ['required', 'string', 'in:active,inactive,deleted'],
+        ]);
+
+        $status = \Enadstack\LaravelRoles\Enums\RolePermissionStatusEnum::from($data['status']);
+        $role = $this->roleService->changeStatus($role, $status);
+
+        return $this->resourceResponse(
+            new RoleResource($role),
+            'Role status updated successfully'
+        );
+    }
+
+    /**
+     * Activate role
+     */
+    public function activate(Role $role): JsonResponse
+    {
+        $this->authorize('update', $role);
+
+        $role = $this->roleService->activate($role);
+
+        return $this->resourceResponse(
+            new RoleResource($role),
+            'Role activated successfully'
+        );
+    }
+
+    /**
+     * Deactivate role
+     */
+    public function deactivate(Role $role): JsonResponse
+    {
+        $this->authorize('update', $role);
+
+        $role = $this->roleService->deactivate($role);
+
+        return $this->resourceResponse(
+            new RoleResource($role),
+            'Role deactivated successfully'
+        );
+    }
+
+    /**
+     * Bulk change status
+     */
+    public function bulkChangeStatus(Request $request): JsonResponse
+    {
+        $this->authorize('update', Role::class);
+
+        $data = $request->validate([
+            'ids' => ['required', 'array'],
+            'ids.*' => ['integer', 'exists:roles,id'],
+            'status' => ['required', 'string', 'in:active,inactive,deleted'],
+        ]);
+
+        $status = \Enadstack\LaravelRoles\Enums\RolePermissionStatusEnum::from($data['status']);
+        $results = $this->roleService->bulkChangeStatus($data['ids'], $status);
+
+        return $this->successResponse($results, 'Bulk status change completed');
+    }
 }

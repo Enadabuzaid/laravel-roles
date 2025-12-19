@@ -4,6 +4,10 @@ namespace Enadstack\LaravelRoles\Providers;
 
 use Enadstack\LaravelRoles\Commands\InstallCommand;
 use Enadstack\LaravelRoles\Commands\SyncCommand;
+use Enadstack\LaravelRoles\Models\Role;
+use Enadstack\LaravelRoles\Models\Permission;
+use Enadstack\LaravelRoles\Observers\RoleObserver;
+use Enadstack\LaravelRoles\Observers\PermissionObserver;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Event;
 use Enadstack\LaravelRoles\Listeners\ClearPermissionCache;
@@ -62,6 +66,10 @@ class RolesServiceProvider extends  ServiceProvider
 
         // Routes (package API)
         $this->loadRoutesFrom(__DIR__ . '/../../routes/roles.php');
+
+        // Register observers for automatic status management
+        Role::observe(RoleObserver::class);
+        Permission::observe(PermissionObserver::class);
 
         // Register event listeners for cache clearing and permission cache reset
         Event::listen([

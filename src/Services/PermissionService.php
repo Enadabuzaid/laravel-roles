@@ -6,6 +6,7 @@ use Enadstack\LaravelRoles\Models\Permission;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Events\PermissionCreated;
 use Enadstack\LaravelRoles\Events\PermissionUpdated;
+use Enadstack\LaravelRoles\Enums\RolePermissionStatusEnum;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -49,8 +50,15 @@ class PermissionService extends BaseService
             $query->where('group', $filters['group']);
         }
 
+        // Status filter
+        if (!empty($filters['status'])) {
+            if (in_array($filters['status'], RolePermissionStatusEnum::values(), true)) {
+                $query->where('status', $filters['status']);
+            }
+        }
+
         // Sorting with whitelist validation
-        $allowedSorts = ['id', 'name', 'group', 'guard_name', 'created_at', 'updated_at'];
+        $allowedSorts = ['id', 'name', 'group', 'guard_name', 'status', 'created_at', 'updated_at'];
         $requestedSort = $filters['sort'] ?? 'id';
         $sort = in_array($requestedSort, $allowedSorts, true) ? $requestedSort : 'id';
         $dir = strtolower($filters['direction'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
@@ -148,11 +156,13 @@ class PermissionService extends BaseService
     {
         return [
             'total' => Permission::count(),
-            'active' => Permission::whereNull('deleted_at')->count(),
-            'deleted' => Permission::onlyTrashed()->count(),
+            'active' => Permission::where('status', RolePermissionStatusEnum::ACTIVE->value)->count(),
+            'inactive' => Permission::where('status', RolePermissionStatusEnum::INACTIVE->value)->count(),
+            'deleted' => Permission::where('status', RolePermissionStatusEnum::DELETED->value)->count(),
             'assigned' => Permission::has('roles')->count(),
             'unassigned' => Permission::doesntHave('roles')->count(),
             'by_group' => $this->getStatsByGroup(),
+            'by_status' => $this->getStatsByStatus(),
             'growth' => $this->calculateGrowth(Permission::class, 'created_at'),
         ];
     }
@@ -172,6 +182,78 @@ class PermissionService extends BaseService
             ->groupBy('group')
             ->pluck('count', 'group')
             ->toArray();
+    }
+
+    /**
+     * Get statistics grouped by status
+     */
+    protected function getStatsByStatus(): array
+    {
+        return Permission::query()
+            ->select('status', DB::raw('COUNT(*) as count'))
+            ->groupBy('status')
+            ->pluck('count', 'status')
+            ->toArray();
+    }
+
+    /**
+     * Change permission status
+     */
+    public function changeStatus(Permission $permission, RolePermissionStatusEnum $status): Permission
+    {
+        $permission->update(['status' => $status->value]);
+        $this->flushCaches();
+
+        event(new PermissionUpdated($permission));
+
+        return $permission->refresh();
+    }
+
+    /**
+     * Activate permission
+     */
+    public function activate(Permission $permission): Permission
+    {
+        return $this->changeStatus($permission, RolePermissionStatusEnum::ACTIVE);
+    }
+
+    /**
+     * Deactivate permission
+     */
+    public function deactivate(Permission $permission): Permission
+    {
+        return $this->changeStatus($permission, RolePermissionStatusEnum::INACTIVE);
+    }
+
+    /**
+     * Bulk change status
+     */
+    public function bulkChangeStatus(array $ids, RolePermissionStatusEnum $status): array
+    {
+        $results = ['success' => [], 'failed' => []];
+
+        DB::transaction(function () use ($ids, $status, &$results) {
+            $permissions = Permission::whereIn('id', $ids)->get();
+            $foundIds = $permissions->pluck('id')->toArray();
+
+            foreach ($ids as $id) {
+                if (!in_array($id, $foundIds)) {
+                    $results['failed'][] = ['id' => $id, 'reason' => 'Not found'];
+                }
+            }
+
+            foreach ($permissions as $permission) {
+                try {
+                    $permission->update(['status' => $status->value]);
+                    $results['success'][] = $permission->id;
+                } catch (\Exception $e) {
+                    $results['failed'][] = ['id' => $permission->id, 'reason' => $e->getMessage()];
+                }
+            }
+        });
+
+        $this->flushCaches();
+        return $results;
     }
 
     /**

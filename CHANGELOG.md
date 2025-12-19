@@ -5,6 +5,85 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2025-12-19
+
+### Added - Status Management System 🎯
+
+#### ✨ New Status Enum
+- **RolePermissionStatusEnum** - Enum with three statuses: `active`, `inactive`, `deleted`
+  - Helper methods: `isActive()`, `isInactive()`, `isDeleted()`
+  - UI helpers: `label()`, `color()`, `badge()`
+  - Static helper: `values()` to get all possible values
+
+#### 🗄️ Database Changes
+- Added `status` column to `roles` table (indexed)
+- Added `status` column to `permissions` table (indexed)
+- Migration automatically sets existing data to appropriate status
+- Automatic migration: active records → 'active', soft-deleted → 'deleted'
+
+#### 👁️ Model Observers
+- **RoleObserver** - Automatically manages role status
+  - Sets `active` on creation
+  - Sets `deleted` on soft delete
+  - Restores to `active` on restore
+- **PermissionObserver** - Automatically manages permission status
+  - Same behavior as RoleObserver
+
+#### 🛠️ Service Methods
+**RoleService:**
+- `changeStatus(Role, RolePermissionStatusEnum)` - Change role status
+- `activate(Role)` - Activate a role
+- `deactivate(Role)` - Deactivate a role
+- `bulkChangeStatus(array $ids, RolePermissionStatusEnum)` - Bulk status change
+- `getStatsByStatus()` - Statistics grouped by status
+
+**PermissionService:**
+- `changeStatus(Permission, RolePermissionStatusEnum)` - Change permission status
+- `activate(Permission)` - Activate a permission
+- `deactivate(Permission)` - Deactivate a permission
+- `bulkChangeStatus(array $ids, RolePermissionStatusEnum)` - Bulk status change
+- `getStatsByStatus()` - Statistics grouped by status
+
+#### 🌐 API Endpoints
+**Role Status Management:**
+- `PATCH /admin/acl/roles/{role}/status` - Change status
+- `POST /admin/acl/roles/{role}/activate` - Activate
+- `POST /admin/acl/roles/{role}/deactivate` - Deactivate
+- `POST /admin/acl/roles/bulk-change-status` - Bulk change
+
+**Permission Status Management:**
+- `PATCH /admin/acl/permissions/{permission}/status` - Change status
+- `POST /admin/acl/permissions/{permission}/activate` - Activate
+- `POST /admin/acl/permissions/{permission}/deactivate` - Deactivate
+- `POST /admin/acl/permissions/bulk-change-status` - Bulk change
+
+#### 📊 Enhanced Statistics
+- Role stats now include: `active`, `inactive`, `deleted`, `by_status`
+- Permission stats now include: `active`, `inactive`, `deleted`, `by_status`
+- Status breakdown in statistics response
+
+#### 🔍 Enhanced Filtering
+- Added status filter to role list: `?status=active|inactive|deleted`
+- Added status filter to permission list: `?status=active|inactive|deleted`
+- Added `status` to allowed sort fields
+
+### Changed
+- `RoleService::stats()` - Now includes status-based statistics
+- `PermissionService::stats()` - Now includes status-based statistics
+- `RoleService::list()` - Added status filtering support
+- `PermissionService::list()` - Added status filtering support
+- Models now have `status` in fillable fields
+
+### Technical Details
+- **New Files (4):**
+  - `src/Enums/RolePermissionStatusEnum.php`
+  - `src/Observers/RoleObserver.php`
+  - `src/Observers/PermissionObserver.php`
+  - `database/migrations/2025_12_19_000000_add_status_to_roles_and_permissions.php`
+- **Modified Files (9):**
+  - Services, Controllers, Models, Routes, Provider updated
+- **Breaking Changes:** None - Fully backward compatible ✅
+
 ## [1.2.1] - 2025-12-19
 
 ### Added - API Response Standardization & Growth Statistics 🚀

@@ -14,6 +14,21 @@ class Permission extends SpatiePermission
     use HasTenantScope;
 
     /**
+     * The attributes that are mass assignable.
+     *
+     * @var array<string>
+     */
+    protected $fillable = [
+        'name',
+        'guard_name',
+        'status',
+        'label',
+        'description',
+        'group',
+        'group_label',
+    ];
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
