@@ -10,11 +10,14 @@ use Enadstack\LaravelRoles\Http\Requests\PermissionUpdateRequest;
 use Enadstack\LaravelRoles\Http\Requests\BulkOperationRequest;
 use Enadstack\LaravelRoles\Http\Resources\PermissionResource;
 use Enadstack\LaravelRoles\Http\Resources\PermissionMatrixResource;
+use Enadstack\LaravelRoles\Traits\ApiResponseTrait;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
 class PermissionController extends Controller
 {
+    use ApiResponseTrait;
+
     protected PermissionService $permissionService;
 
     public function __construct(PermissionService $permissionService)
@@ -36,28 +39,36 @@ class PermissionController extends Controller
         $perPage = (int) $request->query('per_page', 20);
         $perPage = ($perPage > 0 && $perPage <= 100) ? $perPage : 20;
 
-        return PermissionResource::collection($this->permissionService->list($filters, $perPage));
+        return $this->paginatedResponse(
+            PermissionResource::collection($this->permissionService->list($filters, $perPage))
+        );
     }
 
     public function store(PermissionStoreRequest $request)
     {
-        return new PermissionResource($this->permissionService->create($request->validated()));
+        return $this->createdResponse(
+            new PermissionResource($this->permissionService->create($request->validated())),
+            'Permission created successfully'
+        );
     }
 
     public function show(Permission $permission)
     {
-        return new PermissionResource($permission);
+        return $this->resourceResponse(new PermissionResource($permission));
     }
 
     public function update(PermissionUpdateRequest $request, Permission $permission)
     {
-        return new PermissionResource($this->permissionService->update($permission, $request->validated()));
+        return $this->resourceResponse(
+            new PermissionResource($this->permissionService->update($permission, $request->validated())),
+            'Permission updated successfully'
+        );
     }
 
     public function destroy(Permission $permission)
     {
         $this->permissionService->delete($permission);
-        return response()->json(['message' => 'Permission deleted successfully'], 200);
+        return $this->deletedResponse('Permission deleted successfully');
     }
 
     public function restore(Request $request, int $id): JsonResponse
@@ -65,51 +76,39 @@ class PermissionController extends Controller
         $restored = $this->permissionService->restore($id);
         
         if (!$restored) {
-            return response()->json(['message' => 'Permission not found or not deleted'], 404);
+            return $this->notFoundResponse('Permission not found or not deleted');
         }
         
-        return response()->json(['message' => 'Permission restored successfully']);
+        return $this->successResponse(null, 'Permission restored successfully');
     }
 
     public function forceDelete(Permission $permission): JsonResponse
     {
         $this->permissionService->forceDelete($permission);
-        return response()->json(['message' => 'Permission permanently deleted']);
+        return $this->successResponse(null, 'Permission permanently deleted');
     }
 
     public function bulkForceDelete(BulkOperationRequest $request): JsonResponse
     {
         $results = $this->permissionService->bulkForceDelete($request->validated()['ids']);
-
-        return response()->json([
-            'message' => 'Bulk force delete completed',
-            'results' => $results,
-        ]);
+        return $this->successResponse($results, 'Bulk force delete completed');
     }
 
     public function bulkDelete(BulkOperationRequest $request): JsonResponse
     {
         $results = $this->permissionService->bulkDelete($request->validated()['ids']);
-
-        return response()->json([
-            'message' => 'Bulk delete completed',
-            'results' => $results,
-        ]);
+        return $this->successResponse($results, 'Bulk delete completed');
     }
 
     public function bulkRestore(BulkOperationRequest $request): JsonResponse
     {
         $results = $this->permissionService->bulkRestore($request->validated()['ids']);
-
-        return response()->json([
-            'message' => 'Bulk restore completed',
-            'results' => $results,
-        ]);
+        return $this->successResponse($results, 'Bulk restore completed');
     }
 
     public function stats(): JsonResponse
     {
-        return response()->json($this->permissionService->stats());
+        return $this->successResponse($this->permissionService->stats());
     }
 
     public function recent(Request $request): JsonResponse
@@ -117,19 +116,19 @@ class PermissionController extends Controller
         $limit = (int) $request->query('limit', 10);
         $limit = ($limit > 0 && $limit <= 100) ? $limit : 10;
 
-        return response()->json([
-            'data' => PermissionResource::collection($this->permissionService->recent($limit))
-        ]);
+        return $this->successResponse(
+            PermissionResource::collection($this->permissionService->recent($limit))
+        );
     }
 
     public function groups(): JsonResponse
     {
-        return response()->json($this->permissionService->getGroupedPermissions());
+        return $this->successResponse($this->permissionService->getGroupedPermissions());
     }
 
     public function matrix(): JsonResponse
     {
-        return response()->json($this->permissionService->getPermissionMatrix());
+        return $this->successResponse($this->permissionService->getPermissionMatrix());
     }
 }
 

@@ -43,7 +43,7 @@ return [
 
     'routes' => [
         'prefix' => 'admin/acl', // acl : Access Control List
-        'middleware' => ['api', 'auth:sanctum'], // add your 'is_admin' middleware too if needed
+        'middleware' => ['api', 'auth'], // add your 'is_admin' middleware too if needed
         'guard' => env('ROLES_GUARD', 'web'), // guard for the routes
         // Expose handy endpoints for the authenticated user's roles/permissions
         'expose_me' => true,
@@ -73,6 +73,28 @@ return [
     */
     'seed' => [
         'roles' => ['manager'], // additional roles to seed
+
+        // Seeder classes to run (in order)
+        'seeders' => [
+            \Enadstack\LaravelRoles\Database\Seeders\RolesSeeder::class,
+            \Enadstack\LaravelRoles\Database\Seeders\SuperAdminSeeder::class,
+            \Enadstack\LaravelRoles\Database\Seeders\AdminSeeder::class,
+        ],
+
+        // Super Admin User Configuration
+        'super_admin' => [
+            'email' => env('SUPER_ADMIN_EMAIL', 'superadmin@example.com'),
+            'password' => env('SUPER_ADMIN_PASSWORD', 'password'),
+            'name' => env('SUPER_ADMIN_NAME', 'Super Admin'),
+        ],
+
+        // Admin User Configuration
+        'admin' => [
+            'email' => env('ADMIN_EMAIL', 'admin@example.com'),
+            'password' => env('ADMIN_PASSWORD', 'password'),
+            'name' => env('ADMIN_NAME', 'Admin'),
+        ],
+
         'permission_groups' => [
             'roles' => ['list','create', 'show' ,'update','delete' , 'restore', 'force-delete'],
             'users' => ['list', 'create', 'show', 'update', 'delete', 'restore', 'force-delete'],
@@ -81,7 +103,7 @@ return [
         ],
         'map' => [
             'super-admin' => ['*'],
-            'admin' => ['users.*'],
+            'admin' => ['users.*' , 'roles.*' , 'permissions.*' ],
         ],
         'role_descriptions' => [
             'super-admin' => 'Full system access',

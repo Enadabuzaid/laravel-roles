@@ -14,7 +14,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 
-class RoleService
+class RoleService extends BaseService
 {
     /**
      * Get paginated list of roles
@@ -237,17 +237,17 @@ class RoleService
     }
 
     /**
-     * Get role statistics
+     * Get role statistics with growth data
      */
     public function stats(): array
     {
         return [
-
             'total' => Role::count(),
             'active' => Role::whereNull('deleted_at')->count(),
             'deleted' => Role::onlyTrashed()->count(),
             'with_permissions' => Role::has('permissions')->count(),
             'without_permissions' => Role::doesntHave('permissions')->count(),
+            'growth' => $this->calculateGrowth(Role::class, 'created_at'),
         ];
     }
 

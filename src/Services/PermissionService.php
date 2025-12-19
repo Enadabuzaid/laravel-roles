@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 
-class PermissionService
+class PermissionService extends BaseService
 {
     /**
      * Get paginated list of permissions
@@ -142,7 +142,7 @@ class PermissionService
     }
 
     /**
-     * Get permission statistics
+     * Get permission statistics with growth data
      */
     public function stats(): array
     {
@@ -153,6 +153,7 @@ class PermissionService
             'assigned' => Permission::has('roles')->count(),
             'unassigned' => Permission::doesntHave('roles')->count(),
             'by_group' => $this->getStatsByGroup(),
+            'growth' => $this->calculateGrowth(Permission::class, 'created_at'),
         ];
     }
 

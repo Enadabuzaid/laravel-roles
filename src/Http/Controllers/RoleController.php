@@ -11,12 +11,13 @@ use Enadstack\LaravelRoles\Http\Requests\RoleUpdateRequest;
 use Enadstack\LaravelRoles\Http\Requests\AssignPermissionsRequest;
 use Enadstack\LaravelRoles\Http\Requests\BulkOperationRequest;
 use Enadstack\LaravelRoles\Http\Resources\RoleResource;
+use Enadstack\LaravelRoles\Traits\ApiResponseTrait;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
 class RoleController extends Controller
 {
-    use AuthorizesRequests;
+    use AuthorizesRequests, ApiResponseTrait;
 
     protected RoleService $roleService;
 
@@ -40,32 +41,40 @@ class RoleController extends Controller
         $perPage = (int) $request->query('per_page', 20);
         $perPage = ($perPage > 0 && $perPage <= 100) ? $perPage : 20; // Bound per_page
 
-        return RoleResource::collection($this->roleService->list($filters, $perPage));
+        return $this->paginatedResponse(
+            RoleResource::collection($this->roleService->list($filters, $perPage))
+        );
     }
 
     public function store(RoleStoreRequest $request)
     {
         // Authorization handled in RoleStoreRequest
-        return new RoleResource($this->roleService->create($request->validated()));
+        return $this->createdResponse(
+            new RoleResource($this->roleService->create($request->validated())),
+            'Role created successfully'
+        );
     }
 
     public function show(Role $role)
     {
         $this->authorize('view', $role);
-        return new RoleResource($role);
+        return $this->resourceResponse(new RoleResource($role));
     }
 
     public function update(RoleUpdateRequest $request, Role $role)
     {
         // Authorization handled in RoleUpdateRequest
-        return new RoleResource($this->roleService->update($role, $request->validated()));
+        return $this->resourceResponse(
+            new RoleResource($this->roleService->update($role, $request->validated())),
+            'Role updated successfully'
+        );
     }
 
     public function destroy(Role $role)
     {
         $this->authorize('delete', $role);
         $this->roleService->delete($role);
-        return response()->json(['message' => 'Role deleted successfully'], 200);
+        return $this->deletedResponse('Role deleted successfully');
     }
 
     public function restore(Request $request, int $id): JsonResponse
@@ -74,17 +83,17 @@ class RoleController extends Controller
         $restored = $this->roleService->restore($id);
         
         if (!$restored) {
-            return response()->json(['message' => 'Role not found or not deleted'], 404);
+            return $this->notFoundResponse('Role not found or not deleted');
         }
         
-        return response()->json(['message' => 'Role restored successfully']);
+        return $this->successResponse(null, 'Role restored successfully');
     }
 
     public function forceDelete(Role $role): JsonResponse
     {
         $this->authorize('forceDelete', $role);
         $this->roleService->forceDelete($role);
-        return response()->json(['message' => 'Role permanently deleted']);
+        return $this->successResponse(null, 'Role permanently deleted');
     }
 
     public function bulkDelete(BulkOperationRequest $request): JsonResponse
@@ -92,10 +101,7 @@ class RoleController extends Controller
         // Authorization handled in BulkOperationRequest
         $results = $this->roleService->bulkDelete($request->validated()['ids']);
 
-        return response()->json([
-            'message' => 'Bulk delete completed',
-            'results' => $results
-        ]);
+        return $this->successResponse($results, 'Bulk delete completed');
     }
 
     public function bulkRestore(BulkOperationRequest $request): JsonResponse
@@ -103,10 +109,7 @@ class RoleController extends Controller
         // Authorization handled in BulkOperationRequest
         $results = $this->roleService->bulkRestore($request->validated()['ids']);
 
-        return response()->json([
-            'message' => 'Bulk restore completed',
-            'results' => $results
-        ]);
+        return $this->successResponse($results, 'Bulk restore completed');
     }
 
     public function bulkForceDelete(BulkOperationRequest $request): JsonResponse
@@ -114,24 +117,22 @@ class RoleController extends Controller
         // Authorization handled in BulkOperationRequest
         $results = $this->roleService->bulkForceDelete($request->validated()['ids']);
 
-        return response()->json([
-            'message' => 'Bulk force delete completed',
-            'results' => $results,
-        ]);
+        return $this->successResponse($results, 'Bulk force delete completed');
     }
 
     public function recent(Request $request)
     {
-        $this->authorize('viewAny', Role::class);
         $limit = (int) $request->query('limit', 10);
         $limit = ($limit > 0 && $limit <= 100) ? $limit : 10; // Bound limit
-        return RoleResource::collection($this->roleService->recent($limit));
+
+        return $this->successResponse(
+            RoleResource::collection($this->roleService->recent($limit))
+        );
     }
 
     public function stats(): JsonResponse
     {
-        $this->authorize('viewAny', Role::class);
-        return response()->json($this->roleService->stats());
+        return $this->successResponse($this->roleService->stats());
     }
 
     public function assignPermissions(AssignPermissionsRequest $request, Role $role): JsonResponse
@@ -139,10 +140,10 @@ class RoleController extends Controller
         // Authorization handled in AssignPermissionsRequest
         $role = $this->roleService->assignPermissions($role, $request->validated()['permission_ids']);
 
-        return response()->json([
-            'message' => 'Permissions assigned successfully',
-            'role' => new RoleResource($role->load('permissions'))
-        ]);
+        return $this->resourceResponse(
+            new RoleResource($role->load('permissions')),
+            'Permissions assigned successfully'
+        );
     }
 
     public function permissions(int $id)
@@ -150,18 +151,18 @@ class RoleController extends Controller
         $role = $this->roleService->getRoleWithPermissions($id);
         
         if (!$role) {
-            return response()->json(['message' => 'Role not found'], 404);
+            return $this->notFoundResponse('Role not found');
         }
         
         $this->authorize('view', $role);
 
-        return response()->json($role->permissions);
+        return $this->successResponse($role->permissions);
     }
 
     public function permissionsGroupedByRole()
     {
         $this->authorize('viewAny', Role::class);
-        return response()->json($this->roleService->getPermissionsGroupedByRole());
+        return $this->successResponse($this->roleService->getPermissionsGroupedByRole());
     }
 
     public function addPermission(Request $request, Role $role): JsonResponse
@@ -174,10 +175,10 @@ class RoleController extends Controller
 
         $role = $this->roleService->addPermission($role, $data['permission_id']);
 
-        return response()->json([
-            'message' => 'Permission attached successfully',
-            'role' => new RoleResource($role),
-        ]);
+        return $this->resourceResponse(
+            new RoleResource($role),
+            'Permission attached successfully'
+        );
     }
 
     public function removePermission(Request $request, Role $role): JsonResponse
@@ -190,10 +191,10 @@ class RoleController extends Controller
 
         $role = $this->roleService->removePermission($role, $data['permission_id']);
 
-        return response()->json([
-            'message' => 'Permission detached successfully',
-            'role' => new RoleResource($role),
-        ]);
+        return $this->resourceResponse(
+            new RoleResource($role),
+            'Permission detached successfully'
+        );
     }
 
     public function clone(Request $request, Role $role): JsonResponse
@@ -209,9 +210,9 @@ class RoleController extends Controller
 
         $new = $this->roleService->cloneWithPermissions($role, $data['name'], $data);
 
-        return response()->json([
-            'message' => 'Role cloned successfully',
-            'role' => new RoleResource($new),
-        ], 201);
+        return $this->createdResponse(
+            new RoleResource($new),
+            'Role cloned successfully'
+        );
     }
 }
