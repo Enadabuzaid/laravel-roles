@@ -4,6 +4,7 @@ namespace Enadstack\LaravelRoles\Observers;
 
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Enums\RolePermissionStatusEnum;
+use Illuminate\Support\Facades\Cache;
 
 class RoleObserver
 {
@@ -19,6 +20,22 @@ class RoleObserver
     }
 
     /**
+     * Handle the Role "created" event.
+     */
+    public function created(Role $role): void
+    {
+        $this->flushCaches();
+    }
+
+    /**
+     * Handle the Role "updated" event.
+     */
+    public function updated(Role $role): void
+    {
+        $this->flushCaches();
+    }
+
+    /**
      * Handle the Role "deleting" event.
      */
     public function deleting(Role $role): void
@@ -31,6 +48,14 @@ class RoleObserver
     }
 
     /**
+     * Handle the Role "deleted" event.
+     */
+    public function deleted(Role $role): void
+    {
+        $this->flushCaches();
+    }
+
+    /**
      * Handle the Role "restoring" event.
      */
     public function restoring(Role $role): void
@@ -40,11 +65,33 @@ class RoleObserver
     }
 
     /**
+     * Handle the Role "restored" event.
+     */
+    public function restored(Role $role): void
+    {
+        $this->flushCaches();
+    }
+
+    /**
      * Handle the Role "force deleted" event.
      */
     public function forceDeleted(Role $role): void
     {
-        // Additional cleanup if needed
+        $this->flushCaches();
+    }
+
+    /**
+     * Flush package caches to ensure stats are accurate
+     */
+    protected function flushCaches(): void
+    {
+        $store = Cache::getStore();
+        if (method_exists($store, 'tags')) {
+            Cache::tags(['laravel_roles'])->flush();
+        } else {
+            Cache::forget(config('roles.cache.keys.grouped_permissions', 'laravel_roles.grouped_permissions'));
+            Cache::forget(config('roles.cache.keys.permission_matrix', 'laravel_roles.permission_matrix'));
+        }
     }
 }
 

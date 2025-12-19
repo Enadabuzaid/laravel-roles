@@ -4,6 +4,7 @@ namespace Enadstack\LaravelRoles\Observers;
 
 use Enadstack\LaravelRoles\Models\Permission;
 use Enadstack\LaravelRoles\Enums\RolePermissionStatusEnum;
+use Illuminate\Support\Facades\Cache;
 
 class PermissionObserver
 {
@@ -19,6 +20,22 @@ class PermissionObserver
     }
 
     /**
+     * Handle the Permission "created" event.
+     */
+    public function created(Permission $permission): void
+    {
+        $this->flushCaches();
+    }
+
+    /**
+     * Handle the Permission "updated" event.
+     */
+    public function updated(Permission $permission): void
+    {
+        $this->flushCaches();
+    }
+
+    /**
      * Handle the Permission "deleting" event.
      */
     public function deleting(Permission $permission): void
@@ -31,6 +48,14 @@ class PermissionObserver
     }
 
     /**
+     * Handle the Permission "deleted" event.
+     */
+    public function deleted(Permission $permission): void
+    {
+        $this->flushCaches();
+    }
+
+    /**
      * Handle the Permission "restoring" event.
      */
     public function restoring(Permission $permission): void
@@ -40,11 +65,33 @@ class PermissionObserver
     }
 
     /**
+     * Handle the Permission "restored" event.
+     */
+    public function restored(Permission $permission): void
+    {
+        $this->flushCaches();
+    }
+
+    /**
      * Handle the Permission "force deleted" event.
      */
     public function forceDeleted(Permission $permission): void
     {
-        // Additional cleanup if needed
+        $this->flushCaches();
+    }
+
+    /**
+     * Flush package caches to ensure stats are accurate
+     */
+    protected function flushCaches(): void
+    {
+        $store = Cache::getStore();
+        if (method_exists($store, 'tags')) {
+            Cache::tags(['laravel_roles'])->flush();
+        } else {
+            Cache::forget(config('roles.cache.keys.grouped_permissions', 'laravel_roles.grouped_permissions'));
+            Cache::forget(config('roles.cache.keys.permission_matrix', 'laravel_roles.permission_matrix'));
+        }
     }
 }
 

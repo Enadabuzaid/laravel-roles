@@ -283,6 +283,10 @@ class PermissionService extends BaseService
                 $selectFields[] = 'label';
             }
 
+            if (Schema::hasColumn('permissions', 'description')) {
+                $selectFields[] = 'description';
+            }
+
             if (Schema::hasColumn('permissions', 'group')) {
                 $selectFields[] = 'group';
             }
@@ -305,7 +309,8 @@ class PermissionService extends BaseService
                     'permissions' => $items->map(fn($p) => [
                         'id' => $p->id,
                         'name' => $p->name,
-                        'label' => $p->label ?? null
+                        'label' => $p->label ?? null,
+                        'description' => $p->description ?? null,
                     ])->values()
                 ]);
         };
