@@ -1,11 +1,35 @@
+/**
+ * Laravel Roles Package - Main Export
+ *
+ * All components, composables, and types are exported here.
+ * This package is designed to be published into a Laravel project
+ * that uses Vue 3 + Inertia.js + shadcn-vue.
+ */
+
 // Types
 export * from './types'
+
+// API Client Layer
+export * from './api'
 
 // Composables
 export { useRolesApi } from './composables/useRolesApi'
 export { usePermissionsApi } from './composables/usePermissionsApi'
+export { useMatrixApi } from './composables/useMatrixApi'
+export { useToast } from './composables/useToast'
 
-// Components
+// UI Components
+export { default as PageHeader } from './components/ui/PageHeader.vue'
+export { default as ConfirmDialog } from './components/ui/ConfirmDialog.vue'
+export { default as SearchInput } from './components/ui/SearchInput.vue'
+export { default as DataTableSkeleton } from './components/ui/DataTableSkeleton.vue'
+export { default as EmptyState } from './components/ui/EmptyState.vue'
+
+// Permission Matrix Components
+export { default as PermissionToggleRow } from './components/PermissionToggleRow.vue'
+export { default as PermissionGroupAccordion } from './components/PermissionGroupAccordion.vue'
+
+// Legacy Components (for backward compatibility)
 export { default as ViewToggle } from './components/ViewToggle.vue'
 export { default as FiltersBar } from './components/FiltersBar.vue'
 export { default as LocaleBadge } from './components/LocaleBadge.vue'
@@ -26,4 +50,3 @@ export { default as PermissionMatrix } from './pages/PermissionMatrix.vue'
 
 // Locales
 export { default as enTranslations } from './locales/en'
-

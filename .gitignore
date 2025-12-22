@@ -1,0 +1,15 @@
+/vendor/
+/.phpunit.cache/
+/build/
+/.idea/
+/.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.*
+!.env.example
+phpunit.xml.bak
+coverage/
