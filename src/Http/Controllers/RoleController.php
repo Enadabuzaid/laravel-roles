@@ -1,31 +1,70 @@
 <?php
-// src/Http/Controllers/RoleController.php
+
+declare(strict_types=1);
+
 namespace Enadstack\LaravelRoles\Http\Controllers;
 
 use Illuminate\Routing\Controller;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Enadstack\LaravelRoles\Models\Role;
-use Enadstack\LaravelRoles\Services\RoleService;
+use Enadstack\LaravelRoles\Contracts\RoleServiceContract;
+use Enadstack\LaravelRoles\Contracts\RolePermissionSyncServiceContract;
 use Enadstack\LaravelRoles\Http\Requests\RoleStoreRequest;
 use Enadstack\LaravelRoles\Http\Requests\RoleUpdateRequest;
 use Enadstack\LaravelRoles\Http\Requests\AssignPermissionsRequest;
 use Enadstack\LaravelRoles\Http\Requests\BulkOperationRequest;
 use Enadstack\LaravelRoles\Http\Resources\RoleResource;
 use Enadstack\LaravelRoles\Traits\ApiResponseTrait;
+use Enadstack\LaravelRoles\Services\RoleService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
+/**
+ * RoleController
+ *
+ * Handles role CRUD operations through the RoleService.
+ * Never calls Spatie directly - all access goes through package services.
+ *
+ * @package Enadstack\LaravelRoles\Http\Controllers
+ */
 class RoleController extends Controller
 {
     use AuthorizesRequests, ApiResponseTrait;
 
-    protected RoleService $roleService;
+    /**
+     * Role service instance.
+     *
+     * @var RoleServiceContract
+     */
+    protected RoleServiceContract $roleService;
 
-    public function __construct(RoleService $roleService)
-    {
+    /**
+     * Role permission sync service instance.
+     *
+     * @var RolePermissionSyncServiceContract
+     */
+    protected RolePermissionSyncServiceContract $syncService;
+
+    /**
+     * Create a new controller instance.
+     *
+     * @param RoleServiceContract $roleService
+     * @param RolePermissionSyncServiceContract $syncService
+     */
+    public function __construct(
+        RoleServiceContract $roleService,
+        RolePermissionSyncServiceContract $syncService
+    ) {
         $this->roleService = $roleService;
+        $this->syncService = $syncService;
     }
 
+    /**
+     * List all roles.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
     public function index(Request $request)
     {
         $this->authorize('viewAny', Role::class);
@@ -43,37 +82,60 @@ class RoleController extends Controller
             'only_trashed' => $request->boolean('only_trashed'),
         ];
         $perPage = (int) $request->query('per_page', 20);
-        $perPage = ($perPage > 0 && $perPage <= 100) ? $perPage : 20; // Bound per_page
+        $perPage = ($perPage > 0 && $perPage <= 100) ? $perPage : 20;
 
         return $this->paginatedResponse(
             RoleResource::collection($this->roleService->list($filters, $perPage))
         );
     }
 
+    /**
+     * Store a new role.
+     *
+     * @param RoleStoreRequest $request
+     * @return JsonResponse
+     */
     public function store(RoleStoreRequest $request)
     {
-        // Authorization handled in RoleStoreRequest
         return $this->createdResponse(
             new RoleResource($this->roleService->create($request->validated())),
             'Role created successfully'
         );
     }
 
+    /**
+     * Show a specific role.
+     *
+     * @param Role $role
+     * @return JsonResponse
+     */
     public function show(Role $role)
     {
         $this->authorize('view', $role);
         return $this->resourceResponse(new RoleResource($role));
     }
 
+    /**
+     * Update a role.
+     *
+     * @param RoleUpdateRequest $request
+     * @param Role $role
+     * @return JsonResponse
+     */
     public function update(RoleUpdateRequest $request, Role $role)
     {
-        // Authorization handled in RoleUpdateRequest
         return $this->resourceResponse(
             new RoleResource($this->roleService->update($role, $request->validated())),
             'Role updated successfully'
         );
     }
 
+    /**
+     * Delete a role (soft delete).
+     *
+     * @param Role $role
+     * @return JsonResponse
+     */
     public function destroy(Role $role)
     {
         $this->authorize('delete', $role);
@@ -81,6 +143,13 @@ class RoleController extends Controller
         return $this->deletedResponse('Role deleted successfully');
     }
 
+    /**
+     * Restore a soft-deleted role.
+     *
+     * @param Request $request
+     * @param int $id
+     * @return JsonResponse
+     */
     public function restore(Request $request, int $id): JsonResponse
     {
         $this->authorize('restore', Role::class);
@@ -93,6 +162,12 @@ class RoleController extends Controller
         return $this->successResponse(null, 'Role restored successfully');
     }
 
+    /**
+     * Force delete a role (permanent).
+     *
+     * @param Role $role
+     * @return JsonResponse
+     */
     public function forceDelete(Role $role): JsonResponse
     {
         $this->authorize('forceDelete', $role);
@@ -100,49 +175,78 @@ class RoleController extends Controller
         return $this->successResponse(null, 'Role permanently deleted');
     }
 
+    /**
+     * Bulk delete roles.
+     *
+     * @param BulkOperationRequest $request
+     * @return JsonResponse
+     */
     public function bulkDelete(BulkOperationRequest $request): JsonResponse
     {
-        // Authorization handled in BulkOperationRequest
         $results = $this->roleService->bulkDelete($request->validated()['ids']);
-
         return $this->successResponse($results, 'Bulk delete completed');
     }
 
+    /**
+     * Bulk restore roles.
+     *
+     * @param BulkOperationRequest $request
+     * @return JsonResponse
+     */
     public function bulkRestore(BulkOperationRequest $request): JsonResponse
     {
-        // Authorization handled in BulkOperationRequest
         $results = $this->roleService->bulkRestore($request->validated()['ids']);
-
         return $this->successResponse($results, 'Bulk restore completed');
     }
 
+    /**
+     * Bulk force delete roles.
+     *
+     * @param BulkOperationRequest $request
+     * @return JsonResponse
+     */
     public function bulkForceDelete(BulkOperationRequest $request): JsonResponse
     {
-        // Authorization handled in BulkOperationRequest
         $results = $this->roleService->bulkForceDelete($request->validated()['ids']);
-
         return $this->successResponse($results, 'Bulk force delete completed');
     }
 
+    /**
+     * Get recent roles.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
     public function recent(Request $request)
     {
         $limit = (int) $request->query('limit', 10);
-        $limit = ($limit > 0 && $limit <= 100) ? $limit : 10; // Bound limit
+        $limit = ($limit > 0 && $limit <= 100) ? $limit : 10;
 
         return $this->successResponse(
             RoleResource::collection($this->roleService->recent($limit))
         );
     }
 
+    /**
+     * Get role statistics.
+     *
+     * @return JsonResponse
+     */
     public function stats(): JsonResponse
     {
         return $this->successResponse($this->roleService->stats());
     }
 
+    /**
+     * Assign permissions to role (sync).
+     *
+     * @param AssignPermissionsRequest $request
+     * @param Role $role
+     * @return JsonResponse
+     */
     public function assignPermissions(AssignPermissionsRequest $request, Role $role): JsonResponse
     {
-        // Authorization handled in AssignPermissionsRequest
-        $role = $this->roleService->assignPermissions($role, $request->validated()['permission_ids']);
+        $role = $this->syncService->assignPermissions($role, $request->validated()['permission_ids']);
 
         return $this->resourceResponse(
             new RoleResource($role->load('permissions')),
@@ -150,6 +254,51 @@ class RoleController extends Controller
         );
     }
 
+    /**
+     * Diff-based permission sync.
+     *
+     * Accepts grant and revoke arrays for fine-grained permission management.
+     * Supports wildcards like 'users.*' or '*'.
+     *
+     * Payload format:
+     * {
+     *   "grant": ["roles.list", "users.*"],
+     *   "revoke": ["users.delete"]
+     * }
+     *
+     * @param Request $request
+     * @param Role $role
+     * @return JsonResponse
+     */
+    public function diffPermissions(Request $request, Role $role): JsonResponse
+    {
+        $this->authorize('assignPermissions', $role);
+
+        $data = $request->validate([
+            'grant' => ['sometimes', 'array'],
+            'grant.*' => ['string'],
+            'revoke' => ['sometimes', 'array'],
+            'revoke.*' => ['string'],
+        ]);
+
+        $result = $this->syncService->diffSync(
+            $role,
+            $data['grant'] ?? [],
+            $data['revoke'] ?? []
+        );
+
+        return $this->successResponse([
+            'result' => $result,
+            'role' => new RoleResource($role->fresh()->load('permissions')),
+        ], 'Permission diff applied successfully');
+    }
+
+    /**
+     * Get role's permissions.
+     *
+     * @param int $id
+     * @return JsonResponse
+     */
     public function permissions(int $id)
     {
         $role = $this->roleService->getRoleWithPermissions($id);
@@ -163,12 +312,24 @@ class RoleController extends Controller
         return $this->successResponse($role->permissions);
     }
 
+    /**
+     * Get all permissions grouped by role.
+     *
+     * @return JsonResponse
+     */
     public function permissionsGroupedByRole()
     {
         $this->authorize('viewAny', Role::class);
         return $this->successResponse($this->roleService->getPermissionsGroupedByRole());
     }
 
+    /**
+     * Add a single permission to role.
+     *
+     * @param Request $request
+     * @param Role $role
+     * @return JsonResponse
+     */
     public function addPermission(Request $request, Role $role): JsonResponse
     {
         $this->authorize('assignPermissions', $role);
@@ -177,7 +338,7 @@ class RoleController extends Controller
             'permission_id' => ['required', 'integer', 'exists:permissions,id'],
         ]);
 
-        $role = $this->roleService->addPermission($role, $data['permission_id']);
+        $role = $this->syncService->addPermission($role, $data['permission_id']);
 
         return $this->resourceResponse(
             new RoleResource($role),
@@ -185,6 +346,13 @@ class RoleController extends Controller
         );
     }
 
+    /**
+     * Remove a single permission from role.
+     *
+     * @param Request $request
+     * @param Role $role
+     * @return JsonResponse
+     */
     public function removePermission(Request $request, Role $role): JsonResponse
     {
         $this->authorize('assignPermissions', $role);
@@ -193,7 +361,7 @@ class RoleController extends Controller
             'permission_id' => ['required', 'integer', 'exists:permissions,id'],
         ]);
 
-        $role = $this->roleService->removePermission($role, $data['permission_id']);
+        $role = $this->syncService->removePermission($role, $data['permission_id']);
 
         return $this->resourceResponse(
             new RoleResource($role),
@@ -201,6 +369,13 @@ class RoleController extends Controller
         );
     }
 
+    /**
+     * Clone a role with its permissions.
+     *
+     * @param Request $request
+     * @param Role $role
+     * @return JsonResponse
+     */
     public function clone(Request $request, Role $role): JsonResponse
     {
         $this->authorize('clone', $role);
@@ -221,7 +396,11 @@ class RoleController extends Controller
     }
 
     /**
-     * Change role status
+     * Change role status.
+     *
+     * @param Request $request
+     * @param Role $role
+     * @return JsonResponse
      */
     public function changeStatus(Request $request, Role $role): JsonResponse
     {
@@ -241,13 +420,19 @@ class RoleController extends Controller
     }
 
     /**
-     * Activate role
+     * Activate role.
+     *
+     * @param Role $role
+     * @return JsonResponse
      */
     public function activate(Role $role): JsonResponse
     {
         $this->authorize('update', $role);
 
-        $role = $this->roleService->activate($role);
+        $role = $this->roleService->changeStatus(
+            $role,
+            \Enadstack\LaravelRoles\Enums\RolePermissionStatusEnum::ACTIVE
+        );
 
         return $this->resourceResponse(
             new RoleResource($role),
@@ -256,13 +441,19 @@ class RoleController extends Controller
     }
 
     /**
-     * Deactivate role
+     * Deactivate role.
+     *
+     * @param Role $role
+     * @return JsonResponse
      */
     public function deactivate(Role $role): JsonResponse
     {
         $this->authorize('update', $role);
 
-        $role = $this->roleService->deactivate($role);
+        $role = $this->roleService->changeStatus(
+            $role,
+            \Enadstack\LaravelRoles\Enums\RolePermissionStatusEnum::INACTIVE
+        );
 
         return $this->resourceResponse(
             new RoleResource($role),
@@ -271,7 +462,10 @@ class RoleController extends Controller
     }
 
     /**
-     * Bulk change status
+     * Bulk change status.
+     *
+     * @param Request $request
+     * @return JsonResponse
      */
     public function bulkChangeStatus(Request $request): JsonResponse
     {
@@ -284,7 +478,10 @@ class RoleController extends Controller
         ]);
 
         $status = \Enadstack\LaravelRoles\Enums\RolePermissionStatusEnum::from($data['status']);
-        $results = $this->roleService->bulkChangeStatus($data['ids'], $status);
+        
+        // Use RoleService for bulk status change
+        $service = app(RoleService::class);
+        $results = $service->bulkChangeStatus($data['ids'], $status);
 
         return $this->successResponse($results, 'Bulk status change completed');
     }

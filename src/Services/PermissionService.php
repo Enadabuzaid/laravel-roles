@@ -1,7 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Enadstack\LaravelRoles\Services;
 
+use Enadstack\LaravelRoles\Contracts\PermissionServiceContract;
+use Enadstack\LaravelRoles\Contracts\TenantContextContract;
+use Enadstack\LaravelRoles\Contracts\GuardResolverContract;
+use Enadstack\LaravelRoles\Contracts\CacheKeyBuilderContract;
 use Enadstack\LaravelRoles\Models\Permission;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Events\PermissionCreated;
@@ -9,35 +15,72 @@ use Enadstack\LaravelRoles\Events\PermissionUpdated;
 use Enadstack\LaravelRoles\Enums\RolePermissionStatusEnum;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 
-class PermissionService extends BaseService
+/**
+ * PermissionService
+ *
+ * Core service for permission management operations.
+ * All permission access must go through this service, never directly via Spatie.
+ *
+ * @package Enadstack\LaravelRoles\Services
+ */
+class PermissionService extends BaseService implements PermissionServiceContract
 {
     /**
-     * Get paginated list of permissions
+     * Tenant context instance.
+     *
+     * @var TenantContextContract|null
+     */
+    protected ?TenantContextContract $tenantContext = null;
+
+    /**
+     * Guard resolver instance.
+     *
+     * @var GuardResolverContract|null
+     */
+    protected ?GuardResolverContract $guardResolver = null;
+
+    /**
+     * Cache key builder instance.
+     *
+     * @var CacheKeyBuilderContract|null
+     */
+    protected ?CacheKeyBuilderContract $cacheKeyBuilder = null;
+
+    /**
+     * Create a new service instance.
+     *
+     * @param TenantContextContract|null $tenantContext
+     * @param GuardResolverContract|null $guardResolver
+     * @param CacheKeyBuilderContract|null $cacheKeyBuilder
+     */
+    public function __construct(
+        ?TenantContextContract $tenantContext = null,
+        ?GuardResolverContract $guardResolver = null,
+        ?CacheKeyBuilderContract $cacheKeyBuilder = null
+    ) {
+        $this->tenantContext = $tenantContext;
+        $this->guardResolver = $guardResolver;
+        $this->cacheKeyBuilder = $cacheKeyBuilder;
+    }
+
+    /**
+     * {@inheritdoc}
      */
     public function list(array $filters = [], int $perPage = 20): LengthAwarePaginator
     {
-        $guard = $filters['guard'] ?? config('roles.guard', config('auth.defaults.guard', 'web'));
+        $guard = $filters['guard'] ?? $this->getGuard();
         $query = Permission::query()->where('guard_name', $guard);
 
         // Trash filters
-        if (!empty($filters['only_deleted'])) {
-            // Show only soft-deleted records (with status 'deleted')
+        if (!empty($filters['only_deleted']) || !empty($filters['only_trashed'])) {
             $query->onlyTrashed();
-        } elseif (!empty($filters['with_deleted'])) {
-            // Show both active and soft-deleted records
+        } elseif (!empty($filters['with_deleted']) || !empty($filters['with_trashed'])) {
             $query->withTrashed();
-        } elseif (!empty($filters['with_trashed'])) {
-            // Backward compatibility: with_trashed same as with_deleted
-            $query->withTrashed();
-        } elseif (!empty($filters['only_trashed'])) {
-            // Backward compatibility: only_trashed same as only_deleted
-            $query->onlyTrashed();
         }
-        // Default: show only non-deleted records
 
         // Search filter
         if (!empty($filters['search'])) {
@@ -78,7 +121,7 @@ class PermissionService extends BaseService
     }
 
     /**
-     * Get a single permission by ID
+     * {@inheritdoc}
      */
     public function find(int $id): ?Permission
     {
@@ -86,11 +129,32 @@ class PermissionService extends BaseService
     }
 
     /**
-     * Create a new permission
+     * {@inheritdoc}
+     */
+    public function findByName(string $name, ?string $guardName = null): ?Permission
+    {
+        $guardName = $guardName ?? $this->getGuard();
+
+        return Permission::where('name', $name)
+            ->where('guard_name', $guardName)
+            ->first();
+    }
+
+    /**
+     * {@inheritdoc}
      */
     public function create(array $data): Permission
     {
-        $data['guard_name'] = $data['guard_name'] ?? config('roles.guard', config('auth.defaults.guard', 'web'));
+        $data['guard_name'] = $data['guard_name'] ?? $this->getGuard();
+
+        // Apply tenant context if team_scoped
+        if ($this->tenantContext && $this->tenantContext->isTeamScoped()) {
+            $fk = $this->tenantContext->teamForeignKey();
+            if (!isset($data[$fk])) {
+                $data[$fk] = $this->tenantContext->tenantId();
+            }
+        }
+
         $perm = Permission::create($data);
         $this->flushCaches();
 
@@ -100,7 +164,7 @@ class PermissionService extends BaseService
     }
 
     /**
-     * Update an existing permission
+     * {@inheritdoc}
      */
     public function update(Permission $permission, array $data): Permission
     {
@@ -113,27 +177,29 @@ class PermissionService extends BaseService
     }
 
     /**
-     * Soft delete a permission
+     * {@inheritdoc}
      */
     public function delete(Permission $permission): bool
     {
         $ok = $permission->delete();
         $this->flushCaches();
+
         return $ok;
     }
 
     /**
-     * Force delete a permission (permanent deletion)
+     * {@inheritdoc}
      */
     public function forceDelete(Permission $permission): bool
     {
         $ok = $permission->forceDelete();
         $this->flushCaches();
+
         return $ok;
     }
 
     /**
-     * Restore a soft-deleted permission
+     * {@inheritdoc}
      */
     public function restore(int $id): bool
     {
@@ -145,32 +211,44 @@ class PermissionService extends BaseService
 
         $ok = $permission->restore();
         $this->flushCaches();
+
         return $ok;
     }
 
     /**
-     * Get recently created permissions
+     * {@inheritdoc}
      */
     public function recent(int $limit = 10): Collection
     {
-        return Permission::query()
+        $query = Permission::query()
             ->latest('created_at')
-            ->limit($limit)
-            ->get();
+            ->limit($limit);
+
+        if ($this->guardResolver) {
+            $query->where('guard_name', $this->guardResolver->guard());
+        }
+
+        return $query->get();
     }
 
     /**
-     * Get permission statistics with growth data
+     * {@inheritdoc}
      */
     public function stats(): array
     {
+        $query = Permission::query();
+
+        if ($this->guardResolver) {
+            $query->where('guard_name', $this->guardResolver->guard());
+        }
+
         return [
-            'total' => Permission::count(),
-            'active' => Permission::where('status', RolePermissionStatusEnum::ACTIVE->value)->count(),
-            'inactive' => Permission::where('status', RolePermissionStatusEnum::INACTIVE->value)->count(),
-            'deleted' => Permission::where('status', RolePermissionStatusEnum::DELETED->value)->count(),
-            'assigned' => Permission::has('roles')->count(),
-            'unassigned' => Permission::doesntHave('roles')->count(),
+            'total' => (clone $query)->count(),
+            'active' => (clone $query)->where('status', RolePermissionStatusEnum::ACTIVE->value)->count(),
+            'inactive' => (clone $query)->where('status', RolePermissionStatusEnum::INACTIVE->value)->count(),
+            'deleted' => (clone $query)->where('status', RolePermissionStatusEnum::DELETED->value)->count(),
+            'assigned' => (clone $query)->has('roles')->count(),
+            'unassigned' => (clone $query)->doesntHave('roles')->count(),
             'by_group' => $this->getStatsByGroup(),
             'by_status' => $this->getStatsByStatus(),
             'growth' => $this->calculateGrowth(Permission::class, 'created_at'),
@@ -178,7 +256,9 @@ class PermissionService extends BaseService
     }
 
     /**
-     * Alias for stats() method - backward compatibility
+     * Alias for stats() method - backward compatibility.
+     *
+     * @return array
      */
     public function getStats(): array
     {
@@ -186,7 +266,10 @@ class PermissionService extends BaseService
     }
 
     /**
-     * Alias for recent() method - backward compatibility
+     * Alias for recent() method - backward compatibility.
+     *
+     * @param int $limit
+     * @return Collection
      */
     public function getRecent(int $limit = 10): Collection
     {
@@ -194,7 +277,9 @@ class PermissionService extends BaseService
     }
 
     /**
-     * Get statistics by group
+     * Get statistics by group.
+     *
+     * @return array
      */
     protected function getStatsByGroup(): array
     {
@@ -211,7 +296,9 @@ class PermissionService extends BaseService
     }
 
     /**
-     * Get statistics grouped by status
+     * Get statistics grouped by status.
+     *
+     * @return array
      */
     protected function getStatsByStatus(): array
     {
@@ -223,7 +310,7 @@ class PermissionService extends BaseService
     }
 
     /**
-     * Change permission status
+     * {@inheritdoc}
      */
     public function changeStatus(Permission $permission, RolePermissionStatusEnum $status): Permission
     {
@@ -236,7 +323,10 @@ class PermissionService extends BaseService
     }
 
     /**
-     * Activate permission
+     * Activate permission.
+     *
+     * @param Permission $permission
+     * @return Permission
      */
     public function activate(Permission $permission): Permission
     {
@@ -244,7 +334,10 @@ class PermissionService extends BaseService
     }
 
     /**
-     * Deactivate permission
+     * Deactivate permission.
+     *
+     * @param Permission $permission
+     * @return Permission
      */
     public function deactivate(Permission $permission): Permission
     {
@@ -252,7 +345,11 @@ class PermissionService extends BaseService
     }
 
     /**
-     * Bulk change status
+     * Bulk change status.
+     *
+     * @param array $ids
+     * @param RolePermissionStatusEnum $status
+     * @return array
      */
     public function bulkChangeStatus(array $ids, RolePermissionStatusEnum $status): array
     {
@@ -279,30 +376,24 @@ class PermissionService extends BaseService
         });
 
         $this->flushCaches();
+
         return $results;
     }
 
     /**
-     * Get permissions grouped by group (cached)
+     * {@inheritdoc}
      */
-    public function getGroupedPermissions(): \Illuminate\Support\Collection
+    public function getGroupedPermissions(): SupportCollection
     {
-        $cacheOn = (bool) config('roles.cache.enabled', true);
-        $ttl = (int) config('roles.cache.ttl', 300);
-        $key = config('roles.cache.keys.grouped_permissions', 'laravel_roles.grouped_permissions');
-
         $compute = function () {
             $selectFields = ['name', 'id'];
 
-            // Only select label if i18n is enabled and column exists
             if (Schema::hasColumn('permissions', 'label')) {
                 $selectFields[] = 'label';
             }
-
             if (Schema::hasColumn('permissions', 'description')) {
                 $selectFields[] = 'description';
             }
-
             if (Schema::hasColumn('permissions', 'group')) {
                 $selectFields[] = 'group';
             }
@@ -310,7 +401,9 @@ class PermissionService extends BaseService
                 $selectFields[] = 'group_label';
             }
 
-            $query = Permission::query()->select($selectFields);
+            $query = Permission::query()
+                ->select($selectFields)
+                ->where('guard_name', $this->getGuard());
 
             if (Schema::hasColumn('permissions', 'group')) {
                 $query->orderBy('group')->orderBy('name');
@@ -321,53 +414,49 @@ class PermissionService extends BaseService
             return $query->get()
                 ->groupBy('group')
                 ->map(fn($items) => [
-                    'label' => optional($items->first())->group_label ?? null,
+                    'label' => $this->resolveGroupLabel($items->first()),
                     'permissions' => $items->map(fn($p) => [
                         'id' => $p->id,
                         'name' => $p->name,
-                        'label' => $p->label ?? null,
-                        'description' => $p->description ?? null,
+                        'label' => $this->resolveLabel($p),
+                        'description' => $this->resolveDescription($p),
                     ])->values()
                 ]);
         };
 
-        if (! $cacheOn) {
-            return $compute();
+        if ($this->cacheKeyBuilder && $this->cacheKeyBuilder->isEnabled()) {
+            return $this->cacheKeyBuilder->remember('grouped_permissions', $compute);
         }
 
-        $store = Cache::getStore();
-        if (method_exists($store, 'tags')) {
-            return Cache::tags(['laravel_roles'])->remember($key, $ttl, $compute);
-        }
-        return Cache::remember($key, $ttl, $compute);
+        return $compute();
     }
 
     /**
-     * Generate permission matrix (roles x permissions) (cached)
+     * {@inheritdoc}
      */
     public function getPermissionMatrix(): array
     {
-        $cacheOn = (bool) config('roles.cache.enabled', true);
-        $ttl = (int) config('roles.cache.ttl', 300);
-        $key = config('roles.cache.keys.permission_matrix', 'laravel_roles.permission_matrix');
-
         $compute = function () {
-            $roles = Role::with('permissions')->get();
-            $permissions = Permission::all();
+            $guard = $this->getGuard();
 
-            // Create a lookup map for faster permission checks (O(1) instead of O(n))
+            // Query 1: Get all roles with their permissions (eager loaded)
+            $roles = Role::where('guard_name', $guard)->with('permissions')->get();
+
+            // Query 2: Get all permissions
+            $permissions = Permission::where('guard_name', $guard)->get();
+
+            // Build lookup map for O(1) permission checks
             $rolePermissionsMap = [];
             foreach ($roles as $role) {
                 $rolePermissionsMap[$role->id] = $role->permissions->pluck('id')->flip()->toArray();
             }
 
             $matrix = [];
-
             foreach ($permissions as $permission) {
                 $permissionRow = [
                     'permission_id' => $permission->id,
                     'permission_name' => $permission->name,
-                    'permission_label' => $permission->label ?? null,
+                    'permission_label' => $this->resolveLabel($permission),
                     'permission_group' => $permission->group ?? null,
                     'roles' => []
                 ];
@@ -392,50 +481,86 @@ class PermissionService extends BaseService
             ];
         };
 
-        if (! $cacheOn) {
-            return $compute();
+        if ($this->cacheKeyBuilder && $this->cacheKeyBuilder->isEnabled()) {
+            return $this->cacheKeyBuilder->remember('permission_matrix', $compute);
         }
 
-        $store = Cache::getStore();
-        if (method_exists($store, 'tags')) {
-            return Cache::tags(['laravel_roles'])->remember($key, $ttl, $compute);
-        }
-        return Cache::remember($key, $ttl, $compute);
+        return $compute();
     }
 
     /**
-     * Bulk force delete permissions
+     * {@inheritdoc}
      */
-    public function bulkForceDelete(array $ids): array
+    public function resolveLabel(Permission $permission, ?string $locale = null): ?string
     {
-        $results = ['success' => [], 'failed' => []];
+        $label = $permission->label;
 
-        DB::transaction(function () use ($ids, &$results) {
-            $perms = Permission::withTrashed()->whereIn('id', $ids)->get();
-            $found = $perms->pluck('id')->all();
+        if ($label === null) {
+            return null;
+        }
 
-            foreach ($ids as $id) {
-                if (! in_array($id, $found, true)) {
-                    $results['failed'][] = ['id' => $id, 'reason' => 'Not found'];
-                }
-            }
+        if (is_array($label)) {
+            $locale = $locale ?? app()->getLocale();
+            $fallback = config('roles.i18n.fallback', 'en');
 
-            foreach ($perms as $perm) {
-                try {
-                    $perm->forceDelete();
-                    $results['success'][] = $perm->id;
-                } catch (\Throwable $e) {
-                    $results['failed'][] = ['id' => $perm->id, 'reason' => $e->getMessage()];
-                }
-            }
-        });
+            return $label[$locale] ?? $label[$fallback] ?? reset($label) ?? null;
+        }
 
-        $this->flushCaches();
-        return $results;
+        return $label;
     }
 
     /**
-     * Bulk delete permissions (soft delete)
+     * {@inheritdoc}
+     */
+    public function resolveDescription(Permission $permission, ?string $locale = null): ?string
+    {
+        $description = $permission->description;
+
+        if ($description === null) {
+            return null;
+        }
+
+        if (is_array($description)) {
+            $locale = $locale ?? app()->getLocale();
+            $fallback = config('roles.i18n.fallback', 'en');
+
+            return $description[$locale] ?? $description[$fallback] ?? reset($description) ?? null;
+        }
+
+        return $description;
+    }
+
+    /**
+     * Resolve group label.
+     *
+     * @param Permission|null $permission
+     * @param string|null $locale
+     * @return string|null
+     */
+    protected function resolveGroupLabel(?Permission $permission, ?string $locale = null): ?string
+    {
+        if (!$permission) {
+            return null;
+        }
+
+        $groupLabel = $permission->group_label ?? null;
+
+        if ($groupLabel === null) {
+            return null;
+        }
+
+        if (is_array($groupLabel)) {
+            $locale = $locale ?? app()->getLocale();
+            $fallback = config('roles.i18n.fallback', 'en');
+
+            return $groupLabel[$locale] ?? $groupLabel[$fallback] ?? reset($groupLabel) ?? null;
+        }
+
+        return $groupLabel;
+    }
+
+    /**
+     * {@inheritdoc}
      */
     public function bulkDelete(array $ids): array
     {
@@ -446,7 +571,7 @@ class PermissionService extends BaseService
             $found = $perms->pluck('id')->all();
 
             foreach ($ids as $id) {
-                if (! in_array($id, $found, true)) {
+                if (!in_array($id, $found, true)) {
                     $results['failed'][] = ['id' => $id, 'reason' => 'Not found'];
                 }
             }
@@ -462,11 +587,12 @@ class PermissionService extends BaseService
         });
 
         $this->flushCaches();
+
         return $results;
     }
 
     /**
-     * Bulk restore permissions
+     * {@inheritdoc}
      */
     public function bulkRestore(array $ids): array
     {
@@ -477,7 +603,7 @@ class PermissionService extends BaseService
             $found = $perms->pluck('id')->all();
 
             foreach ($ids as $id) {
-                if (! in_array($id, $found, true)) {
+                if (!in_array($id, $found, true)) {
                     $results['failed'][] = ['id' => $id, 'reason' => 'Not found'];
                 }
             }
@@ -497,21 +623,75 @@ class PermissionService extends BaseService
         });
 
         $this->flushCaches();
+
         return $results;
     }
 
     /**
-     * Flush caches
+     * {@inheritdoc}
+     */
+    public function bulkForceDelete(array $ids): array
+    {
+        $results = ['success' => [], 'failed' => []];
+
+        DB::transaction(function () use ($ids, &$results) {
+            $perms = Permission::withTrashed()->whereIn('id', $ids)->get();
+            $found = $perms->pluck('id')->all();
+
+            foreach ($ids as $id) {
+                if (!in_array($id, $found, true)) {
+                    $results['failed'][] = ['id' => $id, 'reason' => 'Not found'];
+                }
+            }
+
+            foreach ($perms as $perm) {
+                try {
+                    $perm->forceDelete();
+                    $results['success'][] = $perm->id;
+                } catch (\Throwable $e) {
+                    $results['failed'][] = ['id' => $perm->id, 'reason' => $e->getMessage()];
+                }
+            }
+        });
+
+        $this->flushCaches();
+
+        return $results;
+    }
+
+    /**
+     * Get the current guard.
+     *
+     * @return string
+     */
+    protected function getGuard(): string
+    {
+        if ($this->guardResolver) {
+            return $this->guardResolver->guard();
+        }
+
+        return config('roles.guard', config('auth.defaults.guard', 'web'));
+    }
+
+    /**
+     * Flush caches.
+     *
+     * @return void
      */
     protected function flushCaches(): void
     {
-        $store = Cache::getStore();
+        if ($this->cacheKeyBuilder) {
+            $this->cacheKeyBuilder->flush();
+            return;
+        }
+
+        // Fallback to old cache flushing logic
+        $store = \Illuminate\Support\Facades\Cache::getStore();
         if (method_exists($store, 'tags')) {
-            Cache::tags(['laravel_roles'])->flush();
+            \Illuminate\Support\Facades\Cache::tags(['laravel_roles'])->flush();
         } else {
-            Cache::forget(config('roles.cache.keys.grouped_permissions', 'laravel_roles.grouped_permissions'));
-            Cache::forget(config('roles.cache.keys.permission_matrix', 'laravel_roles.permission_matrix'));
+            \Illuminate\Support\Facades\Cache::forget(config('roles.cache.keys.grouped_permissions', 'laravel_roles.grouped_permissions'));
+            \Illuminate\Support\Facades\Cache::forget(config('roles.cache.keys.permission_matrix', 'laravel_roles.permission_matrix'));
         }
     }
 }
-

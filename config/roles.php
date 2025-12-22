@@ -40,6 +40,24 @@ return [
         'provider' => null,              // e.g., 'stancl/tenancy' for multi_database
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Admin UI
+    |--------------------------------------------------------------------------
+    |
+    | Configure the optional Vue/Inertia admin UI.
+    | Set 'enabled' to true to activate the UI routes.
+    | Set 'driver' to 'vue' for Vue 3 + Inertia.js.
+    |
+    */
+    'ui' => [
+        'enabled' => env('ROLES_UI_ENABLED', false),
+        'driver' => 'vue', // 'vue' or 'blade' (future)
+        'prefix' => 'admin/acl', // UI route prefix
+        'middleware' => ['web', 'auth'], // UI-specific middleware (different from API)
+        'layout' => 'AppLayout', // Your app's main layout component
+    ],
+
 
     'routes' => [
         'prefix' => 'admin/acl', // acl : Access Control List

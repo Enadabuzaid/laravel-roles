@@ -1,267 +1,250 @@
+/**
+ * usePermissionsApi Composable
+ *
+ * Vue composable for permissions API operations.
+ * Uses the centralized API client - no hardcoded URLs.
+ */
 import { ref, computed, type Ref } from 'vue'
-import type {
-  Permission,
-  PermissionFilters,
-  PaginatedResponse,
-  PermissionStats,
-  PermissionMatrix,
-  PermissionGroup,
-  Role
-} from '@/types'
+import { permissionsApi, type PermissionFilters, type CreatePermissionData, type UpdatePermissionData } from '@/api'
+import { useToast } from './useToast'
+import type { Permission, PermissionStats, PaginationMeta, GroupedPermissions } from '@/types'
 
 export function usePermissionsApi() {
+  const toast = useToast()
+
+  // State
   const permissions: Ref<Permission[]> = ref([])
-  const permissionGroups: Ref<PermissionGroup[]> = ref([])
+  const currentPermission: Ref<Permission | null> = ref(null)
   const stats: Ref<PermissionStats | null> = ref(null)
-  const matrix: Ref<PermissionMatrix | null> = ref(null)
+  const grouped: Ref<GroupedPermissions | null> = ref(null)
   const isLoading = ref(false)
+  const isSaving = ref(false)
+  const error = ref<string | null>(null)
+
   const filters: Ref<PermissionFilters> = ref({
     search: '',
-    group: '',
     guard: '',
+    group: '',
+    status: '',
     sort: 'id',
-    direction: 'desc'
+    direction: 'desc',
+    page: 1,
+    per_page: 20,
   })
 
-  const meta = ref({
+  const meta = ref<PaginationMeta>({
     current_page: 1,
     from: 0,
     to: 0,
     per_page: 20,
     last_page: 1,
-    total: 0
+    total: 0,
   })
 
-  const fetchPermissions = async (page = 1) => {
-    isLoading.value = true
-
-    try {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        per_page: meta.value.per_page.toString(),
-        ...(filters.value.search && { search: filters.value.search }),
-        ...(filters.value.group && { group: filters.value.group }),
-        ...(filters.value.guard && { guard: filters.value.guard }),
-        ...(filters.value.sort && { sort: filters.value.sort }),
-        ...(filters.value.direction && { direction: filters.value.direction })
-      })
-
-      const response = await fetch(`/api/permissions?${params}`)
-      const data: PaginatedResponse<Permission> = await response.json()
-
-      permissions.value = data.data
-      meta.value = data.meta
-    } catch (error) {
-      console.error('Error fetching permissions:', error)
-    } finally {
-      isLoading.value = false
-    }
-  }
-
-  const fetchPermissionGroups = async () => {
-    isLoading.value = true
-
-    try {
-      const response = await fetch('/api/permission-groups')
-      const data = await response.json()
-      permissionGroups.value = Object.entries(data).map(([name, perms]) => ({
-        name,
-        label: name,
-        permissions: perms as Permission[]
-      }))
-    } catch (error) {
-      console.error('Error fetching permission groups:', error)
-    } finally {
-      isLoading.value = false
-    }
-  }
-
-  const fetchStats = async () => {
-    try {
-      const response = await fetch('/api/permissions-stats')
-      stats.value = await response.json()
-    } catch (error) {
-      console.error('Error fetching permission stats:', error)
-    }
-  }
-
-  const fetchMatrix = async () => {
-    isLoading.value = true
-
-    try {
-      const response = await fetch('/api/permissions-matrix')
-      matrix.value = await response.json()
-    } catch (error) {
-      console.error('Error fetching permission matrix:', error)
-    } finally {
-      isLoading.value = false
-    }
-  }
-
-  const togglePermission = async (roleId: number, permissionId: number, value: boolean) => {
-    try {
-      const response = await fetch('/api/roles/matrix', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-        },
-        body: JSON.stringify({
-          role_id: roleId,
-          permission_id: permissionId,
-          value
-        })
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to toggle permission')
-      }
-
-      // Update local matrix state
-      if (matrix.value) {
-        if (value) {
-          if (!matrix.value.matrix[roleId]) {
-            matrix.value.matrix[roleId] = []
-          }
-          if (!matrix.value.matrix[roleId].includes(permissionId)) {
-            matrix.value.matrix[roleId].push(permissionId)
-          }
-        } else {
-          if (matrix.value.matrix[roleId]) {
-            matrix.value.matrix[roleId] = matrix.value.matrix[roleId].filter(
-              id => id !== permissionId
-            )
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error toggling permission:', error)
-      throw error
-    }
-  }
-
-  const createPermission = async (data: Partial<Permission>) => {
-    isLoading.value = true
-
-    try {
-      const response = await fetch('/api/permissions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-        },
-        body: JSON.stringify(data)
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to create permission')
-      }
-
-      const result = await response.json()
-      return result.data
-    } catch (error) {
-      console.error('Error creating permission:', error)
-      throw error
-    } finally {
-      isLoading.value = false
-    }
-  }
-
-  const updatePermission = async (id: number, data: Partial<Permission>) => {
-    isLoading.value = true
-
-    try {
-      const response = await fetch(`/api/permissions/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-        },
-        body: JSON.stringify(data)
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to update permission')
-      }
-
-      const result = await response.json()
-      return result.data
-    } catch (error) {
-      console.error('Error updating permission:', error)
-      throw error
-    } finally {
-      isLoading.value = false
-    }
-  }
-
-  const deletePermission = async (id: number) => {
-    isLoading.value = true
-
-    try {
-      const response = await fetch(`/api/permissions/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to delete permission')
-      }
-
-      await fetchPermissions(meta.value.current_page)
-    } catch (error) {
-      console.error('Error deleting permission:', error)
-      throw error
-    } finally {
-      isLoading.value = false
-    }
-  }
-
-  const updateFilters = (newFilters: Partial<PermissionFilters>) => {
-    filters.value = { ...filters.value, ...newFilters }
-    fetchPermissions(1) // Reset to page 1 when filters change
-  }
-
+  // Computed
   const hasPermissions = computed(() => permissions.value.length > 0)
   const isEmpty = computed(() => !isLoading.value && !hasPermissions.value)
-  const groupedPermissions = computed(() => {
-    const groups: Record<string, Permission[]> = {}
-    permissions.value.forEach(permission => {
-      const group = permission.group || 'other'
-      if (!groups[group]) {
-        groups[group] = []
+
+  /**
+   * Fetch paginated permissions
+   */
+  async function fetchPermissions(page = 1): Promise<void> {
+    isLoading.value = true
+    error.value = null
+
+    try {
+      const response = await permissionsApi.list({
+        ...filters.value,
+        page,
+      })
+
+      permissions.value = response.data
+      meta.value = response.meta
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to fetch permissions'
+      toast.error('Error', error.value)
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /**
+   * Fetch permission statistics
+   */
+  async function fetchStats(): Promise<void> {
+    try {
+      const response = await permissionsApi.stats()
+      stats.value = response.data
+    } catch (err) {
+      console.error('Failed to fetch stats:', err)
+    }
+  }
+
+  /**
+   * Fetch grouped permissions
+   */
+  async function fetchGrouped(): Promise<void> {
+    isLoading.value = true
+    error.value = null
+
+    try {
+      const response = await permissionsApi.grouped()
+      grouped.value = response.data
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to fetch grouped permissions'
+      toast.error('Error', error.value)
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /**
+   * Fetch a single permission
+   */
+  async function fetchPermission(id: number): Promise<Permission | null> {
+    isLoading.value = true
+    error.value = null
+
+    try {
+      const response = await permissionsApi.get(id)
+      currentPermission.value = response.data
+      return response.data
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to fetch permission'
+      toast.error('Error', error.value)
+      return null
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /**
+   * Create a new permission
+   */
+  async function createPermission(data: CreatePermissionData): Promise<Permission | null> {
+    isSaving.value = true
+    error.value = null
+
+    try {
+      const response = await permissionsApi.create(data)
+      toast.success('Success', 'Permission created successfully')
+      return response.data
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to create permission'
+      toast.error('Error', error.value)
+      return null
+    } finally {
+      isSaving.value = false
+    }
+  }
+
+  /**
+   * Update a permission
+   */
+  async function updatePermission(id: number, data: UpdatePermissionData): Promise<Permission | null> {
+    isSaving.value = true
+    error.value = null
+
+    try {
+      const response = await permissionsApi.update(id, data)
+      toast.success('Success', 'Permission updated successfully')
+
+      // Update current permission if it's the same
+      if (currentPermission.value?.id === id) {
+        currentPermission.value = response.data
       }
-      groups[group].push(permission)
-    })
-    return groups
-  })
+
+      return response.data
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to update permission'
+      toast.error('Error', error.value)
+      return null
+    } finally {
+      isSaving.value = false
+    }
+  }
+
+  /**
+   * Delete a permission
+   */
+  async function deletePermission(id: number): Promise<boolean> {
+    isSaving.value = true
+    error.value = null
+
+    try {
+      await permissionsApi.delete(id)
+      toast.success('Success', 'Permission deleted successfully')
+
+      // Refresh list
+      await fetchPermissions(meta.value.current_page)
+      return true
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to delete permission'
+      toast.error('Error', error.value)
+      return false
+    } finally {
+      isSaving.value = false
+    }
+  }
+
+  /**
+   * Restore a permission
+   */
+  async function restorePermission(id: number): Promise<boolean> {
+    isSaving.value = true
+    error.value = null
+
+    try {
+      await permissionsApi.restore(id)
+      toast.success('Success', 'Permission restored successfully')
+
+      // Refresh list
+      await fetchPermissions(meta.value.current_page)
+      return true
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to restore permission'
+      toast.error('Error', error.value)
+      return false
+    } finally {
+      isSaving.value = false
+    }
+  }
+
+  /**
+   * Update filters and refetch
+   */
+  function updateFilters(newFilters: Partial<PermissionFilters>): void {
+    filters.value = { ...filters.value, ...newFilters }
+    fetchPermissions(1)
+  }
 
   return {
     // State
     permissions,
-    permissionGroups,
+    currentPermission,
     stats,
-    matrix,
+    grouped,
     meta,
     filters,
     isLoading,
+    isSaving,
+    error,
 
     // Computed
     hasPermissions,
     isEmpty,
-    groupedPermissions,
 
     // Methods
     fetchPermissions,
-    fetchPermissionGroups,
     fetchStats,
-    fetchMatrix,
-    togglePermission,
+    fetchGrouped,
+    fetchPermission,
     createPermission,
     updatePermission,
     deletePermission,
-    updateFilters
+    restorePermission,
+    updateFilters,
   }
 }
 
+export default usePermissionsApi

@@ -1,7 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Enadstack\LaravelRoles\Services;
 
+use Enadstack\LaravelRoles\Contracts\RoleServiceContract;
+use Enadstack\LaravelRoles\Contracts\TenantContextContract;
+use Enadstack\LaravelRoles\Contracts\GuardResolverContract;
+use Enadstack\LaravelRoles\Contracts\CacheKeyBuilderContract;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Models\Permission;
 use Enadstack\LaravelRoles\Events\RoleCreated;
@@ -13,17 +19,71 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Cache;
 
-class RoleService extends BaseService
+/**
+ * RoleService
+ *
+ * Core service for role management operations.
+ * All role access must go through this service, never directly via Spatie.
+ *
+ * @package Enadstack\LaravelRoles\Services
+ */
+class RoleService extends BaseService implements RoleServiceContract
 {
     /**
-     * Get paginated list of roles
+     * Tenant context instance.
+     *
+     * @var TenantContextContract|null
+     */
+    protected ?TenantContextContract $tenantContext = null;
+
+    /**
+     * Guard resolver instance.
+     *
+     * @var GuardResolverContract|null
+     */
+    protected ?GuardResolverContract $guardResolver = null;
+
+    /**
+     * Cache key builder instance.
+     *
+     * @var CacheKeyBuilderContract|null
+     */
+    protected ?CacheKeyBuilderContract $cacheKeyBuilder = null;
+
+    /**
+     * Create a new service instance.
+     *
+     * @param TenantContextContract|null $tenantContext
+     * @param GuardResolverContract|null $guardResolver
+     * @param CacheKeyBuilderContract|null $cacheKeyBuilder
+     */
+    public function __construct(
+        ?TenantContextContract $tenantContext = null,
+        ?GuardResolverContract $guardResolver = null,
+        ?CacheKeyBuilderContract $cacheKeyBuilder = null
+    ) {
+        $this->tenantContext = $tenantContext;
+        $this->guardResolver = $guardResolver;
+        $this->cacheKeyBuilder = $cacheKeyBuilder;
+    }
+
+    /**
+     * Get paginated list of roles.
+     *
+     * @param array $filters
+     * @param int $perPage
+     * @return LengthAwarePaginator
      */
     public function list(array $filters = [], int $perPage = 20): LengthAwarePaginator
     {
         $query = Role::query();
         
+        // Apply guard filter from resolver if available
+        if ($this->guardResolver && empty($filters['guard'])) {
+            $query->where('guard_name', $this->guardResolver->guard());
+        }
+
         // Apply filters
         if (!empty($filters['search'])) {
             $query->where(function ($q) use ($filters) {
@@ -44,20 +104,11 @@ class RoleService extends BaseService
         }
 
         // Trash filters
-        if (!empty($filters['only_deleted'])) {
-            // Show only soft-deleted records (with status 'deleted')
+        if (!empty($filters['only_deleted']) || !empty($filters['only_trashed'])) {
             $query->onlyTrashed();
-        } elseif (!empty($filters['with_deleted'])) {
-            // Show both active and soft-deleted records
+        } elseif (!empty($filters['with_deleted']) || !empty($filters['with_trashed'])) {
             $query->withTrashed();
-        } elseif (!empty($filters['with_trashed'])) {
-            // Backward compatibility: with_trashed same as with_deleted
-            $query->withTrashed();
-        } elseif (!empty($filters['only_trashed'])) {
-            // Backward compatibility: only_trashed same as only_deleted
-            $query->onlyTrashed();
         }
-        // Default: show only non-deleted records
 
         // Sorting with whitelist validation
         $allowedSorts = ['id', 'name', 'guard_name', 'status', 'created_at', 'updated_at'];
@@ -70,7 +121,7 @@ class RoleService extends BaseService
     }
 
     /**
-     * Get a single role by ID
+     * {@inheritdoc}
      */
     public function find(int $id): ?Role
     {
@@ -78,11 +129,32 @@ class RoleService extends BaseService
     }
 
     /**
-     * Create a new role
+     * {@inheritdoc}
+     */
+    public function findByName(string $name, ?string $guardName = null): ?Role
+    {
+        $guardName = $guardName ?? $this->getGuard();
+
+        return Role::where('name', $name)
+            ->where('guard_name', $guardName)
+            ->first();
+    }
+
+    /**
+     * {@inheritdoc}
      */
     public function create(array $data): Role
     {
-        $data['guard_name'] = $data['guard_name'] ?? config('roles.guard', config('auth.defaults.guard', 'web'));
+        $data['guard_name'] = $data['guard_name'] ?? $this->getGuard();
+
+        // Apply tenant context if team_scoped
+        if ($this->tenantContext && $this->tenantContext->isTeamScoped()) {
+            $fk = $this->tenantContext->teamForeignKey();
+            if (!isset($data[$fk])) {
+                $data[$fk] = $this->tenantContext->tenantId();
+            }
+        }
+
         $role = Role::create($data);
         $this->flushCaches();
 
@@ -92,7 +164,7 @@ class RoleService extends BaseService
     }
 
     /**
-     * Update an existing role
+     * {@inheritdoc}
      */
     public function update(Role $role, array $data): Role
     {
@@ -105,7 +177,7 @@ class RoleService extends BaseService
     }
 
     /**
-     * Soft delete a role
+     * {@inheritdoc}
      */
     public function delete(Role $role): bool
     {
@@ -118,7 +190,7 @@ class RoleService extends BaseService
     }
 
     /**
-     * Force delete a role (permanent deletion)
+     * {@inheritdoc}
      */
     public function forceDelete(Role $role): bool
     {
@@ -131,7 +203,7 @@ class RoleService extends BaseService
     }
 
     /**
-     * Restore a soft-deleted role
+     * {@inheritdoc}
      */
     public function restore(int $id): bool
     {
@@ -143,11 +215,12 @@ class RoleService extends BaseService
 
         $ok = $role->restore();
         $this->flushCaches();
+
         return $ok;
     }
 
     /**
-     * Bulk delete roles (soft delete)
+     * {@inheritdoc}
      */
     public function bulkDelete(array $ids): array
     {
@@ -174,11 +247,12 @@ class RoleService extends BaseService
         });
 
         $this->flushCaches();
+
         return $results;
     }
 
     /**
-     * Bulk restore roles
+     * {@inheritdoc}
      */
     public function bulkRestore(array $ids): array
     {
@@ -209,11 +283,12 @@ class RoleService extends BaseService
         });
 
         $this->flushCaches();
+
         return $results;
     }
 
     /**
-     * Bulk force delete roles
+     * {@inheritdoc}
      */
     public function bulkForceDelete(array $ids): array
     {
@@ -240,22 +315,28 @@ class RoleService extends BaseService
         });
 
         $this->flushCaches();
+
         return $results;
     }
 
     /**
-     * Get recently created roles
+     * {@inheritdoc}
      */
     public function recent(int $limit = 10): EloquentCollection
     {
-        return Role::query()
-            ->latest('created_at')
-            ->limit($limit)
-            ->get();
+        $query = Role::query()->latest('created_at')->limit($limit);
+
+        if ($this->guardResolver) {
+            $query->where('guard_name', $this->guardResolver->guard());
+        }
+
+        return $query->get();
     }
 
     /**
-     * Alias for stats() method - backward compatibility
+     * Alias for stats() method - backward compatibility.
+     *
+     * @return array
      */
     public function getStats(): array
     {
@@ -263,7 +344,10 @@ class RoleService extends BaseService
     }
 
     /**
-     * Alias for recent() method - backward compatibility
+     * Alias for recent() method - backward compatibility.
+     *
+     * @param int $limit
+     * @return EloquentCollection
      */
     public function getRecent(int $limit = 10): EloquentCollection
     {
@@ -271,24 +355,32 @@ class RoleService extends BaseService
     }
 
     /**
-     * Get role statistics with growth data
+     * {@inheritdoc}
      */
     public function stats(): array
     {
+        $query = Role::query();
+
+        if ($this->guardResolver) {
+            $query->where('guard_name', $this->guardResolver->guard());
+        }
+
         return [
-            'total' => Role::count(),
-            'active' => Role::where('status', RolePermissionStatusEnum::ACTIVE->value)->count(),
-            'inactive' => Role::where('status', RolePermissionStatusEnum::INACTIVE->value)->count(),
-            'deleted' => Role::where('status', RolePermissionStatusEnum::DELETED->value)->count(),
-            'with_permissions' => Role::has('permissions')->count(),
-            'without_permissions' => Role::doesntHave('permissions')->count(),
+            'total' => (clone $query)->count(),
+            'active' => (clone $query)->where('status', RolePermissionStatusEnum::ACTIVE->value)->count(),
+            'inactive' => (clone $query)->where('status', RolePermissionStatusEnum::INACTIVE->value)->count(),
+            'deleted' => (clone $query)->where('status', RolePermissionStatusEnum::DELETED->value)->count(),
+            'with_permissions' => (clone $query)->has('permissions')->count(),
+            'without_permissions' => (clone $query)->doesntHave('permissions')->count(),
             'by_status' => $this->getStatsByStatus(),
             'growth' => $this->calculateGrowth(Role::class, 'created_at'),
         ];
     }
 
     /**
-     * Get statistics grouped by status
+     * Get statistics grouped by status.
+     *
+     * @return array
      */
     protected function getStatsByStatus(): array
     {
@@ -300,7 +392,7 @@ class RoleService extends BaseService
     }
 
     /**
-     * Change role status
+     * {@inheritdoc}
      */
     public function changeStatus(Role $role, RolePermissionStatusEnum $status): Role
     {
@@ -313,7 +405,10 @@ class RoleService extends BaseService
     }
 
     /**
-     * Activate role
+     * Activate role.
+     *
+     * @param Role $role
+     * @return Role
      */
     public function activate(Role $role): Role
     {
@@ -321,7 +416,10 @@ class RoleService extends BaseService
     }
 
     /**
-     * Deactivate role
+     * Deactivate role.
+     *
+     * @param Role $role
+     * @return Role
      */
     public function deactivate(Role $role): Role
     {
@@ -329,7 +427,11 @@ class RoleService extends BaseService
     }
 
     /**
-     * Bulk change status
+     * Bulk change status.
+     *
+     * @param array $ids
+     * @param RolePermissionStatusEnum $status
+     * @return array
      */
     public function bulkChangeStatus(array $ids, RolePermissionStatusEnum $status): array
     {
@@ -356,11 +458,16 @@ class RoleService extends BaseService
         });
 
         $this->flushCaches();
+
         return $results;
     }
 
     /**
-     * Assign permissions to a role
+     * Assign permissions to a role.
+     *
+     * @param Role $role
+     * @param array $permissionIds
+     * @return Role
      */
     public function assignPermissions(Role $role, array $permissionIds): Role
     {
@@ -374,7 +481,11 @@ class RoleService extends BaseService
     }
 
     /**
-     * Attach a single permission to role (idempotent)
+     * Attach a single permission to role (idempotent).
+     *
+     * @param Role $role
+     * @param int|Permission $permission
+     * @return Role
      */
     public function addPermission(Role $role, int|Permission $permission): Role
     {
@@ -384,11 +495,16 @@ class RoleService extends BaseService
 
         $role->givePermissionTo($perm);
         $this->flushCaches();
+
         return $role->refresh()->load('permissions');
     }
 
     /**
-     * Detach a single permission from role (idempotent)
+     * Detach a single permission from role (idempotent).
+     *
+     * @param Role $role
+     * @param int|Permission $permission
+     * @return Role
      */
     public function removePermission(Role $role, int|Permission $permission): Role
     {
@@ -398,15 +514,12 @@ class RoleService extends BaseService
 
         $role->revokePermissionTo($perm);
         $this->flushCaches();
+
         return $role->refresh()->load('permissions');
     }
 
     /**
-     * Clone a role with its permissions
-     *
-     * @param Role   $role       Source role to clone
-     * @param string $name       New role name
-     * @param array  $attributes Optional additional attributes (e.g., label, description, guard_name)
+     * {@inheritdoc}
      */
     public function cloneWithPermissions(Role $role, string $name, array $attributes = []): Role
     {
@@ -422,12 +535,13 @@ class RoleService extends BaseService
             $new = Role::create($data);
             $new->syncPermissions($role->permissions()->pluck('id')->all());
             $this->flushCaches();
+
             return $new->load('permissions');
         });
     }
 
     /**
-     * Get role with its permissions
+     * {@inheritdoc}
      */
     public function getRoleWithPermissions(int $id): ?Role
     {
@@ -435,7 +549,7 @@ class RoleService extends BaseService
     }
 
     /**
-     * Get all permissions grouped by role
+     * {@inheritdoc}
      */
     public function getPermissionsGroupedByRole(): SupportCollection
     {
@@ -457,16 +571,38 @@ class RoleService extends BaseService
     }
 
     /**
-     * Flush package caches
+     * Get the current guard.
+     *
+     * @return string
+     */
+    protected function getGuard(): string
+    {
+        if ($this->guardResolver) {
+            return $this->guardResolver->guard();
+        }
+
+        return config('roles.guard', config('auth.defaults.guard', 'web'));
+    }
+
+    /**
+     * Flush package caches.
+     *
+     * @return void
      */
     protected function flushCaches(): void
     {
-        $store = Cache::getStore();
+        if ($this->cacheKeyBuilder) {
+            $this->cacheKeyBuilder->flush();
+            return;
+        }
+
+        // Fallback to old cache flushing logic
+        $store = \Illuminate\Support\Facades\Cache::getStore();
         if (method_exists($store, 'tags')) {
-            Cache::tags(['laravel_roles'])->flush();
+            \Illuminate\Support\Facades\Cache::tags(['laravel_roles'])->flush();
         } else {
-            Cache::forget(config('roles.cache.keys.grouped_permissions', 'laravel_roles.grouped_permissions'));
-            Cache::forget(config('roles.cache.keys.permission_matrix', 'laravel_roles.permission_matrix'));
+            \Illuminate\Support\Facades\Cache::forget(config('roles.cache.keys.grouped_permissions', 'laravel_roles.grouped_permissions'));
+            \Illuminate\Support\Facades\Cache::forget(config('roles.cache.keys.permission_matrix', 'laravel_roles.permission_matrix'));
         }
     }
 }
