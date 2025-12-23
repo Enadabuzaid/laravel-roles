@@ -10,12 +10,15 @@ use Enadstack\LaravelRoles\Http\Controllers\UI\MatrixUIController;
 | Laravel Roles Package UI Routes
 |--------------------------------------------------------------------------
 |
-| These routes are loaded ONLY when:
-|   config('roles.ui.enabled') === true
-|   AND config('roles.ui.driver') === 'vue'
-|
 | These are Inertia routes that render Vue pages.
-| All routes use config-based prefixes - no hardcoded URLs.
+| Routes structure:
+|   /                  -> Roles Management Dashboard
+|   /roles             -> Roles List
+|   /roles/create      -> Create Role
+|   /roles/{id}/edit   -> Edit Role
+|   /permissions-management -> Permissions Management Dashboard
+|   /permissions       -> Permissions List
+|   /matrix            -> Permission Matrix
 |
 */
 
@@ -28,7 +31,14 @@ Route::middleware($middleware)
     ->group(function () {
         /*
         |--------------------------------------------------------------------------
-        | Roles UI Pages
+        | Roles Management Dashboard (Main Entry)
+        |--------------------------------------------------------------------------
+        */
+        Route::get('/', [RoleUIController::class, 'dashboard'])->name('dashboard');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Roles CRUD
         |--------------------------------------------------------------------------
         */
         Route::get('/roles', [RoleUIController::class, 'index'])->name('roles.index');
@@ -38,7 +48,14 @@ Route::middleware($middleware)
 
         /*
         |--------------------------------------------------------------------------
-        | Permissions UI Pages
+        | Permissions Management Dashboard
+        |--------------------------------------------------------------------------
+        */
+        Route::get('/permissions-management', [PermissionUIController::class, 'dashboard'])->name('permissions.dashboard');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Permissions CRUD
         |--------------------------------------------------------------------------
         */
         Route::get('/permissions', [PermissionUIController::class, 'index'])->name('permissions.index');
@@ -48,7 +65,7 @@ Route::middleware($middleware)
 
         /*
         |--------------------------------------------------------------------------
-        | Permission Matrix UI Page
+        | Permission Matrix
         |--------------------------------------------------------------------------
         */
         Route::get('/matrix', [MatrixUIController::class, 'index'])->name('matrix');

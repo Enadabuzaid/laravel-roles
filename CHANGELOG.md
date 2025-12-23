@@ -5,6 +5,104 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.5] - 2025-12-24
+
+### 🎨 Complete UI Redesign (Major Update)
+
+The package UI has been completely redesigned with a professional admin dashboard structure:
+
+### Added
+
+#### RolesManagement Dashboard (`/admin/acl/`)
+- **Stats Cards** - Total Roles, Total Permissions, With Permissions, Trashed
+- **Quick Actions** - Create Role, Open Matrix buttons
+- **Action Cards** - Navigate to Roles, Permissions, Matrix pages
+- **Recent Roles** - List with edit/delete/restore actions
+
+#### Roles Index (`/admin/acl/roles`)
+- **List/Grid View Toggle** - Switch between table and card views
+- **Search** - Filter roles by name
+- **Guard Filter** - web/api
+- **Trashed Filter** - Active Only, With Trashed, Only Trashed
+- **Bulk Selection** - Checkbox for bulk delete
+- **Pagination** - Full pagination with page controls
+- **Actions** - Edit, Delete, Restore per role
+
+#### Role Create (`/admin/acl/roles/create`)
+- **Form Validation** - Name, Description, Guard fields
+- **Permission Selection** - Grouped with search filter
+- **Group Toggle** - Select all permissions in a group
+
+#### Role Edit (`/admin/acl/roles/{id}/edit`)
+- **Tabbed Interface** - Details tab + Permissions tab
+- **Live Permission Sync** - Changes sync immediately to backend
+- **Role Metadata** - Created, Updated dates, Users count
+
+#### PermissionsManagement Dashboard (`/admin/acl/permissions-management`)
+- **Stats Cards** - Total Permissions, Groups, Total Roles
+- **Action Cards** - Navigate to Permissions, Matrix, Roles
+
+#### Permissions Index (`/admin/acl/permissions`)
+- **List/Grid View Toggle** - Table or grouped card view
+- **Filters** - Search, Group, Guard
+- **Grouped Display** - Permissions organized by group
+
+#### Permission Matrix (`/admin/acl/matrix`)
+- **Role Selector Tabs** - Click to switch roles with permission counts
+- **Group Toggles** - Toggle all permissions in a group
+- **Individual Toggles** - Toggle single permissions with optimistic updates
+- **Quick Stats** - Role count, Permission count, Group count
+
+#### Shared Components
+- **StatsCard** - Clickable stats card with icon
+- **ActionCard** - Navigation card with badge
+- **ViewToggle** - List/Grid view switcher
+- **ConfirmDialog** - Confirmation modal
+- **Pagination** - Pagination controls
+- **Toast** - Global toast notifications
+
+### Changed
+
+- **New organized folder structure**:
+  ```
+  Pages/LaravelRoles/
+  ├── RolesManagement/           # Roles dashboard
+  │   ├── Index.vue
+  │   ├── partials/
+  │   │   ├── QuickActions.vue
+  │   │   └── RecentRoles.vue
+  │   └── Roles/                 # Roles CRUD
+  │       ├── Index.vue
+  │       ├── Create.vue
+  │       └── Edit.vue
+  ├── PermissionsManagement/     # Permissions dashboard
+  │   ├── Index.vue
+  │   ├── partials/
+  │   │   └── RecentPermissions.vue
+  │   ├── Permissions/
+  │   │   └── Index.vue
+  │   └── PermissionMatrix/
+  │       └── Index.vue
+  └── shared/                    # Reusable components
+      ├── StatsCard.vue
+      ├── ActionCard.vue
+      ├── ViewToggle.vue
+      ├── ConfirmDialog.vue
+      ├── Pagination.vue
+      └── Toast.vue
+  ```
+- **Works with host AppLayout** - Pages integrate with your application layout
+- **Consistent design language** - All pages follow modern admin dashboard patterns
+- **Simplified publishing** - Single `--tag=roles-vue` publishes everything
+
+### Fixed
+
+- **Removed duplicate pages** - Clean, organized structure
+- **API endpoints** - All CRUD operations work with backend
+- **Pagination** - Fully functional with page controls
+- **Trashed filter** - Proper handling of soft-deleted roles
+- **Permission sync** - Live sync by permission name (not IDs)
+
 ## [1.3.4] - 2025-12-23
 
 ### ⚡ Self-Contained UI (Major Enhancement)

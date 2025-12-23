@@ -485,4 +485,73 @@ class RoleController extends Controller
 
         return $this->successResponse($results, 'Bulk status change completed');
     }
+
+    /**
+     * Sync permissions by name (replaces all permissions).
+     * Used by the Permission Matrix frontend.
+     *
+     * @param Request $request
+     * @param Role $role
+     * @return JsonResponse
+     */
+    public function syncPermissionsByName(Request $request, Role $role): JsonResponse
+    {
+        $this->authorize('assignPermissions', $role);
+
+        $data = $request->validate([
+            'permissions' => ['required', 'array'],
+            'permissions.*' => ['string'],
+        ]);
+
+        $role->syncPermissions($data['permissions']);
+
+        return $this->resourceResponse(
+            new RoleResource($role->fresh()->load('permissions')),
+            'Permissions synced successfully'
+        );
+    }
+
+    /**
+     * Add single permission by name.
+     * Used by the Permission Matrix frontend.
+     *
+     * @param Request $request
+     * @param Role $role
+     * @return JsonResponse
+     */
+    public function grantPermissionByName(Request $request, Role $role): JsonResponse
+    {
+        $this->authorize('assignPermissions', $role);
+
+        $data = $request->validate([
+            'permission' => ['required', 'string', 'exists:permissions,name'],
+        ]);
+
+        $role->givePermissionTo($data['permission']);
+
+        return $this->resourceResponse(
+            new RoleResource($role->fresh()->load('permissions')),
+            'Permission granted successfully'
+        );
+    }
+
+    /**
+     * Revoke single permission by name.
+     * Used by the Permission Matrix frontend.
+     *
+     * @param Role $role
+     * @param string $permission
+     * @return JsonResponse
+     */
+    public function revokePermissionByName(Role $role, string $permission): JsonResponse
+    {
+        $this->authorize('assignPermissions', $role);
+
+        $role->revokePermissionTo($permission);
+
+        return $this->resourceResponse(
+            new RoleResource($role->fresh()->load('permissions')),
+            'Permission revoked successfully'
+        );
+    }
 }

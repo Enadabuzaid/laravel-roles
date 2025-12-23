@@ -1,301 +1,197 @@
 # Vue UI Setup Guide
 
-This document covers how to set up and use the Laravel Roles Vue UI.
+Complete Vue UI for Laravel Roles package (v1.3.5+).
 
-## Two Installation Options
-
-### Option 1: Self-Contained UI (Recommended for v1.3.4+)
-
-The self-contained UI includes its own UI primitives (Button, Card, Table, etc.) and doesn't require any host app dependencies like shadcn-vue.
-
-**Requirements:**
-- Laravel 11+
-- Inertia.js with Vue 3
-- Tailwind CSS (for styling)
-
-**Installation:**
+## Quick Start
 
 ```bash
-# 1. Install the package
+# 1. Install package
 composer require enadstack/laravel-roles
 
-# 2. Publish config and run migrations
+# 2. Configure
 php artisan vendor:publish --tag=roles-config
 php artisan migrate
 
 # 3. Enable UI in config/roles.php
-# Set 'ui.enabled' => true
+# 'ui' => ['enabled' => true]
 
-# 4. Publish the self-contained Vue UI
-php artisan vendor:publish --tag=roles-vue-standalone
+# 4. Publish Vue UI
+php artisan vendor:publish --tag=roles-vue
 
 # 5. Sync permissions
 php artisan roles:sync
 
-# 6. Start your dev server
+# 6. Run dev server
 npm run dev
 ```
 
-**What gets published:**
+## Folder Structure
+
 ```
-resources/js/
-├── Pages/
-│   └── LaravelRoles/
-│       ├── RolesIndex.vue
-│       ├── RoleCreate.vue
-│       ├── RoleEdit.vue
-│       ├── PermissionsIndex.vue
-│       └── PermissionMatrix.vue
-└── laravel-roles/
-    ├── ui/                 # Internal UI primitives
-    │   ├── LrButton.vue
-    │   ├── LrCard.vue
-    │   ├── LrInput.vue
-    │   ├── LrTable.vue
-    │   └── ... (all primitives)
-    ├── layouts/
-    │   └── LaravelRolesLayout.vue
-    ├── components/
-    │   ├── LrPageHeader.vue
-    │   ├── LrEmptyState.vue
-    │   └── LrStatsCards.vue
-    ├── types/
-    └── api/
-```
-
-**No additional configuration required!** The pages work out of the box.
-
----
-
-### Option 2: Legacy Integration (for shadcn-vue users)
-
-If you already have shadcn-vue installed and want to use your app's components:
-
-```bash
-php artisan vendor:publish --tag=roles-vue
+resources/js/Pages/LaravelRoles/
+├── RolesManagement/                 # Roles dashboard
+│   ├── Index.vue                    # Dashboard with stats, cards, recent roles
+│   ├── partials/
+│   │   ├── QuickActions.vue         # Quick action buttons
+│   │   └── RecentRoles.vue          # Recent roles list
+│   └── Roles/                       # Roles CRUD
+│       ├── Index.vue                # List/Grid view with filters, bulk actions
+│       ├── Create.vue               # Create role with permission selection
+│       └── Edit.vue                 # Edit role (tabs: Details, Permissions)
+│
+├── PermissionsManagement/           # Permissions dashboard
+│   ├── Index.vue                    # Dashboard with stats, cards
+│   ├── partials/
+│   │   └── RecentPermissions.vue    # Recent permissions grouped
+│   ├── Permissions/                 # Permissions views
+│   │   └── Index.vue                # List/Grid view with filters
+│   └── PermissionMatrix/            # Matrix page
+│       └── Index.vue                # Role selector + permission toggles
+│
+└── shared/                          # Reusable components
+    ├── StatsCard.vue                # Stats card with icon
+    ├── ActionCard.vue               # Navigation card
+    ├── ViewToggle.vue               # List/Grid toggle
+    ├── ConfirmDialog.vue            # Confirmation modal
+    ├── Pagination.vue               # Pagination controls
+    └── Toast.vue                    # Toast notifications
 ```
 
-This requires:
-- shadcn-vue components installed
-- Vite alias configuration for `@/laravel-roles`
-- Inertia page resolver configuration
+## Routes
 
-See the [Legacy Setup](#legacy-setup) section for details.
+| Route | Page | Description |
+|-------|------|-------------|
+| `/admin/acl/` | RolesManagement/Index | Main dashboard |
+| `/admin/acl/roles` | RolesManagement/Roles/Index | Roles list |
+| `/admin/acl/roles/create` | RolesManagement/Roles/Create | Create role |
+| `/admin/acl/roles/{id}/edit` | RolesManagement/Roles/Edit | Edit role |
+| `/admin/acl/permissions-management` | PermissionsManagement/Index | Permissions dashboard |
+| `/admin/acl/permissions` | PermissionsManagement/Permissions/Index | Permissions list |
+| `/admin/acl/matrix` | PermissionsManagement/PermissionMatrix/Index | Permission matrix |
 
----
+## Features
+
+### Roles Management Dashboard
+- **Stats Cards**: Total Roles, Total Permissions, With Permissions, Trashed
+- **Quick Actions**: Create Role, Open Matrix buttons
+- **Action Cards**: Navigate to Roles, Permissions, Matrix
+- **Recent Roles**: List with edit/delete/restore actions
+
+### Roles Index (List/Grid)
+- **View Toggle**: Switch between list and grid view
+- **Search**: Search by role name
+- **Filters**: Guard (web/api), Trashed (active/with/only)
+- **Bulk Actions**: Select multiple + bulk delete
+- **Pagination**: Full pagination support
+- **Actions**: Edit, Delete, Restore (for trashed)
+
+### Role Create
+- **Form Fields**: Name, Description, Guard
+- **Permission Selection**: Grouped with search
+- **Group Toggle**: Select/deselect all in group
+- **Validation**: Real-time error display
+
+### Role Edit
+- **Tabbed Interface**: Details tab + Permissions tab
+- **Live Sync**: Permission changes sync immediately
+- **Role Metadata**: Created, Updated, Users count
+- **Delete**: Delete role with confirmation
+
+### Permissions Index (List/Grid)
+- **View Toggle**: Grouped view or table view
+- **Filters**: Search, Group, Guard
+- **Group Cards**: Permissions organized by group
+- **Role Count**: Shows how many roles have each permission
+
+### Permission Matrix
+- **Role Selector**: Click role tabs to switch
+- **Group Toggles**: Toggle all permissions in group
+- **Individual Toggles**: Toggle single permissions
+- **Optimistic Updates**: Instant feedback with rollback on error
 
 ## Configuration
-
-### Enable the UI
 
 ```php
 // config/roles.php
 'ui' => [
     'enabled' => true,
     'driver' => 'vue',
-    'prefix' => 'admin/acl',
-    'middleware' => ['web', 'auth'],
+    'prefix' => 'admin/acl',      // URL prefix
+    'middleware' => ['web', 'auth'], // Middleware stack
 ],
 ```
 
-Or via environment:
+## AppLayout Integration
 
-```env
-ROLES_UI_ENABLED=true
-```
-
-### Route Configuration
-
-API and UI routes use different middleware by default:
-
-```php
-// config/roles.php
-'routes' => [
-    'prefix' => 'admin/acl',
-    'middleware' => ['web', 'auth'], // Session-based (default)
-    // 'middleware' => ['api', 'auth:sanctum'], // For API-only mode
-],
-```
-
----
-
-## Accessing the UI
-
-After setup, visit:
-
-- **Roles Index**: `/admin/acl/roles`
-- **Create Role**: `/admin/acl/roles/create`
-- **Edit Role**: `/admin/acl/roles/{id}/edit`
-- **Permissions**: `/admin/acl/permissions`
-- **Permission Matrix**: `/admin/acl/matrix`
-
----
-
-## Pages Included
-
-### Roles Index
-- List all roles with search and filters
-- Stats cards (total, with permissions, without, active)
-- Pagination
-- Actions: Edit, Delete, Restore
-
-### Role Create
-- Form with name, description, guard selection
-- Permission assignment
-
-### Role Edit
-- Tabbed interface: Details / Permissions
-- Toggle permissions individually or by group
-- Delete with confirmation
-
-### Permissions Index
-- Grouped permission view
-- Search and filter
-- Stats cards
-
-### Permission Matrix
-- Role selector tabs
-- Grouped permissions with accordions
-- Single-click toggle for each permission
-- Group-level toggle (Grant All / Revoke All)
-- Optimistic updates with rollback on failure
-
----
-
-## Using Host App Layout (Optional)
-
-The self-contained UI includes its own layout (`LaravelRolesLayout.vue`). If you want pages to render inside your app's AppLayout instead:
-
-### Method 1: Edit Pages Directly
-
-After publishing, open each page and wrap the content:
-
-```vue
-<script setup>
-import AppLayout from '@/Layouts/AppLayout.vue'
-// ... existing imports
-</script>
-
-<template>
-  <AppLayout>
-    <!-- Move existing content here -->
-  </AppLayout>
-</template>
-```
-
-### Method 2: Configure Inertia Default Layout
+Pages work with your host app's AppLayout. Configure in `app.ts`:
 
 ```typescript
-// resources/js/app.ts
-import AppLayout from '@/Layouts/AppLayout.vue'
-
-createInertiaApp({
-    resolve: async (name) => {
-        const page = await resolvePageComponent(`./Pages/${name}.vue`, pages)
-        
-        // Auto-apply layout to Laravel Roles pages
-        if (name.startsWith('LaravelRoles/')) {
-            page.default.layout = page.default.layout || AppLayout
-        }
-        
-        return page
-    },
-    // ...
-})
+resolve: async name => {
+  const pages = import.meta.glob('./Pages/**/*.vue', { eager: true })
+  let page = pages[`./Pages/${name}.vue`]
+  
+  // Apply layout to LaravelRoles pages
+  if (name.startsWith('LaravelRoles/')) {
+    page.default.layout = AppLayout
+  }
+  
+  return page
+}
 ```
 
----
+## API Endpoints (Backend)
 
-## Sharing API Configuration
+The frontend uses these API endpoints:
 
-Add to your Blade layout before `</head>`:
+```
+GET    /admin/acl/roles              # List roles
+POST   /admin/acl/roles              # Create role
+GET    /admin/acl/roles/{id}         # Get role
+PUT    /admin/acl/roles/{id}         # Update role
+DELETE /admin/acl/roles/{id}         # Delete role
+POST   /admin/acl/roles/{id}/restore # Restore role
+POST   /admin/acl/roles/bulk-delete  # Bulk delete
 
-```html
-<script>
-  window.laravelRoles = {
-    apiPrefix: '{{ config("roles.routes.prefix") }}',
-    uiPrefix: '{{ config("roles.ui.prefix") }}',
-  };
-</script>
+GET    /admin/acl/permissions        # List permissions
+GET    /admin/acl/roles-stats        # Role statistics
+GET    /admin/acl/permissions-stats  # Permission statistics
+
+PUT    /admin/acl/roles/{id}/sync              # Sync permissions
+POST   /admin/acl/roles/{id}/permissions       # Grant permission
+DELETE /admin/acl/roles/{id}/permissions/{name} # Revoke permission
 ```
 
----
+## Toast Notifications
 
-## Verify Routes
-
-```bash
-php artisan route:list --name=roles
-```
-
-You should see:
-```
-GET  admin/acl/roles              roles.ui.roles.index
-GET  admin/acl/roles/create       roles.ui.roles.create
-GET  admin/acl/roles/{id}/edit    roles.ui.roles.edit
-GET  admin/acl/permissions        roles.ui.permissions.index
-GET  admin/acl/matrix             roles.ui.matrix
-```
-
----
-
-## Run Diagnostics
-
-```bash
-php artisan roles:doctor
-```
-
----
-
-## Legacy Setup
-
-For users who want to use their existing shadcn-vue components:
-
-### 1. Publish Legacy Files
-
-```bash
-php artisan vendor:publish --tag=roles-vue
-```
-
-### 2. Configure Vite Alias
+Global toast system available everywhere:
 
 ```typescript
-// vite.config.ts
-resolve: {
-    alias: {
-        '@': path.resolve(__dirname, './resources/js'),
-        '@/laravel-roles': path.resolve(__dirname, './resources/js/laravel-roles'),
-    },
-},
+(window as any).__lr_toast.success('Operation completed')
+(window as any).__lr_toast.error('Operation failed')
+(window as any).__lr_toast.info('Information message')
 ```
 
-### 3. Update Inertia Page Resolver
+## Styling
 
-```typescript
-// resources/js/app.ts
-createInertiaApp({
-    resolve: (name) => {
-        const pages = import.meta.glob([
-            './Pages/**/*.vue',
-            './Pages/LaravelRoles/**/*.vue',
-        ])
-        return resolvePageComponent(`./Pages/${name}.vue`, pages)
-    },
-    // ...
-})
-```
+Uses Tailwind CSS with shadcn-vue CSS variables:
+- `--background`, `--foreground`
+- `--card`, `--card-foreground`
+- `--primary`, `--primary-foreground`
+- `--muted`, `--muted-foreground`
+- `--destructive`, `--destructive-foreground`
 
-### 4. Install Required shadcn-vue Components
+## Troubleshooting
 
+### 401 Unauthorized
+Check middleware config and ensure user is logged in.
+
+### Pages Not Found
 ```bash
-npx shadcn-vue@latest add button input label textarea card badge table \
-    dropdown-menu alert-dialog switch checkbox tabs accordion skeleton \
-    separator select breadcrumb toast
+php artisan route:clear
+php artisan vendor:publish --tag=roles-vue --force
 ```
 
----
-
-## Next Steps
-
-- [API Reference](api.md)
-- [Configuration](configuration.md)
-- [Troubleshooting](troubleshooting.md)
+### No Permissions
+```bash
+php artisan roles:sync
+```

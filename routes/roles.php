@@ -85,6 +85,18 @@ Route::middleware($middleware)
 
         /*
         |--------------------------------------------------------------------------
+        | Roles - Permission Sync by Name (for Vue UI)
+        |--------------------------------------------------------------------------
+        |
+        | These endpoints use permission names instead of IDs for easier frontend use.
+        |
+        */
+        Route::put('/roles/{role}/sync', [RoleController::class, 'syncPermissionsByName'])->name('sync');
+        Route::post('/roles/{role}/permissions', [RoleController::class, 'grantPermissionByName'])->name('grant-permission');
+        Route::delete('/roles/{role}/permissions/{permission}', [RoleController::class, 'revokePermissionByName'])->name('revoke-permission');
+
+        /*
+        |--------------------------------------------------------------------------
         | Roles - Fine-grained Permission Operations
         |--------------------------------------------------------------------------
         */

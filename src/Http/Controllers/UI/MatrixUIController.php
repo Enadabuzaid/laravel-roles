@@ -16,25 +16,13 @@ use Enadstack\LaravelRoles\Contracts\GuardResolverContract;
  * MatrixUIController
  *
  * Inertia controller for permission matrix page.
- *
- * @package Enadstack\LaravelRoles\Http\Controllers\UI
  */
 class MatrixUIController extends Controller
 {
     use AuthorizesRequests;
 
-    /**
-     * Guard resolver instance.
-     *
-     * @var GuardResolverContract
-     */
     protected GuardResolverContract $guardResolver;
 
-    /**
-     * Create a new controller instance.
-     *
-     * @param GuardResolverContract $guardResolver
-     */
     public function __construct(GuardResolverContract $guardResolver)
     {
         $this->guardResolver = $guardResolver;
@@ -42,25 +30,17 @@ class MatrixUIController extends Controller
 
     /**
      * Display the permission matrix page.
-     *
-     * @param Request $request
-     * @return Response
      */
     public function index(Request $request): Response
     {
         $this->authorize('viewAny', Role::class);
 
-        return Inertia::render('LaravelRoles/PermissionMatrix', [
+        return Inertia::render('LaravelRoles/PermissionsManagement/PermissionMatrix/Index', [
             'guard' => $request->query('guard', $this->guardResolver->guard()),
             'config' => $this->getConfig(),
         ]);
     }
 
-    /**
-     * Get UI configuration.
-     *
-     * @return array
-     */
     protected function getConfig(): array
     {
         return [

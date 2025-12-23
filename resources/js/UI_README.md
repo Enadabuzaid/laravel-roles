@@ -1,95 +1,89 @@
 # Laravel Roles - Vue UI
 
-This folder contains the Vue 3 admin UI for the Laravel Roles package.
+Complete Vue 3 admin UI for the Laravel Roles package.
 
 ## Quick Setup
 
-### 1. Add Vite Alias (REQUIRED)
-
-Add this alias to your `vite.config.ts`:
-
-```typescript
-import path from 'path';
-
-export default defineConfig({
-    // ... other config
-    resolve: {
-        alias: {
-            '@': path.resolve(__dirname, './resources/js'),
-            // Required for Laravel Roles UI
-            '@/laravel-roles': path.resolve(__dirname, './resources/js/laravel-roles'),
-        },
-    },
-});
-```
-
-### 2. Install Required shadcn-vue Components
-
 ```bash
-npx shadcn-vue@latest add button input label textarea card badge table \
-    dropdown-menu alert-dialog switch checkbox tabs accordion skeleton \
-    separator select breadcrumb toast
+# Publish the Vue UI
+php artisan vendor:publish --tag=roles-vue
 ```
 
-### 3. Install Required Dependencies
-
-```bash
-npm install @vueuse/core lucide-vue-next
-```
-
-### 4. Add API Config to Layout
-
-Add to your base layout before `</head>`:
-
-```html
-<script>
-  window.laravelRoles = {
-    apiPrefix: '{{ config("roles.routes.prefix") }}',
-    uiPrefix: '{{ config("roles.ui.prefix") }}',
-  };
-</script>
-```
+That's it! The pages work with your existing Inertia setup.
 
 ## File Structure
 
 ```
-laravel-roles/
-├── api/              # API client for backend communication
-├── composables/      # Vue composables (useRolesApi, etc.)
-├── components/       # Reusable Vue components
-│   └── ui/           # UI components (PageHeader, ConfirmDialog, etc.)
-├── types/            # TypeScript type definitions
-└── locales/          # Internationalization files
+Pages/LaravelRoles/
+├── RolesManagement/               # Main dashboard
+│   ├── Index.vue                  # Dashboard with stats, cards
+│   ├── partials/
+│   │   ├── QuickActions.vue
+│   │   └── RecentRoles.vue
+│   └── Roles/                     # Roles CRUD
+│       ├── Index.vue              # List/grid with filters
+│       ├── Create.vue             # Create role
+│       └── Edit.vue               # Edit role (tabbed)
+├── PermissionsManagement/         # Permissions dashboard
+│   ├── Index.vue                  # Dashboard
+│   ├── partials/
+│   │   └── RecentPermissions.vue
+│   ├── Permissions/
+│   │   └── Index.vue              # List/grid view
+│   └── PermissionMatrix/
+│       └── Index.vue              # Interactive matrix
+└── shared/                        # Reusable components
+    ├── StatsCard.vue
+    ├── ActionCard.vue
+    ├── ViewToggle.vue
+    ├── ConfirmDialog.vue
+    ├── Pagination.vue
+    └── Toast.vue
 ```
 
-## Import Paths
+## Routes
 
-All imports use the `@/laravel-roles` namespace:
+| Route | Page |
+|-------|------|
+| `/admin/acl/` | RolesManagement/Index |
+| `/admin/acl/roles` | RolesManagement/Roles/Index |
+| `/admin/acl/roles/create` | RolesManagement/Roles/Create |
+| `/admin/acl/roles/{id}/edit` | RolesManagement/Roles/Edit |
+| `/admin/acl/permissions-management` | PermissionsManagement/Index |
+| `/admin/acl/permissions` | PermissionsManagement/Permissions/Index |
+| `/admin/acl/matrix` | PermissionsManagement/PermissionMatrix/Index |
+
+## AppLayout Integration
+
+Add to your `app.ts` to apply your layout:
 
 ```typescript
-// Package components
-import PageHeader from '@/laravel-roles/components/ui/PageHeader.vue';
-import { useRolesApi } from '@/laravel-roles/composables/useRolesApi';
-import type { Role } from '@/laravel-roles/types';
-
-// Your shadcn-vue components (unchanged)
-import { Button } from '@/components/ui/button';
+resolve: async name => {
+  const pages = import.meta.glob('./Pages/**/*.vue', { eager: true })
+  let page = pages[`./Pages/${name}.vue`]
+  
+  // Apply layout to LaravelRoles pages
+  if (name.startsWith('LaravelRoles/')) {
+    page.default.layout = AppLayout
+  }
+  
+  return page
+}
 ```
 
-## Pages
+## Features
 
-The pages are published to `resources/js/Pages/LaravelRoles/`:
-
-- `RolesIndex.vue` - List and manage roles
-- `RoleCreate.vue` - Create new role
-- `RoleEdit.vue` - Edit existing role
-- `PermissionsIndex.vue` - List and manage permissions
-- `PermissionMatrix.vue` - Role-permission matrix
-
-## Customization
-
-All files are published and can be freely modified. The package components are designed to be starting points that you can adapt to your project's needs.
+- ✅ List/Grid view toggle
+- ✅ Search, filter by guard, trashed filter
+- ✅ Bulk selection and delete
+- ✅ Pagination
+- ✅ Permission grouping
+- ✅ Live permission sync (optimistic updates)
+- ✅ Toast notifications
+- ✅ Confirmation dialogs
+- ✅ Responsive design
+- ✅ Dark mode support
 
 ## Need Help?
 
-See the full documentation at [docs/ui-vue.md](../../docs/ui-vue.md).
+See [docs/ui-vue.md](../../docs/ui-vue.md).

@@ -1,0 +1,14 @@
+<script setup lang="ts">
+interface Permission { id: number; name: string; guard_name: string; group: string; label?: string; roles_count?: number }
+defineProps<{ permissions: Permission[]; loading: boolean; apiPrefix: string }>()
+const getGroups = (perms: Permission[]) => { const g: Record<string, Permission[]> = {}; for (const p of perms) { const k = p.group || 'other'; if (!g[k]) g[k] = []; g[k].push(p) }; return g }
+</script>
+
+<template>
+  <div class="rounded-xl border bg-card shadow-sm">
+    <div class="flex items-center justify-between border-b p-4"><h3 class="font-semibold">Recent Permissions</h3><a :href="`/${apiPrefix}/permissions`" class="text-sm font-medium text-primary hover:underline">View all →</a></div>
+    <div v-if="loading" class="p-6 space-y-3"><div v-for="i in 3" :key="i" class="flex items-center gap-4"><div class="h-10 w-10 animate-pulse rounded-lg bg-muted" /><div class="flex-1 space-y-2"><div class="h-4 w-1/3 animate-pulse rounded bg-muted" /><div class="h-3 w-1/4 animate-pulse rounded bg-muted" /></div></div></div>
+    <div v-else-if="permissions.length === 0" class="p-8 text-center text-muted-foreground"><svg class="mx-auto h-12 w-12 mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg><p>No permissions yet</p><p class="text-sm">Run: <code class="bg-muted px-1 rounded">php artisan roles:sync</code></p></div>
+    <div v-else class="p-4"><div class="space-y-4"><div v-for="(perms, group) in getGroups(permissions)" :key="group" class="rounded-lg border"><div class="flex items-center gap-3 bg-muted/50 px-4 py-2"><svg class="h-4 w-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg><span class="font-medium capitalize text-sm">{{ group }}</span><span class="rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-800 dark:bg-purple-900 dark:text-purple-200">{{ perms.length }}</span></div><div class="flex flex-wrap gap-2 p-3"><span v-for="perm in perms" :key="perm.id" class="inline-flex items-center gap-1.5 rounded-lg border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"><svg class="h-3 w-3 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>{{ perm.label || perm.name }}</span></div></div></div></div>
+  </div>
+</template>

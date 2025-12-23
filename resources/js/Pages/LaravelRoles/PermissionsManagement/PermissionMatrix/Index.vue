@@ -1,0 +1,53 @@
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { Head } from '@inertiajs/vue3'
+import StatsCard from '../../shared/StatsCard.vue'
+import Toast from '../../shared/Toast.vue'
+
+interface Props { config: { prefix: string } }
+const props = defineProps<Props>()
+interface Role { id: number; name: string; guard_name: string; permissions: string[] }
+interface Permission { id: number; name: string; group: string; label?: string }
+
+const roles = ref<Role[]>([]), permissions = ref<Permission[]>([]), loading = ref(true), saving = ref<string | null>(null), searchQuery = ref(''), guardFilter = ref(''), selectedRoleId = ref<number | null>(null)
+const apiPrefix = computed(() => props.config?.prefix || 'admin/acl')
+const url = (p: string) => `/${apiPrefix.value}${p}`
+const csrf = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+const toast = (m: string, t: 'success' | 'error' = 'success') => { const x = (window as any).__lr_toast; if (x) t === 'success' ? x.success(m) : x.error(m) }
+
+const fetchData = async () => { loading.value = true; try { const [rolesRes, permsRes] = await Promise.all([fetch(url('/roles?with_permissions=1'), { headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' }), fetch(url('/permissions'), { headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })]); if (rolesRes.ok) { const d = await rolesRes.json(); roles.value = (d.data || d || []).map((r: any) => ({ ...r, permissions: (r.permissions || []).map((p: any) => typeof p === 'string' ? p : p.name) })); if (roles.value.length && !selectedRoleId.value) selectedRoleId.value = roles.value[0].id }; if (permsRes.ok) { const d = await permsRes.json(); permissions.value = d.data || d || [] } } catch { toast('Failed', 'error') } finally { loading.value = false } }
+const groupedPerms = computed(() => { const q = searchQuery.value.toLowerCase(); const f = permissions.value.filter(p => p.name.toLowerCase().includes(q) || (p.label?.toLowerCase().includes(q))); const g: Record<string, Permission[]> = {}; for (const p of f) { const k = p.group || 'other'; if (!g[k]) g[k] = []; g[k].push(p) }; return g })
+const currentRole = computed(() => roles.value.find(r => r.id === selectedRoleId.value))
+const visibleRoles = computed(() => guardFilter.value ? roles.value.filter(r => r.guard_name === guardFilter.value) : roles.value)
+
+const togglePerm = async (permName: string) => { if (!currentRole.value) return; const role = roles.value.find(r => r.id === currentRole.value!.id); if (!role) return; const has = role.permissions.includes(permName); const key = `${role.id}-${permName}`; saving.value = key; if (has) role.permissions = role.permissions.filter(p => p !== permName); else role.permissions.push(permName); try { const endpoint = has ? url(`/roles/${role.id}/permissions/${permName}`) : url(`/roles/${role.id}/permissions`); const res = await fetch(endpoint, { method: has ? 'DELETE' : 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf(), 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin', body: has ? undefined : JSON.stringify({ permission: permName }) }); if (!res.ok) throw new Error() } catch { if (has) role.permissions.push(permName); else role.permissions = role.permissions.filter(p => p !== permName); toast('Failed', 'error') } finally { saving.value = null } }
+
+const toggleGroup = async (perms: Permission[]) => { if (!currentRole.value) return; const role = roles.value.find(r => r.id === currentRole.value!.id); if (!role) return; const names = perms.map(p => p.name); const all = names.every(n => role.permissions.includes(n)); if (all) role.permissions = role.permissions.filter(p => !names.includes(p)); else names.forEach(n => { if (!role.permissions.includes(n)) role.permissions.push(n) }); try { const res = await fetch(url(`/roles/${role.id}/sync`), { method: 'PUT', headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf(), 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin', body: JSON.stringify({ permissions: role.permissions }) }); if (!res.ok) throw new Error(); toast('Updated') } catch { await fetchData(); toast('Failed', 'error') } }
+const isGroupSelected = (perms: Permission[]) => currentRole.value ? perms.every(p => currentRole.value!.permissions.includes(p.name)) : false
+const isGroupPartial = (perms: Permission[]) => { if (!currentRole.value) return false; const s = perms.filter(p => currentRole.value!.permissions.includes(p.name)); return s.length > 0 && s.length < perms.length }
+
+const roleColors = ['bg-blue-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500', 'bg-pink-500', 'bg-indigo-500', 'bg-cyan-500', 'bg-rose-500']
+const getRoleColor = (i: number) => roleColors[i % roleColors.length]
+const stats = computed(() => [{ title: 'Roles', value: roles.value.length, icon: 'shield' as const, color: 'bg-blue-500' }, { title: 'Permissions', value: permissions.value.length, icon: 'key' as const, color: 'bg-purple-500' }, { title: 'Groups', value: Object.keys(groupedPerms.value).length, icon: 'folder' as const, color: 'bg-green-500' }])
+onMounted(fetchData)
+</script>
+
+<template>
+  <Head title="Permission Matrix" /><Toast />
+  <div class="space-y-6">
+    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div><div class="flex items-center gap-2"><a :href="url('')" class="text-muted-foreground hover:text-foreground"><svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg></a><h1 class="text-3xl font-bold tracking-tight">Permission Matrix</h1></div><p class="mt-1 text-muted-foreground">Visually manage role-permission assignments</p></div>
+      <a :href="url('/roles')" class="inline-flex items-center rounded-lg border px-4 py-2.5 text-sm font-medium hover:bg-muted"><svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>Back to Roles</a>
+    </div>
+    <div v-if="loading" class="flex items-center justify-center py-12"><svg class="h-8 w-8 animate-spin text-primary" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg></div>
+    <template v-else>
+      <div class="grid gap-4 md:grid-cols-3"><StatsCard v-for="s in stats" :key="s.title" :title="s.title" :value="s.value" :icon="s.icon" :color="s.color" /></div>
+      <div class="rounded-xl border bg-card shadow-sm"><div class="border-b p-4 flex items-center justify-between"><h2 class="font-semibold">Select Role</h2><select v-model="guardFilter" class="h-9 rounded-lg border bg-background px-3 text-sm"><option value="">All Guards</option><option value="web">Web</option><option value="api">API</option></select></div><div class="flex flex-wrap gap-2 p-4"><button v-for="(role, i) in visibleRoles" :key="role.id" @click="selectedRoleId = role.id" :class="['inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all', selectedRoleId === role.id ? 'bg-primary text-primary-foreground shadow-lg' : 'border bg-background hover:bg-muted']"><div :class="[getRoleColor(i), 'h-2 w-2 rounded-full']" />{{ role.name }}<span :class="['rounded-full px-1.5 py-0.5 text-xs', selectedRoleId === role.id ? 'bg-white/20' : 'bg-primary/10 text-primary']">{{ role.permissions.length }}</span></button></div></div>
+      <div class="rounded-xl border bg-card shadow-sm"><div class="border-b p-4 flex items-center justify-between"><div><h2 class="font-semibold">Permissions for: {{ currentRole?.name || 'Select a role' }}</h2><p v-if="currentRole" class="text-sm text-muted-foreground">{{ currentRole.permissions.length }}/{{ permissions.length }} assigned</p></div><div class="relative"><svg class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg><input v-model="searchQuery" type="text" placeholder="Filter..." class="h-9 w-[240px] rounded-lg border bg-background pl-9 pr-3 text-sm" /></div></div>
+        <div v-if="!currentRole" class="p-8 text-center text-muted-foreground">Select a role to manage permissions</div>
+        <div v-else-if="!Object.keys(groupedPerms).length" class="p-8 text-center text-muted-foreground">{{ searchQuery ? 'No matches' : 'No permissions' }}</div>
+        <div v-else class="divide-y"><div v-for="(perms, group) in groupedPerms" :key="group" class="p-4"><div class="mb-3 flex items-center justify-between"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" :checked="isGroupSelected(perms)" :indeterminate="isGroupPartial(perms)" @change="toggleGroup(perms)" class="h-5 w-5 rounded" /><span class="font-semibold capitalize text-lg">{{ group }}</span><span class="rounded-full bg-primary/10 px-2.5 py-1 text-sm text-primary">{{ perms.filter(p => currentRole!.permissions.includes(p.name)).length }}/{{ perms.length }}</span></label></div><div class="grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"><label v-for="perm in perms" :key="perm.id" :class="['flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-all', currentRole!.permissions.includes(perm.name) ? 'bg-primary/5 border-primary/50 shadow-sm' : 'hover:bg-muted/50']"><div class="relative"><input type="checkbox" :checked="currentRole!.permissions.includes(perm.name)" @change="togglePerm(perm.name)" :disabled="saving === `${currentRole!.id}-${perm.name}`" class="h-4 w-4 rounded" /><svg v-if="saving === `${currentRole!.id}-${perm.name}`" class="absolute -left-1 -top-1 h-6 w-6 animate-spin text-primary" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg></div><div class="flex-1 min-w-0"><p class="text-sm font-medium truncate">{{ perm.label || perm.name }}</p></div></label></div></div></div>
+      </div>
+    </template>
+  </div>
+</template>
