@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2025-12-23
+
+### Fixed
+
+- **Vue UI Import Paths**: All composables and pages now correctly use `@/laravel-roles` namespace
+- **Component Publish Structure**: UI components are now published to `components/ui/` subfolder to match import paths
+- **Missing Components**: Added all components (ViewToggle, FiltersBar, RoleGrid, etc.) to the publish configuration
+
+### Changed
+
+- **Simplified Publish Tag**: `--tag=roles-vue` now publishes everything needed for a complete UI setup
+- **Documentation**: Added comprehensive Vite alias setup instructions to `docs/ui-vue.md`
+
+### Important
+
+Users must add the `@/laravel-roles` alias to their `vite.config.ts`:
+
+```typescript
+resolve: {
+    alias: {
+        '@': path.resolve(__dirname, './resources/js'),
+        '@/laravel-roles': path.resolve(__dirname, './resources/js/laravel-roles'),
+    },
+},
+```
+
 ## [1.3.0] - 2025-12-22
 
 ### Added
