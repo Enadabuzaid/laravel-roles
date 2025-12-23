@@ -33,9 +33,9 @@ import {
 } from 'lucide-vue-next'
 
 // Laravel Roles custom components
-import PageHeader from '@/laravel-roles/components/PageHeader.vue'
-import DataTableSkeleton from '@/laravel-roles/components/DataTableSkeleton.vue'
-import EmptyState from '@/laravel-roles/components/EmptyState.vue'
+import PageHeader from '@/laravel-roles/components/ui/PageHeader.vue'
+import DataTableSkeleton from '@/laravel-roles/components/ui/DataTableSkeleton.vue'
+import EmptyState from '@/laravel-roles/components/ui/EmptyState.vue'
 
 // Laravel Roles API layer
 import { useMatrixApi } from '@/laravel-roles/composables/useMatrixApi'

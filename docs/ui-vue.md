@@ -19,8 +19,9 @@ Your Laravel project must have:
 - Inertia.js with Vue adapter
 - shadcn-vue components
 - Lucide Vue Next icons
+- VueUse (for composables)
 
-## Enabling the UI
+## Quick Start
 
 ### Step 1: Enable in Config
 
@@ -40,20 +41,52 @@ Or via environment:
 ROLES_UI_ENABLED=true
 ```
 
-### Step 2: Publish Vue Components (REQUIRED)
+### Step 2: Publish Vue Components
 
 ```bash
-# Recommended: Publish everything (pages + components + API + composables + types)
-php artisan vendor:publish --tag=laravel-roles-vue-full
-
-# Or publish pages only (requires manual component setup)
-php artisan vendor:publish --tag=laravel-roles-vue
-
-# Or publish just reusable components
-php artisan vendor:publish --tag=laravel-roles-components
+# RECOMMENDED: Publish everything needed for the UI
+php artisan vendor:publish --tag=roles-vue
 ```
 
-### Step 3: Install shadcn-vue Components
+This publishes:
+- Pages (to `resources/js/Pages/LaravelRoles/`)
+- API client (to `resources/js/laravel-roles/api/`)
+- Composables (to `resources/js/laravel-roles/composables/`)
+- Types (to `resources/js/laravel-roles/types/`)
+- Locales (to `resources/js/laravel-roles/locales/`)
+- Custom components (to `resources/js/laravel-roles/components/`)
+- Setup README
+
+### Step 3: Configure Vite Alias (REQUIRED)
+
+The published files use the `@/laravel-roles` import alias. You **must** add this alias to your `vite.config.ts`:
+
+```typescript
+// vite.config.ts
+import { defineConfig } from 'vite';
+import laravel from 'laravel-vite-plugin';
+import vue from '@vitejs/plugin-vue';
+import path from 'path';
+
+export default defineConfig({
+    plugins: [
+        laravel({
+            input: ['resources/css/app.css', 'resources/js/app.ts'],
+            refresh: true,
+        }),
+        vue(),
+    ],
+    resolve: {
+        alias: {
+            '@': path.resolve(__dirname, './resources/js'),
+            // ADD THIS LINE - Required for Laravel Roles UI
+            '@/laravel-roles': path.resolve(__dirname, './resources/js/laravel-roles'),
+        },
+    },
+});
+```
+
+### Step 4: Install Required shadcn-vue Components
 
 The UI requires these shadcn-vue components:
 
@@ -78,9 +111,9 @@ npx shadcn-vue@latest add breadcrumb
 npx shadcn-vue@latest add toast
 ```
 
-### Step 4: Configure API Prefix
+### Step 5: Configure API Prefix
 
-Add this to your base layout:
+Add this to your base layout (before closing `</head>` tag):
 
 ```html
 <script>
@@ -93,7 +126,7 @@ Add this to your base layout:
 
 ## Published File Structure
 
-After publishing with `--tag=laravel-roles-vue-full`:
+After running `php artisan vendor:publish --tag=roles-vue`:
 
 ```
 resources/js/
@@ -102,32 +135,58 @@ resources/js/
 │       ├── RolesIndex.vue
 │       ├── RoleCreate.vue
 │       ├── RoleEdit.vue
+│       ├── PermissionsIndex.vue
 │       └── PermissionMatrix.vue
-├── laravel-roles/
-│   ├── api/
-│   │   ├── config.ts
-│   │   ├── rolesApi.ts
-│   │   ├── permissionsApi.ts
-│   │   └── matrixApi.ts
-│   ├── composables/
-│   │   ├── useRolesApi.ts
-│   │   ├── usePermissionsApi.ts
-│   │   ├── useMatrixApi.ts
-│   │   └── useToast.ts
-│   ├── components/
-│   │   ├── ui/
-│   │   │   ├── PageHeader.vue
-│   │   │   ├── ConfirmDialog.vue
-│   │   │   ├── SearchInput.vue
-│   │   │   ├── DataTableSkeleton.vue
-│   │   │   └── EmptyState.vue
-│   │   ├── PermissionToggleRow.vue
-│   │   └── PermissionGroupAccordion.vue
-│   ├── types/
-│   │   └── index.ts
-│   └── locales/
-│       └── en.ts
+└── laravel-roles/
+    ├── api/
+    │   ├── config.ts
+    │   ├── index.ts
+    │   ├── rolesApi.ts
+    │   ├── permissionsApi.ts
+    │   └── matrixApi.ts
+    ├── composables/
+    │   ├── useRolesApi.ts
+    │   ├── usePermissionsApi.ts
+    │   ├── useMatrixApi.ts
+    │   └── useToast.ts
+    ├── components/
+    │   ├── ui/
+    │   │   ├── PageHeader.vue
+    │   │   ├── ConfirmDialog.vue
+    │   │   ├── SearchInput.vue
+    │   │   ├── DataTableSkeleton.vue
+    │   │   └── EmptyState.vue
+    │   ├── PermissionToggleRow.vue
+    │   ├── PermissionGroupAccordion.vue
+    │   ├── ViewToggle.vue
+    │   ├── FiltersBar.vue
+    │   └── ...
+    ├── types/
+    │   └── index.ts
+    ├── locales/
+    │   └── en.ts
+    └── README.md
 ```
+
+## Import Path Convention
+
+All package files use the `@/laravel-roles` namespace to avoid conflicts with your project's components:
+
+```typescript
+// Package components use @/laravel-roles namespace
+import PageHeader from '@/laravel-roles/components/ui/PageHeader.vue';
+import { useRolesApi } from '@/laravel-roles/composables/useRolesApi';
+import type { Role } from '@/laravel-roles/types';
+
+// Your project's shadcn-vue components use standard @/components path
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+```
+
+This separation ensures:
+- No conflicts with your existing components
+- Clear distinction between package and project code
+- Easy updates when new package versions are released
 
 ## Available Pages
 
@@ -309,6 +368,29 @@ const {
 // Fetch roles reactively
 onMounted(() => fetchRoles());
 ```
+
+## Troubleshooting
+
+### "Cannot find module '@/laravel-roles/...'"
+
+This error means the Vite alias is not configured. Add the alias to `vite.config.ts`:
+
+```typescript
+resolve: {
+    alias: {
+        '@': path.resolve(__dirname, './resources/js'),
+        '@/laravel-roles': path.resolve(__dirname, './resources/js/laravel-roles'),
+    },
+},
+```
+
+### Components not rendering
+
+Ensure you have installed all required shadcn-vue components (see Step 4 above).
+
+### API requests failing
+
+Make sure you've added the `window.laravelRoles` config to your layout (see Step 5 above).
 
 ## Disabling UI (API-Only Mode)
 

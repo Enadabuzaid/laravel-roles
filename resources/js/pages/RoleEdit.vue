@@ -31,8 +31,8 @@ import {
 } from 'lucide-vue-next'
 
 // Laravel Roles custom components
-import PageHeader from '@/laravel-roles/components/PageHeader.vue'
-import ConfirmDialog from '@/laravel-roles/components/ConfirmDialog.vue'
+import PageHeader from '@/laravel-roles/components/ui/PageHeader.vue'
+import ConfirmDialog from '@/laravel-roles/components/ui/ConfirmDialog.vue'
 
 // Laravel Roles API layer
 import { useRolesApi } from '@/laravel-roles/composables/useRolesApi'

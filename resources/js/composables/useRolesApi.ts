@@ -5,10 +5,10 @@
  * Uses the centralized API client - no hardcoded URLs.
  */
 import { ref, computed, type Ref } from 'vue'
-import { rolesApi, type RoleFilters, type CreateRoleData, type UpdateRoleData } from '@/api'
-import { uiUrl } from '@/api/config'
+import { rolesApi, type RoleFilters, type CreateRoleData, type UpdateRoleData } from '@/laravel-roles/api'
+import { uiUrl } from '@/laravel-roles/api/config'
 import { useToast } from './useToast'
-import type { Role, RoleStats, PaginationMeta } from '@/types'
+import type { Role, RoleStats, PaginationMeta } from '@/laravel-roles/types'
 
 export function useRolesApi() {
   const toast = useToast()

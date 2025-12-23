@@ -1,137 +1,95 @@
-# Laravel Roles Vue UI
+# Laravel Roles - Vue UI
 
-This directory contains the Vue 3 admin UI for the Laravel Roles package.
+This folder contains the Vue 3 admin UI for the Laravel Roles package.
 
-## Installation
+## Quick Setup
 
-### Step 1: Publish Vue Files
+### 1. Add Vite Alias (REQUIRED)
 
-Run the following command to publish all Vue files to your project:
+Add this alias to your `vite.config.ts`:
+
+```typescript
+import path from 'path';
+
+export default defineConfig({
+    // ... other config
+    resolve: {
+        alias: {
+            '@': path.resolve(__dirname, './resources/js'),
+            // Required for Laravel Roles UI
+            '@/laravel-roles': path.resolve(__dirname, './resources/js/laravel-roles'),
+        },
+    },
+});
+```
+
+### 2. Install Required shadcn-vue Components
 
 ```bash
-# Recommended: Publish everything (pages, components, API, composables, types)
-php artisan vendor:publish --tag=laravel-roles-vue-full
-
-# Or publish only pages (requires manual component setup)
-php artisan vendor:publish --tag=laravel-roles-vue
+npx shadcn-vue@latest add button input label textarea card badge table \
+    dropdown-menu alert-dialog switch checkbox tabs accordion skeleton \
+    separator select breadcrumb toast
 ```
 
-### Step 2: Install Required shadcn-vue Components
-
-The UI requires the following shadcn-vue components:
+### 3. Install Required Dependencies
 
 ```bash
-npx shadcn-vue@latest add button
-npx shadcn-vue@latest add input
-npx shadcn-vue@latest add label
-npx shadcn-vue@latest add textarea
-npx shadcn-vue@latest add card
-npx shadcn-vue@latest add badge
-npx shadcn-vue@latest add table
-npx shadcn-vue@latest add dropdown-menu
-npx shadcn-vue@latest add alert-dialog
-npx shadcn-vue@latest add switch
-npx shadcn-vue@latest add checkbox
-npx shadcn-vue@latest add tabs
-npx shadcn-vue@latest add accordion
-npx shadcn-vue@latest add skeleton
-npx shadcn-vue@latest add separator
-npx shadcn-vue@latest add select
-npx shadcn-vue@latest add breadcrumb
-npx shadcn-vue@latest add toast
+npm install @vueuse/core lucide-vue-next
 ```
 
-### Step 3: Enable UI in Config
+### 4. Add API Config to Layout
 
-```php
-// config/roles.php
-'ui' => [
-    'enabled' => true,
-    'driver' => 'vue',
-],
+Add to your base layout before `</head>`:
+
+```html
+<script>
+  window.laravelRoles = {
+    apiPrefix: '{{ config("roles.routes.prefix") }}',
+    uiPrefix: '{{ config("roles.ui.prefix") }}',
+  };
+</script>
 ```
 
-### Step 4: Add TypeScript Path Alias
-
-Add this to your `tsconfig.json`:
-
-```json
-{
-  "compilerOptions": {
-    "paths": {
-      "@/*": ["./resources/js/*"]
-    }
-  }
-}
-```
-
-## Published File Structure
-
-After publishing with `--tag=laravel-roles-vue-full`:
+## File Structure
 
 ```
-resources/js/
-├── Pages/
-│   └── LaravelRoles/
-│       ├── RolesIndex.vue       # Roles listing
-│       ├── RoleCreate.vue       # Create role form
-│       ├── RoleEdit.vue         # Edit role form
-│       └── PermissionMatrix.vue # Permission toggle matrix
-└── laravel-roles/
-    ├── api/
-    │   ├── config.ts           # API configuration
-    │   ├── rolesApi.ts         # Roles API client
-    │   ├── permissionsApi.ts   # Permissions API client
-    │   └── matrixApi.ts        # Matrix API client
-    ├── composables/
-    │   ├── useRolesApi.ts      # Roles reactive state
-    │   ├── usePermissionsApi.ts # Permissions reactive state
-    │   ├── useMatrixApi.ts     # Matrix reactive state
-    │   └── useToast.ts         # Toast notifications
-    ├── components/
-    │   ├── PageHeader.vue      # Page header with breadcrumbs
-    │   ├── ConfirmDialog.vue   # Confirmation dialog
-    │   ├── SearchInput.vue     # Debounced search input
-    │   ├── DataTableSkeleton.vue # Loading skeleton
-    │   ├── EmptyState.vue      # Empty state display
-    │   ├── PermissionToggleRow.vue
-    │   └── PermissionGroupAccordion.vue
-    └── types/
-        └── index.ts            # TypeScript interfaces
+laravel-roles/
+├── api/              # API client for backend communication
+├── composables/      # Vue composables (useRolesApi, etc.)
+├── components/       # Reusable Vue components
+│   └── ui/           # UI components (PageHeader, ConfirmDialog, etc.)
+├── types/            # TypeScript type definitions
+└── locales/          # Internationalization files
 ```
 
 ## Import Paths
 
-The published files use these import paths:
+All imports use the `@/laravel-roles` namespace:
 
-- shadcn-vue components: `@/components/ui/*`
-- Laravel Roles components: `@/laravel-roles/components/*`
-- Laravel Roles API: `@/laravel-roles/api/*`
-- Laravel Roles composables: `@/laravel-roles/composables/*`
-- Laravel Roles types: `@/laravel-roles/types`
+```typescript
+// Package components
+import PageHeader from '@/laravel-roles/components/ui/PageHeader.vue';
+import { useRolesApi } from '@/laravel-roles/composables/useRolesApi';
+import type { Role } from '@/laravel-roles/types';
+
+// Your shadcn-vue components (unchanged)
+import { Button } from '@/components/ui/button';
+```
+
+## Pages
+
+The pages are published to `resources/js/Pages/LaravelRoles/`:
+
+- `RolesIndex.vue` - List and manage roles
+- `RoleCreate.vue` - Create new role
+- `RoleEdit.vue` - Edit existing role
+- `PermissionsIndex.vue` - List and manage permissions
+- `PermissionMatrix.vue` - Role-permission matrix
 
 ## Customization
 
-### Modify Pages
+All files are published and can be freely modified. The package components are designed to be starting points that you can adapt to your project's needs.
 
-Edit files in `resources/js/Pages/LaravelRoles/` to customize:
+## Need Help?
 
-- Add your own layout wrapper
-- Change styling
-- Add additional features
-
-### Extend API Layer
-
-Edit files in `resources/js/laravel-roles/api/` to:
-
-- Add authentication headers
-- Modify error handling
-- Add request interceptors
-
-## Requirements
-
-- Vue 3
-- Inertia.js with Vue adapter
-- shadcn-vue
-- Lucide Vue Next icons
-- TypeScript (recommended)
+See the full documentation at [docs/ui-vue.md](../../docs/ui-vue.md).

@@ -40,11 +40,11 @@ import {
 } from 'lucide-vue-next'
 
 // Laravel Roles custom components
-import PageHeader from '@/laravel-roles/components/PageHeader.vue'
-import SearchInput from '@/laravel-roles/components/SearchInput.vue'
-import ConfirmDialog from '@/laravel-roles/components/ConfirmDialog.vue'
-import EmptyState from '@/laravel-roles/components/EmptyState.vue'
-import DataTableSkeleton from '@/laravel-roles/components/DataTableSkeleton.vue'
+import PageHeader from '@/laravel-roles/components/ui/PageHeader.vue'
+import SearchInput from '@/laravel-roles/components/ui/SearchInput.vue'
+import ConfirmDialog from '@/laravel-roles/components/ui/ConfirmDialog.vue'
+import EmptyState from '@/laravel-roles/components/ui/EmptyState.vue'
+import DataTableSkeleton from '@/laravel-roles/components/ui/DataTableSkeleton.vue'
 
 // Laravel Roles API layer
 import { useRolesApi } from '@/laravel-roles/composables/useRolesApi'

@@ -21,7 +21,7 @@ import {
 import { ArrowLeftIcon, SaveIcon, Loader2 } from 'lucide-vue-next'
 
 // Laravel Roles custom components
-import PageHeader from '@/laravel-roles/components/PageHeader.vue'
+import PageHeader from '@/laravel-roles/components/ui/PageHeader.vue'
 
 // Laravel Roles API layer
 import { useRolesApi } from '@/laravel-roles/composables/useRolesApi'

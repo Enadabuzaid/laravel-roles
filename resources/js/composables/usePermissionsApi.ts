@@ -5,9 +5,9 @@
  * Uses the centralized API client - no hardcoded URLs.
  */
 import { ref, computed, type Ref } from 'vue'
-import { permissionsApi, type PermissionFilters, type CreatePermissionData, type UpdatePermissionData } from '@/api'
+import { permissionsApi, type PermissionFilters, type CreatePermissionData, type UpdatePermissionData } from '@/laravel-roles/api'
 import { useToast } from './useToast'
-import type { Permission, PermissionStats, PaginationMeta, GroupedPermissions } from '@/types'
+import type { Permission, PermissionStats, PaginationMeta, GroupedPermissions } from '@/laravel-roles/types'
 
 export function usePermissionsApi() {
   const toast = useToast()

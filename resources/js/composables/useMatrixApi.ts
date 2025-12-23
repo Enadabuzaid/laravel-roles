@@ -5,9 +5,9 @@
  * Handles optimistic updates with rollback on failure.
  */
 import { ref, computed, type Ref } from 'vue'
-import { matrixApi } from '@/api'
+import { matrixApi } from '@/laravel-roles/api'
 import { useToast } from './useToast'
-import type { PermissionMatrix, MatrixRole, MatrixPermission, MatrixRow } from '@/types'
+import type { PermissionMatrix, MatrixRole, MatrixPermission, MatrixRow } from '@/laravel-roles/types'
 
 // Internal state for optimistic updates
 interface OptimisticState {

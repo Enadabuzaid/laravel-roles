@@ -11,12 +11,12 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
 import { PlusIcon, HomeIcon, GridIcon } from 'lucide-vue-next'
-import { usePermissionsApi } from '@/composables/usePermissionsApi'
-import ViewToggle from '@/components/ViewToggle.vue'
-import FiltersBar from '@/components/FiltersBar.vue'
-import PermissionStatsCards from '@/components/PermissionStatsCards.vue'
-import PermissionTable from '@/components/PermissionTable.vue'
-import type { ViewMode, Permission } from '@/types'
+import { usePermissionsApi } from '@/laravel-roles/composables/usePermissionsApi'
+import ViewToggle from '@/laravel-roles/components/ViewToggle.vue'
+import FiltersBar from '@/laravel-roles/components/FiltersBar.vue'
+import PermissionStatsCards from '@/laravel-roles/components/PermissionStatsCards.vue'
+import PermissionTable from '@/laravel-roles/components/PermissionTable.vue'
+import type { ViewMode, Permission } from '@/laravel-roles/types'
 
 // Composable
 const {

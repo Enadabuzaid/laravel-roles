@@ -5,7 +5,7 @@
  * Integrates with shadcn-vue toast or provides fallback.
  */
 import { ref, readonly } from 'vue'
-import type { Toast, ToastType } from '@/types'
+import type { Toast, ToastType } from '@/laravel-roles/types'
 
 // Global toast queue
 const toasts = ref<Toast[]>([])
