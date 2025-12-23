@@ -301,9 +301,34 @@ class DoctorCommand extends Command
         $hasStatus = Schema::hasColumn('roles', 'status') && Schema::hasColumn('permissions', 'status');
         $this->components->twoColumnDetail('Status Column', $hasStatus ? '<info>Present</info>' : '<comment>Missing</comment>');
 
-        // Check i18n columns
-        $hasI18n = Schema::hasColumn('permissions', 'label') && Schema::hasColumn('permissions', 'description');
-        $this->components->twoColumnDetail('i18n Columns', $hasI18n ? '<info>Present</info>' : '<comment>Missing</comment>');
+        // Check group column
+        $hasGroup = Schema::hasColumn('permissions', 'group');
+        $this->components->twoColumnDetail('Group Column', $hasGroup ? '<info>Present</info>' : '<comment>Missing</comment>');
+
+        // Check metadata columns (required for roles:sync labels/descriptions)
+        $this->line('');
+        $this->components->bulletList(['Permission Metadata Columns:']);
+
+        $hasLabel = Schema::hasColumn('permissions', 'label');
+        $hasDescription = Schema::hasColumn('permissions', 'description');
+        $hasGroupLabel = Schema::hasColumn('permissions', 'group_label');
+
+        $this->components->twoColumnDetail('  └ label', $hasLabel ? '<info>Present</info>' : '<comment>Missing</comment>');
+        $this->components->twoColumnDetail('  └ description', $hasDescription ? '<info>Present</info>' : '<comment>Missing</comment>');
+        $this->components->twoColumnDetail('  └ group_label', $hasGroupLabel ? '<info>Present</info>' : '<comment>Missing</comment>');
+
+        // Check if all metadata columns are present
+        $allMetadataPresent = $hasLabel && $hasDescription && $hasGroupLabel;
+        if (!$allMetadataPresent && config('roles.i18n.enabled', false)) {
+            $this->addIssue('database', 'i18n is enabled but metadata columns (label, description, group_label) are missing. Run: php artisan migrate');
+        }
+
+        // Warn if roles:sync might fail
+        if (!$hasLabel && !$hasDescription && !$hasGroupLabel) {
+            $this->components->warn('  ⚠️  No metadata columns found. roles:sync will skip label/description updates.');
+        }
+
+        $this->line('');
 
         // Counts
         $this->components->twoColumnDetail('Total Roles', (string) Role::count());

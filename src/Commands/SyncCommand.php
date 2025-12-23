@@ -13,6 +13,7 @@ use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Models\Permission;
 use Enadstack\LaravelRoles\Database\Seeders\RolesSeeder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * SyncCommand
@@ -232,6 +233,44 @@ class SyncCommand extends Command
      * @param bool $verbose
      * @return void
      */
+    /**
+     * Check if permission metadata columns exist.
+     *
+     * @return array{label: bool, description: bool, group_label: bool, group: bool}
+     */
+    protected function getMetadataColumnStatus(): array
+    {
+        return [
+            'label' => Schema::hasColumn('permissions', 'label'),
+            'description' => Schema::hasColumn('permissions', 'description'),
+            'group_label' => Schema::hasColumn('permissions', 'group_label'),
+            'group' => Schema::hasColumn('permissions', 'group'),
+        ];
+    }
+
+    /**
+     * Encode a value for database storage.
+     * Converts arrays to JSON strings for SQLite/DB compatibility.
+     *
+     * @param mixed $value
+     * @return mixed
+     */
+    protected function encodeForDb(mixed $value): mixed
+    {
+        if (is_array($value)) {
+            return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+        return $value;
+    }
+
+    /**
+     * Sync permissions from config.
+     *
+     * @param string $guard
+     * @param bool $dry
+     * @param bool $verbose
+     * @return void
+     */
     protected function syncPermissions(string $guard, bool $dry, bool $verbose): void
     {
         $this->components->task('Syncing permissions', function () use ($guard, $dry, $verbose) {
@@ -244,6 +283,9 @@ class SyncCommand extends Command
             $permissionDescriptions = (array) config('roles.seed.permission_descriptions', []);
             $permissionGroupLabels = (array) config('roles.seed.permission_group_labels', []);
 
+            // Check which metadata columns exist
+            $columnStatus = $this->getMetadataColumnStatus();
+
             foreach ($permissionGroups as $group => $actions) {
                 foreach ((array) $actions as $action) {
                     $permissionName = "{$group}.{$action}";
@@ -251,22 +293,26 @@ class SyncCommand extends Command
                     $data = [
                         'name' => $permissionName,
                         'guard_name' => $guard,
-                        'group' => $group,
                     ];
 
-                    // Add group label if available
-                    if (isset($permissionGroupLabels[$group])) {
-                        $data['group_label'] = $permissionGroupLabels[$group];
+                    // Only add group if column exists
+                    if ($columnStatus['group']) {
+                        $data['group'] = $group;
                     }
 
-                    // Add label if available
-                    if (isset($permissionLabels[$permissionName])) {
-                        $data['label'] = $permissionLabels[$permissionName];
+                    // Only add group_label if column exists
+                    if ($columnStatus['group_label'] && isset($permissionGroupLabels[$group])) {
+                        $data['group_label'] = $this->encodeForDb($permissionGroupLabels[$group]);
                     }
 
-                    // Add description if available
-                    if (isset($permissionDescriptions[$permissionName])) {
-                        $data['description'] = $permissionDescriptions[$permissionName];
+                    // Only add label if column exists
+                    if ($columnStatus['label'] && isset($permissionLabels[$permissionName])) {
+                        $data['label'] = $this->encodeForDb($permissionLabels[$permissionName]);
+                    }
+
+                    // Only add description if column exists
+                    if ($columnStatus['description'] && isset($permissionDescriptions[$permissionName])) {
+                        $data['description'] = $this->encodeForDb($permissionDescriptions[$permissionName]);
                     }
 
                     Permission::firstOrCreate(
@@ -392,11 +438,28 @@ class SyncCommand extends Command
      * @param bool $verbose
      * @return void
      */
+    /**
+     * Update labels and descriptions from config.
+     * Only updates columns that exist in the schema.
+     *
+     * @param string $guard
+     * @param bool $dry
+     * @param bool $verbose
+     * @return void
+     */
     protected function updateLabelsAndDescriptions(string $guard, bool $dry, bool $verbose): void
     {
         $this->components->task('Updating labels and descriptions', function () use ($guard, $dry, $verbose) {
             if ($dry) {
                 return 'dry-run';
+            }
+
+            // Check which metadata columns exist
+            $columnStatus = $this->getMetadataColumnStatus();
+
+            // If no metadata columns exist, skip this step entirely
+            if (!$columnStatus['label'] && !$columnStatus['description'] && !$columnStatus['group_label']) {
+                return 'skipped (no metadata columns)';
             }
 
             $permissionLabels = (array) config('roles.seed.permission_labels', []);
@@ -410,27 +473,36 @@ class SyncCommand extends Command
             foreach ($permissions as $permission) {
                 $updates = [];
 
-                // Update label
-                if (isset($permissionLabels[$permission->name])) {
-                    $updates['label'] = $permissionLabels[$permission->name];
+                // Update label only if column exists
+                if ($columnStatus['label'] && isset($permissionLabels[$permission->name])) {
+                    $updates['label'] = $this->encodeForDb($permissionLabels[$permission->name]);
                 }
 
-                // Update description
-                if (isset($permissionDescriptions[$permission->name])) {
-                    $updates['description'] = $permissionDescriptions[$permission->name];
+                // Update description only if column exists
+                if ($columnStatus['description'] && isset($permissionDescriptions[$permission->name])) {
+                    $updates['description'] = $this->encodeForDb($permissionDescriptions[$permission->name]);
                 }
 
-                // Update group label
-                if ($permission->group && isset($permissionGroupLabels[$permission->group])) {
-                    $updates['group_label'] = $permissionGroupLabels[$permission->group];
+                // Update group label only if column exists
+                if ($columnStatus['group_label'] && $columnStatus['group']) {
+                    $group = $permission->group ?? null;
+                    if ($group && isset($permissionGroupLabels[$group])) {
+                        $updates['group_label'] = $this->encodeForDb($permissionGroupLabels[$group]);
+                    }
                 }
 
                 if (!empty($updates)) {
-                    $permission->update($updates);
-                    $updated++;
+                    try {
+                        $permission->update($updates);
+                        $updated++;
 
-                    if ($verbose) {
-                        $this->line("  ✓ Updated: {$permission->name}");
+                        if ($verbose) {
+                            $this->line("  ✓ Updated: {$permission->name}");
+                        }
+                    } catch (\Throwable $e) {
+                        if ($verbose) {
+                            $this->warn("  ✗ Failed to update {$permission->name}: {$e->getMessage()}");
+                        }
                     }
                 }
             }

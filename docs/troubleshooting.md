@@ -1,344 +1,371 @@
 # Troubleshooting
 
-This document covers common issues and solutions.
+Common issues and their solutions for the Laravel Roles package.
 
-## Diagnostics
+---
 
-Always start with the doctor command:
+## roles:sync Fails with Missing Columns
+
+### Symptoms
+
+When running `php artisan roles:sync`, you see:
+
+```
+SQLSTATE[HY000]: General error: 1 no such column: label
+```
+
+Or similar errors for `description` or `group_label` columns.
+
+### Root Cause
+
+The `roles:sync` command attempts to update permission metadata (label, description, group_label), but these columns don't exist in your database. This commonly happens because:
+
+1. You're using an older version of the package
+2. The metadata migration was not published or run
+3. You're on a fresh installation without running migrations
+
+### Fix
+
+**Step 1: Publish and run migrations**
+
+```bash
+php artisan migrate
+```
+
+**Step 2: Verify columns exist**
 
 ```bash
 php artisan roles:doctor
 ```
 
-This identifies most configuration issues.
+Look for the "Permission Metadata Columns" section:
 
-## Common Installation Issues
+```
+Permission Metadata Columns:
+  └ label ......................................... Present
+  └ description ................................... Present
+  └ group_label ................................... Present
+```
 
-### Issue: Config file not found
-
-**Symptom**: Error about missing config, or default values used unexpectedly.
-
-**Solution**:
+**Step 3: Re-run sync**
 
 ```bash
-php artisan vendor:publish --provider="Enadstack\LaravelRoles\Providers\RolesServiceProvider" --tag=roles-config
+php artisan roles:sync
 ```
 
-### Issue: Migrations not running
+### Alternative: Skip Metadata Updates
 
-**Symptom**: Tables don't exist, or missing columns.
-
-**Solution**:
-
-1. Ensure Spatie migrations ran first
-2. Run package migrations
+If you don't need metadata columns, the v1.3.3+ version of `roles:sync` will automatically skip them if they don't exist. You can verify this:
 
 ```bash
-php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider"
-php artisan migrate
-
-php artisan vendor:publish --tag=roles-migrations
-php artisan migrate
+php artisan roles:sync --verbose-output
 ```
 
-### Issue: Service provider not loading
+You should see: `Updating labels and descriptions ... skipped (no metadata columns)`
 
-**Symptom**: Routes not registered, services not available.
+---
 
-**Solution**: Clear cached config:
+## Create/Edit Pages Redirect to /admin
+
+### Symptoms
+
+- Roles index page (`/admin/acl/roles`) works correctly
+- Clicking "Create Role" or "Edit" redirects to `/admin` or shows 404
+- The browser URL changes but the page doesn't load
+
+### Root Cause
+
+This typically happens due to:
+
+1. **Missing Inertia page resolver configuration** - The app.ts doesn't know how to resolve `LaravelRoles/*` pages
+2. **Missing Vite alias** - The `@/laravel-roles` import path isn't configured
+3. **Pages not published** - The Vue pages weren't published to `resources/js/Pages/LaravelRoles/`
+
+### Fix
+
+**Step 1: Verify pages are published**
 
 ```bash
-php artisan config:clear
-php artisan clear-compiled
-composer dump-autoload
+ls -la resources/js/Pages/LaravelRoles/
 ```
 
-## Guard Mismatch Issues
+You should see:
+- RolesIndex.vue
+- RoleCreate.vue
+- RoleEdit.vue
+- PermissionsIndex.vue
+- PermissionMatrix.vue
 
-### Issue: "There is no permission named X for guard Y"
-
-**Symptom**: Permission check fails even though permission exists.
-
-**Cause**: Permission was created with different guard than user's authentication guard.
-
-**Solution**:
-
-1. Check which guard the permission uses:
-
-```php
-$permission = Permission::where('name', 'users.list')->first();
-echo $permission->guard_name; // e.g., 'web'
-```
-
-2. Ensure user is authenticated with the same guard:
-
-```php
-$user = auth('web')->user(); // Must match permission's guard
-```
-
-3. Or create permission for the correct guard:
-
-```php
-Permission::create([
-    'name' => 'users.list',
-    'guard_name' => 'api', // Match your auth guard
-]);
-```
-
-### Issue: Role assignment fails silently
-
-**Cause**: Role guard doesn't match user's guard.
-
-**Solution**: Same as above. Ensure guards match.
-
-### Issue: Multiple guards, wrong one used
-
-**Solution**: Explicitly specify guard:
+If missing, republish:
 
 ```bash
-# When syncing
-php artisan roles:sync --guard=api
-
-# In config
-'guard' => 'api',
+php artisan vendor:publish --tag=roles-vue --force
 ```
 
-## Tenancy Misconfiguration
+**Step 2: Configure Vite alias**
 
-### Issue: Team-scoped mode not isolating data
+Add to `vite.config.ts`:
 
-**Cause**: Spatie teams not enabled, or team context not set.
-
-**Solution**:
-
-1. Enable teams in both configs:
-
-```php
-// config/roles.php
-'tenancy' => ['mode' => 'team_scoped'],
-
-// config/permission.php
-'teams' => true,
+```typescript
+resolve: {
+    alias: {
+        '@': path.resolve(__dirname, './resources/js'),
+        '@/laravel-roles': path.resolve(__dirname, './resources/js/laravel-roles'),
+    },
+},
 ```
 
-2. Set team context before ACL operations:
+**Step 3: Update Inertia page resolver**
 
-```php
-app(PermissionRegistrar::class)->setPermissionsTeamId($teamId);
+In `resources/js/app.ts`:
+
+```typescript
+createInertiaApp({
+    resolve: (name) => {
+        const pages = import.meta.glob([
+            './Pages/**/*.vue',
+            './Pages/LaravelRoles/**/*.vue',  // Add this
+        ])
+        return resolvePageComponent(`./Pages/${name}.vue`, pages)
+    },
+    // ...
+})
 ```
 
-### Issue: "Team ID is null" errors
-
-**Cause**: Team context not set before Spatie operations.
-
-**Solution**: Set team in middleware:
-
-```php
-// app/Http/Middleware/SetTeamContext.php
-public function handle($request, $next)
-{
-    $teamId = $request->user()->team_id;
-    app(PermissionRegistrar::class)->setPermissionsTeamId($teamId);
-    return $next($request);
-}
-```
-
-### Issue: Multi-database tenant not detected
-
-**Cause**: Provider not recognized or not in tenant context.
-
-**Solution**:
-
-1. Specify provider explicitly:
-
-```php
-'tenancy' => [
-    'mode' => 'multi_database',
-    'provider' => 'stancl/tenancy',
-],
-```
-
-2. Or set custom resolver:
-
-```php
-app(TenantContextContract::class)->setTenantIdResolver(function () {
-    return tenant()?->id;
-});
-```
-
-## Cache-Related Issues
-
-### Issue: Changes not reflected immediately
-
-**Cause**: Cached data not invalidated.
-
-**Solution**:
+**Step 4: Clear Vite cache and rebuild**
 
 ```bash
-php artisan cache:clear
-```
-
-Or force refresh via API:
-
-```
-GET /admin/acl/roles?refresh=true
-```
-
-### Issue: Different tenants seeing each other's data
-
-**Cause**: Cache keys not including tenant context (should not happen in v1.3.0+).
-
-**Solution**: Clear cache and verify tenancy mode:
-
-```bash
-php artisan cache:clear
-php artisan roles:doctor
-```
-
-### Issue: Cache errors with certain drivers
-
-**Cause**: Driver doesn't support required operations.
-
-**Solution**: Use a supported driver for production:
-
-```php
-// Recommended
-CACHE_DRIVER=redis
-
-// Or
-CACHE_DRIVER=memcached
-```
-
-## UI Not Showing Issues
-
-### Issue: UI routes return 404
-
-**Cause**: UI not enabled or wrong driver.
-
-**Solution**:
-
-```php
-// config/roles.php
-'ui' => [
-    'enabled' => true,
-    'driver' => 'vue',
-],
-```
-
-Then clear config:
-
-```bash
-php artisan config:clear
-php artisan route:clear
-```
-
-### Issue: UI pages show blank
-
-**Cause**: Inertia not configured, or Vue components not compiled.
-
-**Solution**:
-
-1. Ensure Inertia is installed:
-
-```bash
-composer require inertiajs/inertia-laravel
-npm install @inertiajs/vue3
-```
-
-2. Publish Vue components:
-
-```bash
-php artisan vendor:publish --tag=laravel-roles-vue
-```
-
-3. Compile assets:
-
-```bash
+npm run build
+# or for development
 npm run dev
 ```
 
-### Issue: shadcn-vue components not found
-
-**Cause**: Components not installed.
-
-**Solution**: Install required components:
+**Step 5: Verify routes**
 
 ```bash
-npx shadcn-vue@latest add button card table ...
+php artisan route:list --name=roles.ui
 ```
 
-See [Vue UI](ui-vue.md) for full list.
+All routes should be listed with proper controller actions.
 
-## API Issues
+---
 
-### Issue: 401 Unauthorized on all routes
+## UI Pages Not Rendering Inside App Layout
 
-**Cause**: Authentication middleware not satisfied.
+### Symptoms
 
-**Solution**: Ensure user is authenticated before accessing routes:
+- Package pages render but without your app's sidebar/header
+- Pages appear as standalone without navigation
+- Layout is different from other pages in your app
+
+### Root Cause
+
+Package pages are published as standalone Vue components. They don't automatically use your app's layout because:
+
+1. Inertia needs to be configured to apply a default layout
+2. Or each page needs to manually import and use your layout
+
+### Fix
+
+**Option A: Configure Inertia to auto-apply layout**
+
+In `resources/js/app.ts`:
+
+```typescript
+import AppLayout from '@/Layouts/AppLayout.vue'
+
+createInertiaApp({
+    resolve: async (name) => {
+        const page = await resolvePageComponent(`./Pages/${name}.vue`, pages)
+        
+        // Auto-apply AppLayout to Laravel Roles pages
+        if (name.startsWith('LaravelRoles/')) {
+            page.default.layout = page.default.layout || AppLayout
+        }
+        
+        return page
+    },
+    // ...
+})
+```
+
+**Option B: Edit each page manually**
+
+Open each published page and wrap content with your layout:
+
+```vue
+<template>
+  <AppLayout>
+    <!-- existing page content here -->
+  </AppLayout>
+</template>
+
+<script setup lang="ts">
+import AppLayout from '@/Layouts/AppLayout.vue'
+// ... rest of imports
+</script>
+```
+
+---
+
+## "Cannot find module '@/laravel-roles/...'"
+
+### Symptoms
+
+TypeScript/IDE errors showing:
+
+```
+Cannot find module '@/laravel-roles/api' or its corresponding type declarations.
+```
+
+### Root Cause
+
+The `@/laravel-roles` alias is not configured in:
+- `vite.config.ts` (for runtime)
+- `tsconfig.json` (for TypeScript/IDE support)
+
+### Fix
+
+**Step 1: Update vite.config.ts**
+
+```typescript
+resolve: {
+    alias: {
+        '@': path.resolve(__dirname, './resources/js'),
+        '@/laravel-roles': path.resolve(__dirname, './resources/js/laravel-roles'),
+    },
+},
+```
+
+**Step 2: Update tsconfig.json (optional, for IDE support)**
+
+```json
+{
+    "compilerOptions": {
+        "paths": {
+            "@/*": ["./resources/js/*"],
+            "@/laravel-roles/*": ["./resources/js/laravel-roles/*"]
+        }
+    }
+}
+```
+
+**Step 3: Restart IDE/TypeScript server**
+
+In VS Code: `Ctrl+Shift+P` → "TypeScript: Restart TS Server"
+
+---
+
+## API Requests Return 404
+
+### Symptoms
+
+UI pages load but data doesn't appear. Network tab shows 404 errors for API requests.
+
+### Root Cause
+
+1. API routes are not loaded
+2. API prefix configuration mismatch
+3. Missing `window.laravelRoles` configuration
+
+### Fix
+
+**Step 1: Verify API routes are registered**
+
+```bash
+php artisan route:list --name=roles
+```
+
+You should see API routes like:
+- `GET roles/api/roles`
+- `POST roles/api/roles`
+- etc.
+
+**Step 2: Check config prefix**
+
+```bash
+php artisan tinker
+>>> config('roles.routes.prefix')
+"admin/acl"
+```
+
+**Step 3: Add window config to layout**
+
+In your base Blade layout, before `</head>`:
+
+```html
+<script>
+  window.laravelRoles = {
+    apiPrefix: '{{ config("roles.routes.prefix") }}',
+    uiPrefix: '{{ config("roles.ui.prefix") }}',
+  };
+</script>
+```
+
+---
+
+## Permission Denied Errors
+
+### Symptoms
+
+Pages show "403 Forbidden" or "This action is unauthorized"
+
+### Root Cause
+
+The package uses Laravel's authorization (policies) to control access. You need to either:
+1. Define policies for Role and Permission models
+2. Give your user the required permissions
+
+### Fix
+
+**Option A: Create a super-admin check**
+
+In `AuthServiceProvider`:
 
 ```php
-// Login first
-$this->postJson('/login', $credentials);
+use Illuminate\Support\Facades\Gate;
 
-// Then access ACL routes
-$this->getJson('/admin/acl/roles');
+public function boot(): void
+{
+    // Super-admin bypass
+    Gate::before(function ($user, $ability) {
+        if ($user->hasRole('super-admin')) {
+            return true;
+        }
+    });
+}
 ```
 
-### Issue: 403 Forbidden
+**Option B: Define policies**
 
-**Cause**: User doesn't have required permissions.
+Create policies for Role and Permission models that check appropriate permissions.
 
-**Solution**: The package uses Laravel's authorization. Check if user has permission or if Gate is blocking.
+---
 
-### Issue: Validation errors on create
+## SQLite Compatibility Issues
 
-**Cause**: Required fields missing or invalid.
+### Symptoms
 
-**Solution**: Check required fields:
+Migrations or sync commands fail on SQLite with JSON column errors.
 
-- Role: `name`, `guard_name`
-- Permission: `name`, `guard_name`
+### Root Cause
 
-## Performance Issues
+Earlier versions used JSON column type which isn't fully supported by SQLite.
 
-### Issue: Slow matrix endpoint
+### Fix
 
-**Cause**: Large number of roles/permissions without caching.
+**Upgrade to v1.3.3+** which uses TEXT columns for SQLite compatibility.
 
-**Solution**:
+Then run:
 
-1. Enable caching:
-
-```php
-'cache' => ['enabled' => true],
+```bash
+php artisan migrate
 ```
 
-2. Use pagination if supported by your UI
+---
 
-### Issue: High database load
+## Need More Help?
 
-**Cause**: Cache disabled or expired frequently.
-
-**Solution**:
-
-1. Increase TTL:
-
-```php
-'cache' => ['ttl' => 3600], // 1 hour
-```
-
-2. Use a fast cache driver (Redis/Memcached)
-
-## Still Having Issues?
-
-1. Run `roles:doctor` and review output
-2. Check Laravel logs: `storage/logs/laravel.log`
-3. Enable query logging to see database queries
-4. Check GitHub issues for similar problems
-
-## Next Steps
-
-- [Configuration](configuration.md)
-- [Commands](commands.md)
-- [Testing](testing.md)
+1. Run diagnostics: `php artisan roles:doctor`
+2. Check the [GitHub Issues](https://github.com/enadstack/laravel-roles/issues)
+3. Ensure you're on the latest version: `composer update enadstack/laravel-roles`

@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2025-12-23
+
+### Fixed
+
+- **roles:sync schema-aware**: Command now checks if metadata columns exist before updating, preventing SQL errors on databases without `label`, `description`, or `group_label` columns
+- **SQLite compatibility**: New migration uses TEXT columns instead of JSON for full SQLite support
+- **JSON encoding**: Arrays are now properly encoded to JSON strings before database storage
+- **UI routes**: All create/edit/show routes now fully registered for both roles and permissions
+
+### Added
+
+- **Permission metadata migration**: New migration `2025_12_23_000000_add_permission_metadata_columns.php` safely adds nullable `label`, `description`, and `group_label` columns
+- **PermissionUIController**: Full UI controller for permission management pages
+- **Enhanced roles:doctor diagnostics**: Now reports detailed metadata column status with visual indicators
+- **Comprehensive troubleshooting guide**: New `docs/troubleshooting.md` with solutions for common issues
+
+### Changed
+
+- **UI pages support host AppLayout integration**: Documentation now explains how to wrap package pages with your app's layout
+- **Step-by-step UI setup guide**: Completely rewritten `docs/ui-vue.md` with 14-step installation guide
+- **Improved error handling**: roles:sync now gracefully skips metadata updates if columns don't exist
+
+### Migration Notes
+
+For users upgrading from v1.3.0-v1.3.2:
+
+1. Run migrations to add metadata columns:
+   ```bash
+   php artisan migrate
+   ```
+
+2. Verify with doctor:
+   ```bash
+   php artisan roles:doctor
+   ```
+
 ## [1.3.1] - 2025-12-23
 
 ### Fixed

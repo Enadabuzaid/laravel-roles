@@ -21,12 +21,27 @@ Your Laravel project must have:
 - Lucide Vue Next icons
 - VueUse (for composables)
 
-## Quick Start
+---
 
-### Step 1: Enable in Config
+## Step-by-Step Setup Guide
+
+### Step 1: Install the Package
+
+```bash
+composer require enadstack/laravel-roles
+```
+
+### Step 2: Publish Configuration
+
+```bash
+php artisan vendor:publish --tag=roles-config
+```
+
+### Step 3: Enable UI in Config
+
+Edit `config/roles.php`:
 
 ```php
-// config/roles.php
 'ui' => [
     'enabled' => true,
     'driver' => 'vue',
@@ -41,25 +56,43 @@ Or via environment:
 ROLES_UI_ENABLED=true
 ```
 
-### Step 2: Publish Vue Components
+### Step 4: Run Migrations
 
 ```bash
-# RECOMMENDED: Publish everything needed for the UI
+php artisan migrate
+```
+
+This creates the required database tables with metadata columns (label, description, group_label).
+
+### Step 5: Seed Roles & Permissions
+
+```bash
+php artisan roles:sync
+```
+
+Verify the sync worked:
+
+```bash
+php artisan roles:doctor
+```
+
+### Step 6: Publish Vue UI Components
+
+```bash
 php artisan vendor:publish --tag=roles-vue
 ```
 
 This publishes:
-- Pages (to `resources/js/Pages/LaravelRoles/`)
-- API client (to `resources/js/laravel-roles/api/`)
-- Composables (to `resources/js/laravel-roles/composables/`)
-- Types (to `resources/js/laravel-roles/types/`)
-- Locales (to `resources/js/laravel-roles/locales/`)
-- Custom components (to `resources/js/laravel-roles/components/`)
-- Setup README
+- Pages → `resources/js/Pages/LaravelRoles/`
+- API client → `resources/js/laravel-roles/api/`
+- Composables → `resources/js/laravel-roles/composables/`
+- Types → `resources/js/laravel-roles/types/`
+- Locales → `resources/js/laravel-roles/locales/`
+- Components → `resources/js/laravel-roles/components/`
 
-### Step 3: Configure Vite Alias (REQUIRED)
+### Step 7: Configure Vite Alias (REQUIRED)
 
-The published files use the `@/laravel-roles` import alias. You **must** add this alias to your `vite.config.ts`:
+Add the `@/laravel-roles` alias to your `vite.config.ts`:
 
 ```typescript
 // vite.config.ts
@@ -72,48 +105,110 @@ export default defineConfig({
     plugins: [
         laravel({
             input: ['resources/css/app.css', 'resources/js/app.ts'],
-            refresh: true,
+            refresh: [
+                'resources/js/**',
+                // Add this for package pages refresh
+                'resources/js/Pages/LaravelRoles/**',
+            ],
         }),
         vue(),
     ],
     resolve: {
         alias: {
             '@': path.resolve(__dirname, './resources/js'),
-            // ADD THIS LINE - Required for Laravel Roles UI
+            // REQUIRED: Add this alias for Laravel Roles UI
             '@/laravel-roles': path.resolve(__dirname, './resources/js/laravel-roles'),
         },
     },
 });
 ```
 
-### Step 4: Install Required shadcn-vue Components
+### Step 8: Update Inertia Page Resolver
 
-The UI requires these shadcn-vue components:
+Update your `resources/js/app.ts` to resolve package pages:
 
-```bash
-npx shadcn-vue@latest add button
-npx shadcn-vue@latest add input
-npx shadcn-vue@latest add label
-npx shadcn-vue@latest add textarea
-npx shadcn-vue@latest add card
-npx shadcn-vue@latest add badge
-npx shadcn-vue@latest add table
-npx shadcn-vue@latest add dropdown-menu
-npx shadcn-vue@latest add alert-dialog
-npx shadcn-vue@latest add switch
-npx shadcn-vue@latest add checkbox
-npx shadcn-vue@latest add tabs
-npx shadcn-vue@latest add accordion
-npx shadcn-vue@latest add skeleton
-npx shadcn-vue@latest add separator
-npx shadcn-vue@latest add select
-npx shadcn-vue@latest add breadcrumb
-npx shadcn-vue@latest add toast
+```typescript
+// resources/js/app.ts
+import { createApp, h } from 'vue'
+import { createInertiaApp } from '@inertiajs/vue3'
+import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers'
+
+createInertiaApp({
+    resolve: (name) => {
+        // Resolve pages from both app and vendor directories
+        const pages = import.meta.glob([
+            './Pages/**/*.vue',
+            // Include Laravel Roles pages
+            './Pages/LaravelRoles/**/*.vue',
+        ])
+        return resolvePageComponent(`./Pages/${name}.vue`, pages)
+    },
+    setup({ el, App, props, plugin }) {
+        createApp({ render: () => h(App, props) })
+            .use(plugin)
+            .mount(el)
+    },
+})
 ```
 
-### Step 5: Configure API Prefix
+### Step 9: Install Required shadcn-vue Components
 
-Add this to your base layout (before closing `</head>` tag):
+```bash
+npx shadcn-vue@latest add button input label textarea card badge table \
+    dropdown-menu alert-dialog switch checkbox tabs accordion skeleton \
+    separator select breadcrumb toast
+```
+
+### Step 10: Install Required NPM Dependencies
+
+```bash
+npm install @vueuse/core lucide-vue-next
+```
+
+### Step 11: Configure Default Layout (Optional but Recommended)
+
+To ensure package pages use your app's layout (sidebar, header, etc.):
+
+**Option A: Edit each page to wrap with your layout**
+
+```vue
+<!-- resources/js/Pages/LaravelRoles/RolesIndex.vue -->
+<template>
+  <AppLayout>
+    <!-- existing page content -->
+  </AppLayout>
+</template>
+
+<script setup>
+import AppLayout from '@/Layouts/AppLayout.vue'
+// ... rest of imports
+</script>
+```
+
+**Option B: Use Inertia's default layout**
+
+```typescript
+// resources/js/app.ts
+import AppLayout from '@/Layouts/AppLayout.vue'
+
+createInertiaApp({
+    resolve: async (name) => {
+        const page = await resolvePageComponent(`./Pages/${name}.vue`, pages)
+        
+        // Auto-apply layout to Laravel Roles pages
+        if (name.startsWith('LaravelRoles/')) {
+            page.default.layout = page.default.layout || AppLayout
+        }
+        
+        return page
+    },
+    // ...
+})
+```
+
+### Step 12: Add API Config to Layout
+
+Add to your base layout before `</head>`:
 
 ```html
 <script>
@@ -123,6 +218,31 @@ Add this to your base layout (before closing `</head>` tag):
   };
 </script>
 ```
+
+### Step 13: Verify Routes
+
+```bash
+php artisan route:list --name=roles.ui
+```
+
+You should see:
+```
+GET  admin/acl/roles              roles.ui.roles.index
+GET  admin/acl/roles/create       roles.ui.roles.create
+GET  admin/acl/roles/{id}         roles.ui.roles.show
+GET  admin/acl/roles/{id}/edit    roles.ui.roles.edit
+GET  admin/acl/permissions        roles.ui.permissions.index
+GET  admin/acl/matrix             roles.ui.matrix
+```
+
+### Step 14: Access UI Pages
+
+Visit your application:
+- Roles: `http://your-app.test/admin/acl/roles`
+- Permissions: `http://your-app.test/admin/acl/permissions`
+- Matrix: `http://your-app.test/admin/acl/matrix`
+
+---
 
 ## Published File Structure
 
@@ -170,23 +290,19 @@ resources/js/
 
 ## Import Path Convention
 
-All package files use the `@/laravel-roles` namespace to avoid conflicts with your project's components:
+All package files use the `@/laravel-roles` namespace:
 
 ```typescript
-// Package components use @/laravel-roles namespace
+// Package components
 import PageHeader from '@/laravel-roles/components/ui/PageHeader.vue';
 import { useRolesApi } from '@/laravel-roles/composables/useRolesApi';
 import type { Role } from '@/laravel-roles/types';
 
-// Your project's shadcn-vue components use standard @/components path
+// Your shadcn-vue components (unchanged)
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 ```
 
-This separation ensures:
-- No conflicts with your existing components
-- Clear distinction between package and project code
-- Easy updates when new package versions are released
+---
 
 ## Available Pages
 
@@ -231,6 +347,8 @@ Features:
 - Single-click permission toggle
 - Group-level toggle (all permissions)
 - Optimistic updates with rollback
+
+---
 
 ## UI Components
 
@@ -281,57 +399,7 @@ Debounced search input:
 />
 ```
 
-### DataTableSkeleton
-
-Loading skeleton for tables:
-
-```vue
-<DataTableSkeleton :columns="5" :rows="10" />
-```
-
-### EmptyState
-
-Empty state with optional action:
-
-```vue
-<EmptyState
-  title="No roles found"
-  description="Get started by creating your first role."
-  action-label="Create Role"
-  action-href="/admin/acl/roles/create"
-/>
-```
-
-## Customizing the UI
-
-### Override Pages
-
-Edit published files in `resources/js/Pages/LaravelRoles/`.
-
-### Custom Layout
-
-Wrap pages in your own layout:
-
-```vue
-<!-- resources/js/Pages/LaravelRoles/RolesIndex.vue -->
-<template>
-  <AppLayout>
-    <!-- page content -->
-  </AppLayout>
-</template>
-```
-
-Or set in config:
-
-```php
-'ui' => [
-    'layout' => 'AppLayout',
-],
-```
-
-### Custom Styling
-
-The components use shadcn-vue which is fully customizable via your Tailwind config and component overrides.
+---
 
 ## API Client
 
@@ -369,28 +437,27 @@ const {
 onMounted(() => fetchRoles());
 ```
 
-## Troubleshooting
+---
 
-### "Cannot find module '@/laravel-roles/...'"
+## Layout Integration
 
-This error means the Vite alias is not configured. Add the alias to `vite.config.ts`:
+### Why Pages May Not Show Your Layout
 
-```typescript
-resolve: {
-    alias: {
-        '@': path.resolve(__dirname, './resources/js'),
-        '@/laravel-roles': path.resolve(__dirname, './resources/js/laravel-roles'),
-    },
-},
-```
+Package pages are published as standalone Vue components. They don't automatically inherit your app's layout unless you configure it.
 
-### Components not rendering
+### Solution: Wrap Pages with Your Layout
 
-Ensure you have installed all required shadcn-vue components (see Step 4 above).
+1. **Edit each published page** to import and use your AppLayout
+2. **Or configure Inertia** to auto-apply layouts (see Step 11 above)
 
-### API requests failing
+### Content Slot Compatibility
 
-Make sure you've added the `window.laravelRoles` config to your layout (see Step 5 above).
+Package pages are designed to work inside a layout slot:
+- They don't assume full-screen layout
+- Content renders correctly inside sidebar/header layouts
+- No hardcoded widths or positions
+
+---
 
 ## Disabling UI (API-Only Mode)
 
@@ -405,8 +472,11 @@ For headless/API-only usage:
 
 API routes remain active. Only UI routes are disabled.
 
+---
+
 ## Next Steps
 
 - [API Reference](api.md)
 - [Permission Matrix](permission-matrix.md)
 - [Configuration](configuration.md)
+- [Troubleshooting](troubleshooting.md)
