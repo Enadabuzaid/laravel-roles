@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import LrButton from '../ui/LrButton.vue'
+import LrButton from '@/laravel-roles/ui/LrButton.vue'
 
 interface Props {
   icon?: 'inbox' | 'search' | 'shield' | 'key'

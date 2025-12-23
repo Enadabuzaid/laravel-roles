@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import LaravelRolesLayout from '../layouts/LaravelRolesLayout.vue'
-import LrPageHeader from '../components/LrPageHeader.vue'
+import LaravelRolesLayout from '@/laravel-roles/layouts/LaravelRolesLayout.vue'
+import LrPageHeader from '@/laravel-roles/components/LrPageHeader.vue'
 import {
   LrButton,
   LrInput,
@@ -11,7 +11,7 @@ import {
   LrCardContent,
   LrCheckbox,
   LrSelect,
-} from '../ui'
+} from '@/laravel-roles/ui'
 
 // State
 const name = ref('')

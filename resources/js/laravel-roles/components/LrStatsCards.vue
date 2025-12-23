@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import LrCard from '../ui/LrCard.vue'
-import LrCardHeader from '../ui/LrCardHeader.vue'
-import LrCardTitle from '../ui/LrCardTitle.vue'
-import LrCardContent from '../ui/LrCardContent.vue'
-import LrSkeleton from '../ui/LrSkeleton.vue'
+import LrCard from '@/laravel-roles/ui/LrCard.vue'
+import LrCardHeader from '@/laravel-roles/ui/LrCardHeader.vue'
+import LrCardTitle from '@/laravel-roles/ui/LrCardTitle.vue'
+import LrCardContent from '@/laravel-roles/ui/LrCardContent.vue'
+import LrSkeleton from '@/laravel-roles/ui/LrSkeleton.vue'
 
 interface StatCard {
   title: string

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import LaravelRolesLayout from '../layouts/LaravelRolesLayout.vue'
-import LrPageHeader from '../components/LrPageHeader.vue'
-import LrStatsCards from '../components/LrStatsCards.vue'
-import LrEmptyState from '../components/LrEmptyState.vue'
+import LaravelRolesLayout from '@/laravel-roles/layouts/LaravelRolesLayout.vue'
+import LrPageHeader from '@/laravel-roles/components/LrPageHeader.vue'
+import LrStatsCards from '@/laravel-roles/components/LrStatsCards.vue'
+import LrEmptyState from '@/laravel-roles/components/LrEmptyState.vue'
 import {
   LrButton,
   LrInput,
@@ -18,7 +18,7 @@ import {
   LrSkeleton,
   LrDialog,
   LrSelect,
-} from '../ui'
+} from '@/laravel-roles/ui'
 
 // Types
 interface Role {

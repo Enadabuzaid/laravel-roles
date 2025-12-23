@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import LaravelRolesLayout from '../layouts/LaravelRolesLayout.vue'
-import LrPageHeader from '../components/LrPageHeader.vue'
+import LaravelRolesLayout from '@/laravel-roles/layouts/LaravelRolesLayout.vue'
+import LrPageHeader from '@/laravel-roles/components/LrPageHeader.vue'
 import {
   LrButton,
   LrInput,
@@ -14,7 +14,7 @@ import {
   LrBadge,
   LrDialog,
   LrSkeleton,
-} from '../ui'
+} from '@/laravel-roles/ui'
 
 // Props from Inertia
 const props = defineProps<{

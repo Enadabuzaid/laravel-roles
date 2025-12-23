@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import LrToast from '../ui/LrToast.vue'
+import LrToast from '@/laravel-roles/ui/LrToast.vue'
 
 interface Props {
   title?: string
