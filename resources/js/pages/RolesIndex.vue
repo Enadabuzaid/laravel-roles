@@ -39,15 +39,17 @@ import {
   AlertTriangleIcon,
 } from 'lucide-vue-next'
 
-import PageHeader from '@/components/ui/PageHeader.vue'
-import SearchInput from '@/components/ui/SearchInput.vue'
-import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
-import EmptyState from '@/components/ui/EmptyState.vue'
-import DataTableSkeleton from '@/components/ui/DataTableSkeleton.vue'
+// Laravel Roles custom components
+import PageHeader from '@/laravel-roles/components/PageHeader.vue'
+import SearchInput from '@/laravel-roles/components/SearchInput.vue'
+import ConfirmDialog from '@/laravel-roles/components/ConfirmDialog.vue'
+import EmptyState from '@/laravel-roles/components/EmptyState.vue'
+import DataTableSkeleton from '@/laravel-roles/components/DataTableSkeleton.vue'
 
-import { useRolesApi } from '@/composables/useRolesApi'
-import { uiUrl } from '@/api/config'
-import type { Role } from '@/types'
+// Laravel Roles API layer
+import { useRolesApi } from '@/laravel-roles/composables/useRolesApi'
+import { uiUrl } from '@/laravel-roles/api/config'
+import type { Role } from '@/laravel-roles/types'
 
 // Props from Inertia
 const props = defineProps<{

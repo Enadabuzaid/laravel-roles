@@ -30,11 +30,14 @@ import {
   KeyIcon,
 } from 'lucide-vue-next'
 
-import PageHeader from '@/components/ui/PageHeader.vue'
-import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
-import { useRolesApi } from '@/composables/useRolesApi'
-import { uiUrl } from '@/api/config'
-import type { Role } from '@/types'
+// Laravel Roles custom components
+import PageHeader from '@/laravel-roles/components/PageHeader.vue'
+import ConfirmDialog from '@/laravel-roles/components/ConfirmDialog.vue'
+
+// Laravel Roles API layer
+import { useRolesApi } from '@/laravel-roles/composables/useRolesApi'
+import { uiUrl } from '@/laravel-roles/api/config'
+import type { Role } from '@/laravel-roles/types'
 
 // Props from Inertia
 const props = defineProps<{

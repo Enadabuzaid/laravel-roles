@@ -40,16 +40,16 @@ Or via environment:
 ROLES_UI_ENABLED=true
 ```
 
-### Step 2: Publish Vue Components
+### Step 2: Publish Vue Components (REQUIRED)
 
 ```bash
-# Publish pages only
-php artisan vendor:publish --tag=laravel-roles-vue
-
-# Publish full UI (pages, components, composables, types)
+# Recommended: Publish everything (pages + components + API + composables + types)
 php artisan vendor:publish --tag=laravel-roles-vue-full
 
-# Publish just reusable components
+# Or publish pages only (requires manual component setup)
+php artisan vendor:publish --tag=laravel-roles-vue
+
+# Or publish just reusable components
 php artisan vendor:publish --tag=laravel-roles-components
 ```
 

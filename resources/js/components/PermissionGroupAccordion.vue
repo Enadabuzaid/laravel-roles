@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Loader2, ChevronDown, CheckCircle2, XCircle } from 'lucide-vue-next'
 import PermissionToggleRow from './PermissionToggleRow.vue'
-import type { MatrixPermission } from '@/types'
+import type { MatrixPermission } from '@/laravel-roles/types'
 
 export interface GroupPermission extends MatrixPermission {
   hasPermission: boolean

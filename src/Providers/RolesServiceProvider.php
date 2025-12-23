@@ -254,22 +254,29 @@ class RolesServiceProvider extends ServiceProvider
             ], 'roles-translations');
         }
 
-        // Publish Vue UI components
+        // Publish Vue UI pages only
+        // Use this for minimal installation - requires laravel-roles-vue-full for dependencies
         $this->publishes([
             __DIR__ . '/../../resources/js/pages' => resource_path('js/Pages/LaravelRoles'),
         ], 'laravel-roles-vue');
 
-        // Publish Vue composables and API layer
+        // Publish Vue full package (pages + components + API + composables + types)
+        // This is the recommended way for new installations
         $this->publishes([
+            __DIR__ . '/../../resources/js/pages' => resource_path('js/Pages/LaravelRoles'),
             __DIR__ . '/../../resources/js/api' => resource_path('js/laravel-roles/api'),
             __DIR__ . '/../../resources/js/composables' => resource_path('js/laravel-roles/composables'),
             __DIR__ . '/../../resources/js/types' => resource_path('js/laravel-roles/types'),
-            __DIR__ . '/../../resources/js/locales' => resource_path('js/laravel-roles/locales'),
+            __DIR__ . '/../../resources/js/components/ui' => resource_path('js/laravel-roles/components'),
+            __DIR__ . '/../../resources/js/components/PermissionGroupAccordion.vue' => resource_path('js/laravel-roles/components/PermissionGroupAccordion.vue'),
+            __DIR__ . '/../../resources/js/components/PermissionToggleRow.vue' => resource_path('js/laravel-roles/components/PermissionToggleRow.vue'),
         ], 'laravel-roles-vue-full');
 
-        // Publish Vue UI components (reusable)
+        // Publish Vue custom components only (reusable)
         $this->publishes([
-            __DIR__ . '/../../resources/js/components' => resource_path('js/laravel-roles/components'),
+            __DIR__ . '/../../resources/js/components/ui' => resource_path('js/laravel-roles/components'),
+            __DIR__ . '/../../resources/js/components/PermissionGroupAccordion.vue' => resource_path('js/laravel-roles/components/PermissionGroupAccordion.vue'),
+            __DIR__ . '/../../resources/js/components/PermissionToggleRow.vue' => resource_path('js/laravel-roles/components/PermissionToggleRow.vue'),
         ], 'laravel-roles-components');
     }
 

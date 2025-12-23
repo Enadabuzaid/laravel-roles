@@ -9,7 +9,7 @@ import { ref, computed } from 'vue'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-vue-next'
-import type { MatrixPermission } from '@/types'
+import type { MatrixPermission } from '@/laravel-roles/types'
 
 const props = defineProps<{
   permission: MatrixPermission

@@ -20,9 +20,12 @@ import {
 } from '@/components/ui/select'
 import { ArrowLeftIcon, SaveIcon, Loader2 } from 'lucide-vue-next'
 
-import PageHeader from '@/components/ui/PageHeader.vue'
-import { useRolesApi } from '@/composables/useRolesApi'
-import { uiUrl } from '@/api/config'
+// Laravel Roles custom components
+import PageHeader from '@/laravel-roles/components/PageHeader.vue'
+
+// Laravel Roles API layer
+import { useRolesApi } from '@/laravel-roles/composables/useRolesApi'
+import { uiUrl } from '@/laravel-roles/api/config'
 
 // Props
 const props = defineProps<{
