@@ -254,47 +254,32 @@ class RolesServiceProvider extends ServiceProvider
             ], 'roles-translations');
         }
 
-        // Publish Vue full package (pages + components + API + composables + types + locales)
-        // RECOMMENDED: Use this for a complete, working UI installation
-        // Usage: php artisan vendor:publish --tag=roles-vue
+        // Publish Vue UI - SELF-CONTAINED (Recommended for v1.3.4+)
+        // This publishes the complete self-contained UI with internal primitives
+        // NO host app dependencies required (no shadcn-vue, no @ alias changes)
+        // Usage: php artisan vendor:publish --tag=roles-vue-standalone
         $this->publishes([
-            // Pages go to Pages/LaravelRoles
-            __DIR__ . '/../../resources/js/pages' => resource_path('js/Pages/LaravelRoles'),
+            // Self-contained pages (use internal UI primitives)
+            __DIR__ . '/../../resources/js/laravel-roles/pages' => resource_path('js/Pages/LaravelRoles'),
             
-            // API client
-            __DIR__ . '/../../resources/js/api' => resource_path('js/laravel-roles/api'),
+            // Internal UI primitives (Button, Card, Table, etc.)
+            __DIR__ . '/../../resources/js/laravel-roles/ui' => resource_path('js/laravel-roles/ui'),
             
-            // Composables
-            __DIR__ . '/../../resources/js/composables' => resource_path('js/laravel-roles/composables'),
+            // Layout
+            __DIR__ . '/../../resources/js/laravel-roles/layouts' => resource_path('js/laravel-roles/layouts'),
+            
+            // Components (PageHeader, EmptyState, StatsCards)
+            __DIR__ . '/../../resources/js/laravel-roles/components' => resource_path('js/laravel-roles/components'),
             
             // Types
             __DIR__ . '/../../resources/js/types' => resource_path('js/laravel-roles/types'),
             
-            // Locales
-            __DIR__ . '/../../resources/js/locales' => resource_path('js/laravel-roles/locales'),
-            
-            // UI components (PageHeader, ConfirmDialog, etc.) - maintains ui/ subfolder
-            __DIR__ . '/../../resources/js/components/ui' => resource_path('js/laravel-roles/components/ui'),
-            
-            // Regular components (PermissionGroupAccordion, etc.)
-            __DIR__ . '/../../resources/js/components/PermissionGroupAccordion.vue' => resource_path('js/laravel-roles/components/PermissionGroupAccordion.vue'),
-            __DIR__ . '/../../resources/js/components/PermissionToggleRow.vue' => resource_path('js/laravel-roles/components/PermissionToggleRow.vue'),
-            __DIR__ . '/../../resources/js/components/ViewToggle.vue' => resource_path('js/laravel-roles/components/ViewToggle.vue'),
-            __DIR__ . '/../../resources/js/components/FiltersBar.vue' => resource_path('js/laravel-roles/components/FiltersBar.vue'),
-            __DIR__ . '/../../resources/js/components/PermissionStatsCards.vue' => resource_path('js/laravel-roles/components/PermissionStatsCards.vue'),
-            __DIR__ . '/../../resources/js/components/PermissionTable.vue' => resource_path('js/laravel-roles/components/PermissionTable.vue'),
-            __DIR__ . '/../../resources/js/components/RoleStatsCards.vue' => resource_path('js/laravel-roles/components/RoleStatsCards.vue'),
-            __DIR__ . '/../../resources/js/components/RoleTable.vue' => resource_path('js/laravel-roles/components/RoleTable.vue'),
-            __DIR__ . '/../../resources/js/components/RoleGrid.vue' => resource_path('js/laravel-roles/components/RoleGrid.vue'),
-            __DIR__ . '/../../resources/js/components/RoleForm.vue' => resource_path('js/laravel-roles/components/RoleForm.vue'),
-            __DIR__ . '/../../resources/js/components/PermissionsMatrixTable.vue' => resource_path('js/laravel-roles/components/PermissionsMatrixTable.vue'),
-            __DIR__ . '/../../resources/js/components/LocaleBadge.vue' => resource_path('js/laravel-roles/components/LocaleBadge.vue'),
-            
-            // README for setup instructions
-            __DIR__ . '/../../resources/js/UI_README.md' => resource_path('js/laravel-roles/README.md'),
-        ], 'roles-vue');
+            // API client
+            __DIR__ . '/../../resources/js/api' => resource_path('js/laravel-roles/api'),
+        ], 'roles-vue-standalone');
 
-        // Also register the full alias for backward compatibility
+        // Legacy Vue publishing (requires host app shadcn-vue + @ alias)
+        // Usage: php artisan vendor:publish --tag=roles-vue
         $this->publishes([
             __DIR__ . '/../../resources/js/pages' => resource_path('js/Pages/LaravelRoles'),
             __DIR__ . '/../../resources/js/api' => resource_path('js/laravel-roles/api'),
@@ -315,13 +300,11 @@ class RolesServiceProvider extends ServiceProvider
             __DIR__ . '/../../resources/js/components/PermissionsMatrixTable.vue' => resource_path('js/laravel-roles/components/PermissionsMatrixTable.vue'),
             __DIR__ . '/../../resources/js/components/LocaleBadge.vue' => resource_path('js/laravel-roles/components/LocaleBadge.vue'),
             __DIR__ . '/../../resources/js/UI_README.md' => resource_path('js/laravel-roles/README.md'),
-        ], 'laravel-roles-vue-full');
+        ], 'roles-vue');
 
         // Publish Vue custom components only (reusable)
         $this->publishes([
-            __DIR__ . '/../../resources/js/components/ui' => resource_path('js/laravel-roles/components/ui'),
-            __DIR__ . '/../../resources/js/components/PermissionGroupAccordion.vue' => resource_path('js/laravel-roles/components/PermissionGroupAccordion.vue'),
-            __DIR__ . '/../../resources/js/components/PermissionToggleRow.vue' => resource_path('js/laravel-roles/components/PermissionToggleRow.vue'),
+            __DIR__ . '/../../resources/js/laravel-roles/components' => resource_path('js/laravel-roles/components'),
         ], 'laravel-roles-components');
     }
 

@@ -5,6 +5,71 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.4] - 2025-12-23
+
+### ⚡ Self-Contained UI (Major Enhancement)
+
+The package now ships a **fully self-contained Vue UI** that requires NO host app dependencies:
+
+- No shadcn-vue installation required
+- No Vite alias configuration needed
+- No Inertia page resolver changes needed
+- Works in any fresh Laravel + Inertia + Vue project
+
+### Added
+
+- **Self-contained UI primitives** (`resources/js/laravel-roles/ui/`):
+  - LrButton, LrInput, LrCard, LrTable, LrBadge, LrSwitch, LrCheckbox
+  - LrSelect, LrDialog, LrToast, LrSkeleton
+  - All use pure Tailwind CSS with CSS variables for theming
+
+- **LaravelRolesLayout** - Package-provided layout with header, navigation, and toast container
+
+- **New self-contained pages**:
+  - RolesIndex - with stats cards, search, filters, pagination
+  - RoleCreate - form with permission selection
+  - RoleEdit - tabbed interface for details and permissions
+  - PermissionsIndex - grouped view with stats
+  - PermissionMatrix - role tabs, group toggles, optimistic updates
+
+- **New publish tag**: `--tag=roles-vue-standalone` for the self-contained UI
+
+### Fixed
+
+- **401 Unauthorized on UI routes** - Middleware properly defaults to `['web', 'auth']`
+- **302 redirects on create/edit** - All UI routes correctly registered
+- **Vue SFC parse errors** - All components are valid Vue SFCs
+- **Missing component imports** - Self-contained UI has no external dependencies
+
+### Changed
+
+- **Two UI installation options**:
+  1. `roles-vue-standalone` (Recommended) - Self-contained, works out of the box
+  2. `roles-vue` (Legacy) - For users with existing shadcn-vue setup
+
+- **Documentation rewritten** - Clear step-by-step guide for both installation options
+
+### UI Features
+
+- ✅ Consistent PageHeader component
+- ✅ Stats cards (roles + permissions)
+- ✅ Search and filter UX
+- ✅ Confirm dialogs for destructive actions
+- ✅ Toast notifications
+- ✅ Loading states and empty states
+- ✅ Optimistic updates on matrix toggles
+- ✅ Responsive design
+
+### Acceptance Criteria Met
+
+- ✅ Fresh Laravel + Inertia + Vue works without Vite errors
+- ✅ No redirects except expected login redirects
+- ✅ No 401 on UI pages when logged in
+- ✅ All UI pages work end-to-end
+- ✅ i18n on/off works without breaking UI
+
+
+
 ## [1.3.3] - 2025-12-23
 
 ### Fixed
