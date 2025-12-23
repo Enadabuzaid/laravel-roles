@@ -23,7 +23,7 @@ import {
   EyeIcon,
   RotateCcwIcon
 } from 'lucide-vue-next'
-import type { Permission } from '@/types'
+import type { Permission } from '@/laravel-roles/types'
 
 defineProps<{
   permissions: Permission[]

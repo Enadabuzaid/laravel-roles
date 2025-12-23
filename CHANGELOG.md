@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SQLite compatibility**: New migration uses TEXT columns instead of JSON for full SQLite support
 - **JSON encoding**: Arrays are now properly encoded to JSON strings before database storage
 - **UI routes**: All create/edit/show routes now fully registered for both roles and permissions
+- **Default middleware**: Changed default from `['api', 'auth']` to `['web', 'auth']` for session-based apps (Inertia/Blade)
+- **PermissionStatsCards.vue**: Fixed corrupted Vue SFC (was reversed/malformed)
+- **ViewToggle.vue**: Removed dependency on `toggle-group` (not standard shadcn-vue), now uses Button components
+- **Component imports**: All package components now use correct `@/laravel-roles/types` namespace
 
 ### Added
 
@@ -20,12 +24,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **PermissionUIController**: Full UI controller for permission management pages
 - **Enhanced roles:doctor diagnostics**: Now reports detailed metadata column status with visual indicators
 - **Comprehensive troubleshooting guide**: New `docs/troubleshooting.md` with solutions for common issues
+- **UIRoutesTest**: Tests for UI route registration, middleware, and authentication behavior
 
 ### Changed
 
 - **UI pages support host AppLayout integration**: Documentation now explains how to wrap package pages with your app's layout
 - **Step-by-step UI setup guide**: Completely rewritten `docs/ui-vue.md` with 14-step installation guide
 - **Improved error handling**: roles:sync now gracefully skips metadata updates if columns don't exist
+- **Config documentation**: Added comments explaining middleware options for session vs API mode
 
 ### Migration Notes
 
@@ -39,6 +45,14 @@ For users upgrading from v1.3.0-v1.3.2:
 2. Verify with doctor:
    ```bash
    php artisan roles:doctor
+   ```
+
+3. If using API middleware, update your config:
+   ```php
+   // config/roles.php
+   'routes' => [
+       'middleware' => ['api', 'auth:sanctum'], // For API-only mode
+   ],
    ```
 
 ## [1.3.1] - 2025-12-23

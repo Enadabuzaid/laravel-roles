@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import type { Role, PermissionGroup } from '@/types'
+import type { Role, PermissionGroup } from '@/laravel-roles/types'
 
 interface Props {
   role?: Role

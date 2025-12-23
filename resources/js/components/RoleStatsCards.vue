@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { UsersIcon, ShieldCheckIcon, ShieldXIcon, ActivityIcon } from 'lucide-vue-next'
-import type { RoleStats } from '@/types'
+import type { RoleStats } from '@/laravel-roles/types'
 
 const props = defineProps<{
   stats: RoleStats | null
@@ -39,6 +39,17 @@ const statsCards = computed(() => [
     bgColor: 'bg-purple-100 dark:bg-purple-900/20'
   }
 ])
+
+// Fallback label function
+const getLabel = (key: string) => {
+  const labels: Record<string, string> = {
+    'roles.stats.total_roles': 'Total Roles',
+    'roles.stats.with_permissions': 'With Permissions',
+    'roles.stats.without_permissions': 'Without Permissions',
+    'roles.stats.active': 'Active Roles'
+  }
+  return labels[key] || key
+}
 </script>
 
 <template>
@@ -46,7 +57,7 @@ const statsCards = computed(() => [
     <Card v-for="stat in statsCards" :key="stat.title">
       <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle class="text-sm font-medium">
-          {{ $t(stat.title) }}
+          {{ getLabel(stat.title) }}
         </CardTitle>
         <component
           :is="stat.icon"
@@ -60,4 +71,3 @@ const statsCards = computed(() => [
     </Card>
   </div>
 </template>
-

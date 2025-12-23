@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SearchIcon, XIcon } from 'lucide-vue-next'
-import type { RoleFilters, PermissionFilters } from '@/types'
+import type { RoleFilters, PermissionFilters } from '@/laravel-roles/types'
 
 interface Props {
   type?: 'roles' | 'permissions'

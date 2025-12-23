@@ -4,7 +4,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { SearchIcon } from 'lucide-vue-next'
-import type { PermissionMatrix } from '@/types'
+import type { PermissionMatrix } from '@/laravel-roles/types'
 
 const props = defineProps<{
   matrix: PermissionMatrix

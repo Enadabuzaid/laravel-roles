@@ -5,143 +5,135 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use Tests\TestCase;
-use Tests\Traits\SeedsRolesAndPermissions;
-use Enadstack\LaravelRoles\Models\Role;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Route;
 
 /**
- * UIRoutes Feature Tests
+ * UIRoutesTest
  *
- * Tests UI route availability based on configuration.
+ * Tests UI route registration, middleware, and accessibility.
  */
 class UIRoutesTest extends TestCase
 {
-    use SeedsRolesAndPermissions;
-
     /**
-     * @test
-     * @group feature
-     * @group ui
+     * Test that UI routes are registered when UI is enabled.
      */
-    public function ui_routes_return_404_when_disabled(): void
+    public function test_ui_routes_registered_when_enabled(): void
     {
-        config(['roles.ui.enabled' => false]);
+        Config::set('roles.ui.enabled', true);
+        Config::set('roles.ui.driver', 'vue');
 
-        // Verify config is set
-        $this->assertFalse(config('roles.ui.enabled'));
+        // Re-register routes
+        $this->app->make('router')->getRoutes()->refreshNameLookups();
+
+        // Check that UI routes exist
+        $routes = collect(Route::getRoutes()->getRoutes())
+            ->filter(fn ($route) => str_starts_with($route->getName() ?? '', 'roles.ui.'))
+            ->pluck('uri')
+            ->toArray();
+
+        $this->assertNotEmpty($routes, 'UI routes should be registered when enabled');
     }
 
     /**
-     * @test
-     * @group feature
-     * @group ui
+     * Test that UI routes use web middleware.
      */
-    public function ui_enabled_config_is_respected(): void
+    public function test_ui_routes_use_web_middleware(): void
     {
-        config(['roles.ui.enabled' => true]);
-        config(['roles.ui.driver' => 'vue']);
+        Config::set('roles.ui.enabled', true);
+        Config::set('roles.ui.driver', 'vue');
+        Config::set('roles.ui.middleware', ['web', 'auth']);
 
-        $this->assertTrue(config('roles.ui.enabled'));
-        $this->assertEquals('vue', config('roles.ui.driver'));
+        $this->app->make('router')->getRoutes()->refreshNameLookups();
+
+        $routes = collect(Route::getRoutes()->getRoutes())
+            ->filter(fn ($route) => str_starts_with($route->getName() ?? '', 'roles.ui.'));
+
+        foreach ($routes as $route) {
+            $middleware = $route->gatherMiddleware();
+            $this->assertContains('web', $middleware, "UI route {$route->uri()} should use 'web' middleware");
+        }
     }
 
     /**
-     * @test
-     * @group feature
-     * @group ui
+     * Test that API routes are separate from UI routes.
      */
-    public function ui_only_enabled_for_vue_driver(): void
+    public function test_api_routes_use_configured_middleware(): void
     {
-        config(['roles.ui.enabled' => true]);
-        config(['roles.ui.driver' => 'blade']);
+        Config::set('roles.routes.middleware', ['web', 'auth']);
 
-        // UI should only be active for 'vue' driver
-        $this->assertNotEquals('vue', config('roles.ui.driver'));
+        $this->app->make('router')->getRoutes()->refreshNameLookups();
+
+        $routes = collect(Route::getRoutes()->getRoutes())
+            ->filter(fn ($route) => str_starts_with($route->getName() ?? '', 'roles.') && !str_starts_with($route->getName() ?? '', 'roles.ui.'));
+
+        $this->assertNotEmpty($routes, 'API routes should be registered');
+
+        foreach ($routes as $route) {
+            $middleware = $route->gatherMiddleware();
+            // Should contain the configured middleware
+            $this->assertTrue(
+                in_array('web', $middleware) || in_array('api', $middleware),
+                "API route {$route->uri()} should have web or api middleware"
+            );
+        }
     }
 
     /**
-     * @test
-     * @group feature
-     * @group ui
+     * Test UI routes return redirect for unauthenticated users (web behavior).
      */
-    public function ui_respects_custom_prefix(): void
+    public function test_ui_routes_redirect_unauthenticated_users(): void
     {
-        config(['roles.ui.enabled' => true]);
-        config(['roles.ui.prefix' => 'custom/acl']);
+        Config::set('roles.ui.enabled', true);
+        Config::set('roles.ui.driver', 'vue');
 
-        $this->assertEquals('custom/acl', config('roles.ui.prefix'));
+        $prefix = config('roles.ui.prefix', 'admin/acl');
+
+        $response = $this->get("/{$prefix}/roles");
+
+        // Web middleware should redirect to login
+        $response->assertStatus(302);
     }
 
     /**
-     * @test
-     * @group feature
-     * @group ui
+     * Test that API routes return 401 JSON for unauthenticated requests.
      */
-    public function ui_respects_middleware_config(): void
+    public function test_api_routes_return_json_for_unauthenticated(): void
     {
-        config(['roles.ui.enabled' => true]);
-        config(['roles.ui.middleware' => ['web', 'auth', 'custom']]);
+        // When using API middleware with auth:sanctum, should return 401 JSON
+        Config::set('roles.routes.middleware', ['api', 'auth:sanctum']);
 
-        $middleware = config('roles.ui.middleware');
-        $this->assertContains('web', $middleware);
-        $this->assertContains('auth', $middleware);
-        $this->assertContains('custom', $middleware);
+        $prefix = config('roles.routes.prefix', 'admin/acl');
+
+        $response = $this->getJson("/{$prefix}/roles");
+
+        // For sanctum, unauthenticated should get 401
+        $response->assertStatus(401);
+        $response->assertJson(['message' => 'Unauthenticated.']);
     }
 
     /**
-     * @test
-     * @group feature
-     * @group ui
+     * Test UI routes have correct names.
      */
-    public function api_routes_work_independently_of_ui_config(): void
+    public function test_ui_routes_have_correct_names(): void
     {
-        config(['roles.ui.enabled' => false]);
-        $this->seedDefaultRoles();
+        Config::set('roles.ui.enabled', true);
+        Config::set('roles.ui.driver', 'vue');
 
-        // API routes should still work
-        $response = $this->getJson('/admin/acl/roles');
-        $response->assertOk();
-    }
+        $expectedNames = [
+            'roles.ui.roles.index',
+            'roles.ui.roles.create',
+            'roles.ui.roles.show',
+            'roles.ui.roles.edit',
+            'roles.ui.permissions.index',
+            'roles.ui.matrix',
+        ];
 
-    /**
-     * @test
-     * @group feature
-     * @group ui
-     */
-    public function matrix_api_route_works_when_ui_disabled(): void
-    {
-        config(['roles.ui.enabled' => false]);
-        $this->seedRolesWithPermissions();
-
-        $response = $this->getJson('/admin/acl/matrix');
-        $response->assertOk();
-    }
-
-    /**
-     * @test
-     * @group feature
-     * @group ui
-     */
-    public function ui_routes_require_authentication(): void
-    {
-        config(['roles.ui.enabled' => true]);
-        config(['roles.ui.middleware' => ['web', 'auth']]);
-
-        // Verify middleware is configured
-        $middleware = config('roles.ui.middleware');
-        $this->assertContains('auth', $middleware);
-    }
-
-    /**
-     * @test
-     * @group feature
-     * @group ui
-     */
-    public function ui_layout_config_is_available(): void
-    {
-        config(['roles.ui.enabled' => true]);
-        config(['roles.ui.layout' => 'AppLayout']);
-
-        $this->assertEquals('AppLayout', config('roles.ui.layout'));
+        foreach ($expectedNames as $name) {
+            $this->assertTrue(
+                Route::has($name),
+                "Route '{$name}' should exist"
+            );
+        }
     }
 }

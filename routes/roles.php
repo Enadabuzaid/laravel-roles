@@ -8,17 +8,20 @@ use Enadstack\LaravelRoles\Http\Controllers\SelfAclController;
 
 /*
 |--------------------------------------------------------------------------
-| Laravel Roles Package Routes
+| Laravel Roles Package API Routes
 |--------------------------------------------------------------------------
 |
-| Here are the API routes for the Laravel Roles package.
-| These routes are loaded by the RolesServiceProvider.
+| These routes provide the JSON API for the Laravel Roles package.
+| They support both session-based (web) and token-based (api) authentication.
+|
+| Middleware Configuration:
+| - Default: ['web', 'auth'] for session-based apps (Inertia/Blade)
+| - For API-only: set config('roles.routes.middleware') to ['api', 'auth:sanctum']
 |
 */
 
-$guard = config('roles.guard', config('auth.defaults.guard', 'web'));
 $prefix = config('roles.routes.prefix', 'admin/acl');
-$middleware = config('roles.routes.middleware', ['api', 'auth']);
+$middleware = config('roles.routes.middleware', ['web', 'auth']);
 
 Route::middleware($middleware)
     ->prefix($prefix)

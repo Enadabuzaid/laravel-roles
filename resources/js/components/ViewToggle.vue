@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Button } from '@/components/ui/button'
 import { TableIcon, LayoutGridIcon } from 'lucide-vue-next'
-import type { ViewMode } from '@/types'
+import type { ViewMode } from '@/laravel-roles/types'
 
 defineProps<{
   modelValue: ViewMode
@@ -13,20 +13,32 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <ToggleGroup
-    type="single"
-    :model-value="modelValue"
-    @update:model-value="emit('update:modelValue', $event as ViewMode)"
-    class="border rounded-md"
-  >
-    <ToggleGroupItem value="table" aria-label="Table view" class="gap-2">
+  <div class="flex items-center border rounded-md">
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      :class="[
+        'gap-2 rounded-r-none',
+        modelValue === 'table' ? 'bg-muted' : ''
+      ]"
+      @click="emit('update:modelValue', 'table')"
+    >
       <TableIcon class="h-4 w-4" />
-      <span class="sr-only md:not-sr-only">{{ $t('common.table') }}</span>
-    </ToggleGroupItem>
-    <ToggleGroupItem value="grid" aria-label="Grid view" class="gap-2">
+      <span class="sr-only md:not-sr-only">Table</span>
+    </Button>
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      :class="[
+        'gap-2 rounded-l-none',
+        modelValue === 'grid' ? 'bg-muted' : ''
+      ]"
+      @click="emit('update:modelValue', 'grid')"
+    >
       <LayoutGridIcon class="h-4 w-4" />
-      <span class="sr-only md:not-sr-only">{{ $t('common.grid') }}</span>
-    </ToggleGroupItem>
-  </ToggleGroup>
+      <span class="sr-only md:not-sr-only">Grid</span>
+    </Button>
+  </div>
 </template>
-

@@ -11,7 +11,7 @@ import {
   ShieldIcon
 } from 'lucide-vue-next'
 import LocaleBadge from './LocaleBadge.vue'
-import type { Role } from '@/types'
+import type { Role } from '@/laravel-roles/types'
 
 defineProps<{
   roles: Role[]

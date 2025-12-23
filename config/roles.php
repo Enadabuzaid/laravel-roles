@@ -59,9 +59,22 @@ return [
     ],
 
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | API Routes
+    |--------------------------------------------------------------------------
+    |
+    | Configure the API routes for roles and permissions.
+    |
+    | Middleware options:
+    | - ['web', 'auth'] : For session-based apps (Inertia, Blade)
+    | - ['api', 'auth:sanctum'] : For token-based API access
+    |
+    */
     'routes' => [
         'prefix' => 'admin/acl', // acl : Access Control List
-        'middleware' => ['api', 'auth'], // add your 'is_admin' middleware too if needed
+        'middleware' => ['web', 'auth'], // default for session-based apps
         'guard' => env('ROLES_GUARD', 'web'), // guard for the routes
         // Expose handy endpoints for the authenticated user's roles/permissions
         'expose_me' => true,
