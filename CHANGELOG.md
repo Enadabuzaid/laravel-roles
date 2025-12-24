@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.6] - 2025-12-24
+
+### 🔧 Critical Route Fix & Installation Enhancements
+
+This release fixes a critical issue where UI routes were intercepting API calls, causing JSON endpoints to return HTML responses.
+
+### Fixed
+
+#### Route Conflict Resolution
+- **UI/API Route Separation** - UI routes now use `/ui` sub-prefix to prevent conflicts
+  - UI routes: `/admin/acl/ui/roles`, `/admin/acl/ui/permissions`, etc.
+  - API routes: `/admin/acl/roles`, `/admin/acl/permissions`, etc. (unchanged)
+- **JSON API Endpoints** - All API endpoints now correctly return JSON data
+- **Stats Endpoints** - `/roles-stats`, `/permissions-stats` work correctly
+- **Recent Data Endpoints** - `/roles-recent`, `/permissions-recent` return proper JSON
+
+#### Vue Page Fixes
+- All pages now use `apiPrefix` for API calls and `uiPrefix` for navigation
+- Fixed data fetching in dashboard pages (stats, recent items)
+- Fixed pagination returning HTML instead of JSON
+- Added container wrapper to all pages for consistent layout
+
+### Added
+
+#### Install Command Enhancements (`php artisan roles:install`)
+- **UI Configuration Prompts** - Enable/disable UI during installation
+- **Layout Configuration** - Specify your app's layout component name (e.g., `AppLayout`)
+- **Route Prefix Configuration** - Customize the UI route prefix
+- **Next Steps Guide** - Shows clear instructions after installation
+
+#### Config Improvements
+- Added `ui.layout` configuration option for specifying AppLayout component
+- Backend controllers now pass both `prefix` (UI) and `apiPrefix` (API) to Vue pages
+
+### Changed
+
+- Documentation updated to reflect new route architecture
+- Vue pages refactored for cleaner API/UI separation
+
+### Migration Guide
+
+If upgrading from v1.3.5:
+
+1. **Update Routes** - UI is now at `/admin/acl/ui/` instead of `/admin/acl/`
+2. **Re-publish Vue Pages** - Run `php artisan vendor:publish --tag=roles-vue --force`
+3. **Clear Caches** - Run `php artisan config:clear && php artisan route:clear`
+
 ## [1.3.5] - 2025-12-24
 
 ### 🎨 Complete UI Redesign (Major Update)

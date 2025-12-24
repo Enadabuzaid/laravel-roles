@@ -164,6 +164,39 @@ class InstallCommand extends Command
             }
         }
 
+        /* -------------------------------------------------------------
+         | ADMIN UI CONFIGURATION
+         |--------------------------------------------------------------
+         */
+        $this->components->info('Configure Admin UI');
+        $enableUI = confirm('Enable the Vue/Inertia Admin UI? (roles and permissions management)', false);
+
+        if ($enableUI) {
+            $rolesConfig = Arr::set($rolesConfig, 'ui.enabled', true);
+
+            $layout = text(
+                label: 'Layout component name (your app\'s main layout)',
+                default: 'AppLayout',
+                placeholder: 'AppLayout',
+                hint: 'This should match your Inertia layout component name',
+            );
+            $rolesConfig = Arr::set($rolesConfig, 'ui.layout', $layout);
+
+            $uiPrefix = text(
+                label: 'UI route prefix',
+                default: 'admin/acl',
+                placeholder: 'admin/acl',
+            );
+            $rolesConfig = Arr::set($rolesConfig, 'ui.prefix', $uiPrefix);
+
+            $this->components->info("UI will be available at: /{$uiPrefix}/ui/");
+            $this->line('');
+            $this->line('After installation, publish the Vue pages:');
+            $this->line('  php artisan vendor:publish --tag=roles-vue-pages');
+        } else {
+            $rolesConfig = Arr::set($rolesConfig, 'ui.enabled', false);
+        }
+
         // 3) Persist roles.php
         $this->writeConfigRoles($fs, $rolesConfig);
 
@@ -183,6 +216,15 @@ class InstallCommand extends Command
         }
 
         $this->components->info('laravel-roles installed ✅');
+
+        if ($enableUI) {
+            $this->newLine();
+            $this->components->info('Next steps for UI:');
+            $this->line('  1. Publish Vue pages: php artisan vendor:publish --tag=roles-vue-pages');
+            $this->line('  2. Configure Inertia page resolver in resources/js/app.ts');
+            $this->line('  3. Visit: ' . url($rolesConfig['ui']['prefix'] . '/ui/'));
+        }
+
         return self::SUCCESS;
     }
 
@@ -296,6 +338,36 @@ class InstallCommand extends Command
                 $content = preg_replace(
                     "/'provider'\s*=>\s*(null|'[^']*')/",
                     "'provider' => {$provider}",
+                    $content
+                );
+            }
+        }
+
+        // Update UI settings
+        if (isset($config['ui'])) {
+            if (isset($config['ui']['enabled'])) {
+                $uiEnabled = $config['ui']['enabled'] ? 'true' : 'false';
+                // Match the specific UI enabled line (env pattern)
+                $content = preg_replace(
+                    "/'enabled'\s*=>\s*env\('ROLES_UI_ENABLED',\s*(true|false)\)/",
+                    "'enabled' => env('ROLES_UI_ENABLED', {$uiEnabled})",
+                    $content
+                );
+            }
+
+            if (isset($config['ui']['layout'])) {
+                $content = preg_replace(
+                    "/'layout'\s*=>\s*'[^']*'/",
+                    "'layout' => '{$config['ui']['layout']}'",
+                    $content
+                );
+            }
+
+            if (isset($config['ui']['prefix'])) {
+                // Update both ui.prefix and routes.prefix if they are the same
+                $content = preg_replace(
+                    "/'prefix'\s*=>\s*'admin\/acl'/",
+                    "'prefix' => '{$config['ui']['prefix']}'",
                     $content
                 );
             }

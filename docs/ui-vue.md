@@ -59,15 +59,40 @@ resources/js/Pages/LaravelRoles/
 
 ## Routes
 
-| Route | Page | Description |
-|-------|------|-------------|
-| `/admin/acl/` | RolesManagement/Index | Main dashboard |
-| `/admin/acl/roles` | RolesManagement/Roles/Index | Roles list |
-| `/admin/acl/roles/create` | RolesManagement/Roles/Create | Create role |
-| `/admin/acl/roles/{id}/edit` | RolesManagement/Roles/Edit | Edit role |
-| `/admin/acl/permissions-management` | PermissionsManagement/Index | Permissions dashboard |
-| `/admin/acl/permissions` | PermissionsManagement/Permissions/Index | Permissions list |
-| `/admin/acl/matrix` | PermissionsManagement/PermissionMatrix/Index | Permission matrix |
+> **Important**: UI routes use a `/ui` sub-prefix to avoid conflicts with API routes.
+
+| UI Route | API Route | Page | Description |
+|----------|-----------|------|-------------|
+| `/admin/acl/ui/` | - | RolesManagement/Index | Main dashboard |
+| `/admin/acl/ui/roles` | `/admin/acl/roles` | RolesManagement/Roles/Index | Roles list |
+| `/admin/acl/ui/roles/create` | - | RolesManagement/Roles/Create | Create role |
+| `/admin/acl/ui/roles/{id}/edit` | - | RolesManagement/Roles/Edit | Edit role |
+| `/admin/acl/ui/permissions-management` | - | PermissionsManagement/Index | Permissions dashboard |
+| `/admin/acl/ui/permissions` | `/admin/acl/permissions` | PermissionsManagement/Permissions/Index | Permissions list |
+| `/admin/acl/ui/matrix` | `/admin/acl/matrix` | PermissionsManagement/PermissionMatrix/Index | Permission matrix |
+
+### Route Architecture
+
+```
+/admin/acl/           <-- API routes (JSON responses)
+├── roles             <-- GET: list roles, POST: create role
+├── roles/{id}        <-- GET: show, PUT: update, DELETE: soft delete
+├── roles-stats       <-- GET: role statistics
+├── roles-recent      <-- GET: recent roles
+├── permissions       <-- GET: list permissions
+├── permissions-stats <-- GET: permission statistics
+└── matrix            <-- GET: permission matrix data
+
+/admin/acl/ui/        <-- UI routes (Inertia/Vue pages)
+├── /                 <-- Dashboard
+├── roles             <-- Roles list page
+├── roles/create      <-- Create role page
+├── roles/{id}/edit   <-- Edit role page
+├── permissions-management <-- Permissions dashboard
+├── permissions       <-- Permissions list page
+└── matrix            <-- Permission matrix page
+```
+
 
 ## Features
 

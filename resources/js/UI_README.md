@@ -41,17 +41,21 @@ Pages/LaravelRoles/
     └── Toast.vue
 ```
 
-## Routes
+## Routes (v1.3.6+)
 
-| Route | Page |
-|-------|------|
-| `/admin/acl/` | RolesManagement/Index |
-| `/admin/acl/roles` | RolesManagement/Roles/Index |
-| `/admin/acl/roles/create` | RolesManagement/Roles/Create |
-| `/admin/acl/roles/{id}/edit` | RolesManagement/Roles/Edit |
-| `/admin/acl/permissions-management` | PermissionsManagement/Index |
-| `/admin/acl/permissions` | PermissionsManagement/Permissions/Index |
-| `/admin/acl/matrix` | PermissionsManagement/PermissionMatrix/Index |
+> **Important**: UI routes use a `/ui` sub-prefix to avoid conflicts with API routes.
+
+| UI Route | Page |
+|----------|------|
+| `/admin/acl/ui/` | RolesManagement/Index |
+| `/admin/acl/ui/roles` | RolesManagement/Roles/Index |
+| `/admin/acl/ui/roles/create` | RolesManagement/Roles/Create |
+| `/admin/acl/ui/roles/{id}/edit` | RolesManagement/Roles/Edit |
+| `/admin/acl/ui/permissions-management` | PermissionsManagement/Index |
+| `/admin/acl/ui/permissions` | PermissionsManagement/Permissions/Index |
+| `/admin/acl/ui/matrix` | PermissionsManagement/PermissionMatrix/Index |
+
+API routes remain at `/admin/acl/roles`, `/admin/acl/permissions`, etc.
 
 ## AppLayout Integration
 
@@ -83,6 +87,7 @@ resolve: async name => {
 - ✅ Confirmation dialogs
 - ✅ Responsive design
 - ✅ Dark mode support
+- ✅ Separate API/UI routes (no conflicts)
 
 ## Need Help?
 

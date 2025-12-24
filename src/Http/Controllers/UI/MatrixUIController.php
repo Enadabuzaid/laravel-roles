@@ -43,11 +43,15 @@ class MatrixUIController extends Controller
 
     protected function getConfig(): array
     {
+        $basePrefix = config('roles.ui.prefix', config('roles.routes.prefix', 'admin/acl'));
+
         return [
-            'prefix' => config('roles.ui.prefix', config('roles.routes.prefix', 'admin/acl')),
+            'prefix' => $basePrefix . '/ui', // UI routes prefix
+            'apiPrefix' => $basePrefix, // API routes prefix (no /ui)
             'guard' => $this->guardResolver->guard(),
             'i18n' => config('roles.i18n.enabled', false),
             'locale' => app()->getLocale(),
+            'layout' => config('roles.ui.layout', 'AppLayout'),
         ];
     }
 }
