@@ -51,3 +51,11 @@ it('treats an empty expected email as a mismatch, even with an empty confirmatio
     expect(guardrailCode(new Operation(T::DeleteUser, target: $user)))->toBe('guardrail.confirmation_mismatch')
         ->and(guardrailCode(new Operation(T::DeleteUser, target: $user, confirmation: '')))->toBe('guardrail.confirmation_mismatch');
 });
+
+it('requires the exact permission name to delete a permission', function () {
+    $permission = makePermission('man.perm');
+
+    expect(guardrailCode(new Operation(T::DeletePermission, target: $permission)))->toBe('guardrail.confirmation_mismatch')
+        ->and(guardrailCode(new Operation(T::DeletePermission, target: $permission, confirmation: 'other')))->toBe('guardrail.confirmation_mismatch')
+        ->and(guardrailCode(new Operation(T::DeletePermission, target: $permission, confirmation: ' MAN.perm ')))->toBeNull();
+});

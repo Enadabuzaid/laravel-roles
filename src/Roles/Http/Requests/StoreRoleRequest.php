@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Enadstack\LaravelRoles\Roles\Http\Requests;
 
+use Enadstack\LaravelRoles\Http\Support\TranslatedFieldRules;
 use Enadstack\LaravelRoles\Models\Role;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
@@ -27,8 +28,6 @@ class StoreRoleRequest extends FormRequest
      */
     protected function roleRules(bool $partial, ?int $ignoreId = null): array
     {
-        $locales = array_values((array) config('roles.locales', ['en']));
-        $default = (string) config('roles.default_locale', 'en');
         $presence = $partial ? 'sometimes' : 'required';
         $table = (new Role)->getTable();
 
@@ -39,11 +38,7 @@ class StoreRoleRequest extends FormRequest
 
         return [
             'name' => [$presence, 'string', 'min:2', 'max:64', 'regex:/^[a-z0-9][a-z0-9._-]*$/', $unique],
-            'label' => [$presence, 'array:'.implode(',', $locales)],
-            "label.{$default}" => [$partial ? 'required_with:label' : 'required', 'string', 'min:1', 'max:120'],
-            'label.*' => ['string', 'min:1', 'max:120'],
-            'description' => ['sometimes', 'nullable', 'array:'.implode(',', $locales)],
-            'description.*' => ['string', 'min:1', 'max:500'],
+            ...TranslatedFieldRules::rules($partial),
             'color' => ['sometimes', 'nullable', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'is_default' => ['sometimes', 'boolean'],
             'sort_order' => ['sometimes', 'integer', 'min:0'],
