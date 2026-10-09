@@ -12,6 +12,7 @@ use Enadstack\LaravelRoles\Core\Http\Requests\StorePermissionRequest;
 use Enadstack\LaravelRoles\Core\Http\Requests\UpdatePermissionRequest;
 use Enadstack\LaravelRoles\Core\Http\Resources\PermissionResource;
 use Enadstack\LaravelRoles\Core\Queries\PermissionsQuery;
+use Enadstack\LaravelRoles\Http\Support\AuthorizesAccess;
 use Enadstack\LaravelRoles\Models\Permission;
 use Enadstack\LaravelRoles\Support\ApiResponse;
 use Enadstack\LaravelRoles\Support\ListQuery;
@@ -20,15 +21,21 @@ use Illuminate\Http\Request;
 
 final class PermissionController
 {
+    use AuthorizesAccess;
+
     public function index(Request $request): JsonResponse
     {
+        $this->authorizeAbility($request, 'viewAny', 'permission');
+
         $query = ListQuery::fromRequest($request, PermissionsQuery::definition());
 
         return ApiResponse::list($query, PermissionsQuery::paginate($query), PermissionResource::class);
     }
 
-    public function show(Permission $permission): JsonResponse
+    public function show(Request $request, Permission $permission): JsonResponse
     {
+        $this->authorizeAbility($request, 'view', 'permission');
+
         return ApiResponse::success($this->represent($permission));
     }
 

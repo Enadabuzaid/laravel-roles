@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Enadstack\LaravelRoles\Roles\Http\Controllers;
 
+use Enadstack\LaravelRoles\Http\Support\AuthorizesAccess;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Roles\Actions\UpdateMatrix;
 use Enadstack\LaravelRoles\Roles\Actions\UpdateRolePermissions;
@@ -20,8 +21,12 @@ use Illuminate\Support\Facades\Gate;
 
 final class MatrixController
 {
+    use AuthorizesAccess;
+
     public function show(Request $request): JsonResponse
     {
+        $this->authorizeAbility($request, 'viewAny', 'permission');
+
         $matrix = MatrixQuery::get($request->user(), Gate::forUser($request->user())->allows('update', Role::class));
 
         return ApiResponse::success(MatrixResource::make($matrix)->resolve());

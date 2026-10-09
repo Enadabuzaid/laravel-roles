@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Enadstack\LaravelRoles\Roles\Http\Controllers;
 
+use Enadstack\LaravelRoles\Http\Support\AuthorizesAccess;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Roles\Actions\CreateRole;
 use Enadstack\LaravelRoles\Roles\Actions\ForceDeleteRole;
@@ -23,15 +24,21 @@ use Illuminate\Http\Request;
 
 final class RoleController
 {
+    use AuthorizesAccess;
+
     public function index(Request $request): JsonResponse
     {
+        $this->authorizeAbility($request, 'viewAny', 'role');
+
         $query = ListQuery::fromRequest($request, RolesQuery::definition());
 
         return ApiResponse::list($query, RolesQuery::paginate($query), RoleResource::class);
     }
 
-    public function show(Role $role): JsonResponse
+    public function show(Request $request, Role $role): JsonResponse
     {
+        $this->authorizeAbility($request, 'view', 'role');
+
         return ApiResponse::success(RoleResource::make(RolesQuery::detail($role))->resolve());
     }
 
