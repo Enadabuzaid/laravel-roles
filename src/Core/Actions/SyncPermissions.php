@@ -10,6 +10,7 @@ use Enadstack\LaravelRoles\Core\Registry\PermissionDefinition;
 use Enadstack\LaravelRoles\Core\Registry\PermissionRegistry;
 use Enadstack\LaravelRoles\Models\Permission;
 use Enadstack\LaravelRoles\Support\Action;
+use Enadstack\LaravelRoles\Support\ActorContext;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -19,6 +20,8 @@ final class SyncPermissions extends Action
 
     public function handle(bool $dryRun = false, bool $prune = false): SyncResult
     {
+        app(ActorContext::class)->assertKnownActor();
+
         $guard = (string) config('roles.guard');
         /** @var array<string, PermissionDefinition> $definitions */
         $definitions = collect($this->registry->definitions())->keyBy('name')->all();

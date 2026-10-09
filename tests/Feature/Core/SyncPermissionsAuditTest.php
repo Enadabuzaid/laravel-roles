@@ -5,6 +5,8 @@ declare(strict_types=1);
 use Enadstack\ActionLogger\Models\ActionLog;
 use Enadstack\LaravelRoles\Core\Actions\SyncPermissions;
 use Enadstack\LaravelRoles\Models\Permission;
+use Enadstack\LaravelRoles\Support\ActorContext;
+use Enadstack\LaravelRoles\Support\Exceptions\AccessException;
 
 beforeEach(function () {
     config(['roles.permissions_file' => __DIR__.'/../../Support/registry/valid.php']);
@@ -53,4 +55,20 @@ it('caps listed names at 200 per list', function () {
 
     $log = ActionLog::sole();
     expect($log->new_values['counts']['deprecated'])->toBe(250)->and($log->new_values['deprecated'])->toHaveCount(200);
+});
+
+it('fails closed without an actor outside console and writes nothing', function () {
+    $context = Mockery::mock(ActorContext::class)->makePartial();
+    $context->shouldReceive('actor')->andReturn(null);
+    $context->shouldReceive('runningInConsole')->andReturn(false);
+    app()->instance(ActorContext::class, $context);
+
+    expect(fn () => app(SyncPermissions::class)->handle())->toThrow(AccessException::class);
+    expect(Permission::count())->toBe(0)->and(ActionLog::count())->toBe(0);
+});
+
+it('allows the system actor explicitly and the console', function () {
+    app(ActorContext::class)->runAs(null, fn () => app(SyncPermissions::class)->handle());
+
+    expect(Permission::count())->toBeGreaterThan(0);
 });
