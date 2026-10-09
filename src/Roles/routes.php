@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Enadstack\LaravelRoles\Roles\Http\Controllers\RoleAssignmentController;
 use Enadstack\LaravelRoles\Roles\Http\Controllers\RoleController;
 use Enadstack\LaravelRoles\Roles\Http\Controllers\RoleMemberController;
 use Enadstack\LaravelRoles\Roles\Http\Controllers\RoleOverviewController;
@@ -22,3 +23,10 @@ Route::post('roles/{role}/restore', [RoleController::class, 'restore'])->name('r
     ->middleware('can:access.roles.delete')->where('role', '[0-9]{1,18}')->withTrashed();
 Route::delete('roles/{role}/force', [RoleController::class, 'force'])->name('roles.force')
     ->middleware('can:access.roles.delete')->where('role', '[0-9]{1,18}')->withTrashed();
+
+Route::post('users/{user}/roles', [RoleAssignmentController::class, 'assign'])->name('users.roles.assign')
+    ->middleware('can:access.roles.assign')->where('user', '[0-9]{1,18}');
+Route::delete('users/{user}/roles/{role}', [RoleAssignmentController::class, 'remove'])->name('users.roles.remove')
+    ->middleware('can:access.roles.assign')->where(['user' => '[0-9]{1,18}', 'role' => '[0-9]{1,18}']);
+Route::put('users/{user}/roles', [RoleAssignmentController::class, 'sync'])->name('users.roles.sync')
+    ->middleware('can:access.roles.assign')->where('user', '[0-9]{1,18}');
