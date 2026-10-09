@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Enadstack\ActionLogger\Models\ActionLog;
 use Enadstack\LaravelRoles\Models\Permission;
+use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Support\ActorContext;
 use Enadstack\LaravelRoles\Support\Exceptions\AccessException;
 use Illuminate\Support\Facades\DB;
@@ -131,4 +132,34 @@ it('records a system-actor entry when no actor exists (console make:admin path)'
 
     $log = ActionLog::sole();
     expect($user->fresh()->isOwner())->toBeTrue()->and($log->actor_type)->toBeNull()->and($log->actor_id)->toBeNull();
+});
+
+it('writes no audit entry and does not touch the pivot when syncing the same set in a different order', function () {
+    makeRole('a');
+    makeRole('b');
+    $user = makeUser();
+    $user->syncAccessRoles(['a', 'b']);
+    ActionLog::query()->delete();
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    $user->fresh()->syncAccessRoles(['b', 'a']);
+    $queries = array_column(DB::getQueryLog(), 'query');
+    DB::disableQueryLog();
+
+    expect(ActionLog::count())->toBe(0)
+        ->and(array_filter($queries, fn (string $q): bool => (bool) preg_match('/^(delete from|insert into) .model_has_roles/i', $q)))->toBe([]);
+});
+
+it('treats roles of another guard as removed by a sync', function () {
+    makeRole('web-role');
+    $other = Role::create(['name' => 'api-role', 'guard_name' => 'api']);
+    $user = makeUser();
+    $user->roles()->attach($other);
+
+    $user->fresh()->syncAccessRoles(['web-role']);
+
+    $entry = ActionLog::query()->where('event', 'roles.synced')->sole();
+    expect($user->fresh()->roles()->pluck('name')->all())->toBe(['web-role'])
+        ->and($entry->meta['removed'])->toBe(['api-role']);
 });
