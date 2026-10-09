@@ -31,6 +31,28 @@ final class RoutesRegistrar
     }
 
     /**
+     * The one public route group: the configured middleware WITHOUT its authentication entries (`auth`,
+     * `auth:sanctum`, ...), no inactive-user check (there is no user) and no `access` limiter; the routes file
+     * adds `access:public` and its own throttle. CSRF protection applies when the configured middleware has the web group.
+     */
+    public static function registerPublic(string $module, string $routesFile): void
+    {
+        if (! config("roles.modules.{$module}")) {
+            return;
+        }
+
+        $middleware = array_values(array_filter(
+            (array) config('roles.routes.middleware', []),
+            static fn (mixed $entry): bool => ! (is_string($entry) && preg_match('/^auth(?:[:.]|$)/', $entry) === 1),
+        ));
+
+        Route::prefix((string) config('roles.routes.prefix'))
+            ->middleware($middleware)
+            ->name('access.')
+            ->group($routesFile);
+    }
+
+    /**
      * `roles.http.rate_limit` as requests per minute (int), or the legacy `attempts,minutes` string; null disables the limit.
      *
      * @return array{attempts: int, minutes: int}|null

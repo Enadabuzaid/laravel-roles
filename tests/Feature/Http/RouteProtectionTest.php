@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Enadstack\LaravelRoles\Core\Doctor\Checks\RoutesProtectedCheck;
 use Enadstack\LaravelRoles\Core\Http\Controllers\PermissionController;
 use Enadstack\LaravelRoles\Core\Http\Controllers\PermissionModulesController;
 use Enadstack\LaravelRoles\Core\Http\Controllers\PermissionOverviewController;
@@ -9,6 +10,7 @@ use Enadstack\LaravelRoles\Roles\Http\Controllers\MatrixController;
 use Enadstack\LaravelRoles\Roles\Http\Controllers\RoleController;
 use Enadstack\LaravelRoles\Roles\Http\Controllers\RoleMemberController;
 use Enadstack\LaravelRoles\Roles\Http\Controllers\RoleOverviewController;
+use Enadstack\LaravelRoles\Users\Models\AccessInvitation;
 use Illuminate\Routing\Route as LaravelRoute;
 use Illuminate\Support\Facades\Route;
 
@@ -28,16 +30,23 @@ it('protects every access route with a permission middleware, a 401 envelope and
     $stranger = makeUser('stranger@example.test');
     $stranger->assignRole(makeRole('stranger-role', ['reports.view']));
 
+    $invitation = AccessInvitation::create(['email' => 'inv@example.test', 'token_hash' => hash('sha256', 'inv'), 'expires_at' => now()->addDay()]);
+
     $routes = accessRoutes();
     expect($routes)->not->toBeEmpty();
 
     foreach ($routes as $route) {
         $name = (string) $route->getName();
+
+        if ($name === RoutesProtectedCheck::PUBLIC_ROUTE) {
+            continue; // the single public route: covered by AcceptInvitationTest and the doctor marker tests
+        }
+
         $middleware = array_values(array_filter($route->gatherMiddleware(), 'is_string'));
 
         expect(array_filter($middleware, static fn (string $m): bool => str_starts_with($m, 'can:') || str_starts_with($m, 'access:')))->not->toBeEmpty("{$name} has no can:/access: middleware");
 
-        $uri = '/'.str_replace(['{role}', '{permission}', '{user}', '{view}'], [(string) $role->id, (string) $permission->id, (string) $target->id, '1'], $route->uri());
+        $uri = '/'.str_replace(['{role}', '{permission}', '{user}', '{view}', '{invitation}'], [(string) $role->id, (string) $permission->id, (string) $target->id, '1', (string) $invitation->id], $route->uri());
         $method = $route->methods()[0];
 
         auth()->forgetGuards();

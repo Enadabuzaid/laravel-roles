@@ -14,13 +14,19 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * `access:any` - the user must be an owner or hold at least one `access.*` permission.
+ * `access:public` - a pass-through marker for the single public route (invitation acceptance): it requires no
+ * user and checks nothing; the doctor allows it for that route only.
  */
 final class RequireAccess
 {
     public function handle(Request $request, Closure $next, string $requirement = 'any'): Response
     {
+        if ($requirement === 'public') {
+            return $next($request);
+        }
+
         if ($requirement !== 'any') {
-            throw new InvalidArgumentException("Unsupported access middleware argument [{$requirement}]; only [access:any] is supported.");
+            throw new InvalidArgumentException("Unsupported access middleware argument [{$requirement}]; only [access:any] and [access:public] are supported.");
         }
 
         $user = $request->user();

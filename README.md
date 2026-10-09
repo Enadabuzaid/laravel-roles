@@ -188,6 +188,11 @@ All paths are relative to `roles.routes.prefix` (default `api/access`) and run u
 | POST | `users/{user}/unlock` | `access.users.update` | Locked becomes active with `locked_until` and `failed_login_count` cleared; any other status is 409 `user.invalid_transition`. Returns the User |
 | POST | `users/{user}/force-password-reset` | `access.users.update` | Ends the user's current access (database sessions and API tokens, exactly like suspend) and sends the host's password reset link through the password broker whose provider matches `config('roles.guard')`'s provider (the default broker otherwise). **It does not change the password: the old password keeps working until the user follows the link**, so pair it with a suspend when a credential is known to be compromised. Clears `password_changed_at` on an existing state row (no row is created) and leaves the status untouched. Never returns a token. `meta` has `link_sent` (the broker status is `passwords.sent`) and `broker_status` (e.g. `passwords.throttled`, `passwords.user`, or `mail_failed` when sending threw); a throttled or failed send does not undo the revocation, and the broker status is stored in the audit `meta`. Allowed on yourself. Returns the User |
 | DELETE | `users/{user}` | `access.users.delete` | Body `confirmation` must equal the user's email (case-insensitive, trimmed; missing or wrong is 403 `guardrail.confirmation_mismatch`). Deletes through the host model (soft-deleted when it uses SoftDeletes), removes the role and permission pivot rows of that model, its state row and saved views, and sets `invited_by` to null on the invitations and state rows it created. Never the last active owner or yourself. Ends sessions and tokens. A host foreign key that still points at the user is 409 `user.in_use` with nothing changed. Soft-deleted users keep their email, so the address stays taken (new invitations or sign-ups for it will conflict until the row is force-deleted). 204 |
+| GET | `invitations` | `access.invitations.view` | Paginated invitations, newest first. Filters `filter[status]` (`pending`, `accepted`, `expired`, `revoked`; repeatable), `search` (email), `sort` (`created`, `expires`, `-` for descending). `meta.counts` holds the four status totals. Row: see Payloads |
+| POST | `invitations` | `access.invitations.create` | Body `email`, `role` (name or id, required), `confirm` for the Owner role or a high-risk role. The role goes through the assignment guardrails (escalation, high-risk confirmation, Owner role needs an Owner actor) but nothing is assigned until acceptance. 409 `invitation.user_exists` / `invitation.pending_exists`. 201 with the Invitation and `meta.mail_sent` |
+| POST | `invitations/{invitation}/resend` | `access.invitations.create` | Rotates the token (the old link dies), restarts the expiry and mails the new link; optional `confirm`. 409 `invitation.not_pending` when accepted or revoked. 200 with the Invitation and `meta.mail_sent`; the response never carries the token |
+| DELETE | `invitations/{invitation}` | `access.invitations.revoke` | Revokes a pending or expired invitation; already revoked is a 200 no-op (no audit); accepted is 409 `invitation.not_pending`. 200 with the Invitation |
+| POST | `invitations/accept` | none (public) | See Invitations. Body `token`, `email`, `name`, `password`, `password_confirmation`. 200 `{accepted: true}` |
 | GET | `saved-views` | `access.users.view` | The current user's saved filter views (never anyone else's), optionally `?page=users`. An unknown `page` is 422 |
 | POST | `saved-views` | `access.users.view` | `page` (one of `roles.users.saved_view_pages`), `name` (1 to 80 chars, unique per user and page, 422 on a duplicate), `filters` (optional object: at most 20 keys, each value a scalar or a list of scalars, at most 2 KB as JSON). At most 25 views per user and page (422 `saved_view.limit`). Names and filters must be valid UTF-8 (422 otherwise). Saved views of every page require `access.users.view` (a known limit). Saved views are a personal preference and are not audited. 201 with the SavedView |
 | DELETE | `saved-views/{view}` | `access.users.view` | Own views only; another user's id is 404, never 403. 204 |
@@ -232,6 +237,8 @@ Every success is `{success: true, message, data, meta}`; the shapes below are `d
 | `abilities.assign` | bool | The user may assign roles, and the role is not the Owner role unless the user is an Owner |
 
 These flags are computed without per-role queries (one query for the current user's roles, memoized per request). They mirror what the server would accept; the guardrails remain the authority.
+
+**Invitation** (`GET invitations` rows and the write responses): `id`, `email`, `role` (RoleLite or null), `status` (`pending`, `accepted`, `revoked` or `expired`, derived: accepted wins over revoked over expired), `expires_at`, `accepted_at`, `revoked_at`, `invited_by` (`{id, name}`; `name` only when the viewer holds `access.users.view`; null when unknown), `created_at`. The token and its hash are never returned.
 
 **RoleLite** (the `roles` of assignment responses): `id`, `name`, `label`, `label_text`, `color`, `is_system`.
 
@@ -282,6 +289,10 @@ Errors are `{success: false, message, code, errors}`. `errors` is a field map fo
 | `guardrail.target_above_actor` | 403 | "You can't manage a user with more access than you have." |
 | `user.invalid_transition` | 409 | A lifecycle action that does not apply to the user's current status; `errors.status` holds the current status |
 | `user.in_use` | 409 | Deleting a user still referenced by a host foreign key; nothing was changed |
+| `invitation.invalid` | 410 | Public accept: unknown, expired, revoked, already used token or an email that does not match; one identical response for all of them |
+| `invitation.user_exists` | 409 | The email already belongs to a user (create, resend, accept); an existing account is never modified |
+| `invitation.pending_exists` | 409 | A usable invitation for that email exists; resend it instead |
+| `invitation.not_pending` | 409 | Resending or revoking an accepted (or, for resend, revoked) invitation |
 | `saved_view.limit` | 422 | The user already has 25 saved views on that page |
 | `account_inactive` | 403 | The signed-in user's access state no longer allows signing in; returned by the `access.active` middleware for JSON requests after it ended the session |
 | `guardrail.self_role_change` | 403 | Changing, or restoring, a role you hold; editing a role you hold |
@@ -302,6 +313,14 @@ Errors are `{success: false, message, code, errors}`. `errors` is a field map fo
 | `permission.registry_managed` | 409 | Editing or deleting a registry permission |
 | `permission.in_use` | 409 | Deleting a held permission, or lowering the risk of a held high-risk one |
 | `registry.invalid` | 422 | The registry file failed validation during `permissions/sync` |
+
+### Invitations
+
+An invitation carries an email and a role. Create it (`POST invitations`), the package mails a link built from `roles.users.accept_url` (default `url('/accept-invitation')`) plus `?token=...&email=...`; your page posts the form to `POST {prefix}/invitations/accept`. Texts live in the package lang files (`invitation.php`, English and Arabic).
+
+- **Token.** 64 random bytes, base64url. Only `sha256(token)` is stored; the plain token exists only in the mail (the notification is deliberately not queued, so it never enters a queue payload) and is never in a response, audit entry or log. The mail goes out after the transaction commits through `DB::afterCommit`; a delivery failure is reported, does not roll anything back and shows as `meta.mail_sent: false` (resend to retry). The TTL is `roles.users.invitation_ttl_hours` (72).
+- **Accept.** One transaction with the invitation row locked. Unknown, expired, revoked, used tokens and a wrong email all answer the same 410 `invitation.invalid`. An email that already belongs to a user is 409 `invitation.user_exists` and nothing is changed. Otherwise the user is created through `roles.user_model` (`name`, `email`, hashed `password`, `email_verified_at` now), its state row is set `active` before the role is assigned, the invited role is assigned through `AssignRoleToUser` as the system actor with `confirmed: true` (the inviter's guardrails already vetted it), and the invitation is marked accepted. Fields other than the five documented are ignored (no `role`, `roles`, `is_admin`). If the invited role was deleted meanwhile the user is created without a role. The response is `{accepted: true}`: the package does not log the user in, your app signs them in through its normal login.
+- **Public route security.** `POST invitations/accept` is the only route of the package without authentication. It carries the middleware marker `access:public` (a pass-through; any other `access:` argument than `any` or `public` throws), `throttle:6,1` per IP (429 `too_many_requests` on the 7th attempt) and the configured route middleware WITHOUT its `auth*` entries. Keep the `web` group in `roles.routes.middleware` if you call it from an Inertia page so CSRF applies (a pure `api` stack has no CSRF). `roles:doctor` (`routes-protected`) accepts `access:public` for the route named `access.invitations.accept` only; any other route with the marker fails the check. Pending invitations can be disabled together with the routes via `roles.modules.invitations`.
 
 ### Inactive users
 
@@ -340,6 +359,9 @@ Writes go to `enadstack/laravel-action-logger` (^1.1), module `roles`, `permissi
 | `users.deactivated` | users | `warning` (`critical` when the target is an owner) | the user | `meta.reason` |
 | `users.password_reset_forced` | users | `info` | the user | One entry per request; `meta.broker_status` |
 | `users.deleted` | users | `critical` | none | `old_values` hold `id`, `name`, `email`; `meta.was_owner` |
+| `invitations.created` | invitations | `info` (`warning` for a high-risk role, `critical` for the Owner role) | the invitation | `meta.email`, `meta.role`; never the token |
+| `invitations.resent` / `invitations.revoked` | invitations | `info` | the invitation | `meta.email`, `meta.role` |
+| `invitations.accepted` | invitations | `info` | the invitation | Actor is the new user. Accepting writes TWO entries on purpose (two resources change): this one and `users.activated` (module `users`, subject the new user, `meta.via` = `invitation`); the reused role Action adds its own `roles.assigned` |
 | `permissions.created` | permissions | `info` | the permission | |
 | `permissions.updated` | permissions | `info` (`warning` when a high risk was lowered) | the permission | Changed attributes only |
 | `permissions.deleted` | permissions | `warning` | none | `meta` holds `id` and `name` |

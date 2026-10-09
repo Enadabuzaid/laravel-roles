@@ -107,6 +107,7 @@ class RolesServiceProvider extends ServiceProvider
         Gate::before(new Roles\OwnerGate);
 
         Gate::policy((string) config('permission.models.role'), Roles\Policies\RolePolicy::class);
+        Gate::policy(Users\Models\AccessInvitation::class, Users\Policies\InvitationPolicy::class);
         Gate::policy((string) config('permission.models.permission'), Core\Policies\PermissionPolicy::class);
 
         $userModel = (string) config('roles.user_model');
@@ -118,6 +119,8 @@ class RolesServiceProvider extends ServiceProvider
             Http\Support\RoutesRegistrar::register('roles', __DIR__.'/Roles/routes.php');
             Http\Support\RoutesRegistrar::register('permissions', __DIR__.'/Core/routes.php');
             Http\Support\RoutesRegistrar::register('users', __DIR__.'/Users/routes.php');
+            Http\Support\RoutesRegistrar::register('invitations', __DIR__.'/Users/invitation-routes.php');
+            Http\Support\RoutesRegistrar::registerPublic('invitations', __DIR__.'/Users/public-routes.php');
         }
 
         if ($this->app->runningInConsole()) {

@@ -11,6 +11,9 @@ use Illuminate\Support\Facades\Route as Router;
 
 final class RoutesProtectedCheck implements Check
 {
+    /** The single route that may be public, carrying the `access:public` marker. */
+    public const PUBLIC_ROUTE = 'access.invitations.accept';
+
     private const PATTERN = '/^(can|permission|role|role_or_permission|access):/';
 
     public function name(): string
@@ -38,7 +41,9 @@ final class RoutesProtectedCheck implements Check
         foreach ($routes as $route) {
             $guarded = array_filter(
                 $route->gatherMiddleware(),
-                fn (mixed $middleware): bool => is_string($middleware) && preg_match(self::PATTERN, $middleware) === 1,
+                fn (mixed $middleware): bool => is_string($middleware)
+                    && preg_match(self::PATTERN, $middleware) === 1
+                    && ($middleware !== 'access:public' || $route->getName() === self::PUBLIC_ROUTE),
             );
             if ($guarded === []) {
                 $open[] = $route->uri();
