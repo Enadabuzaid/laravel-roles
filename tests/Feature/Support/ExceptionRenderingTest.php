@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Session\TokenMismatchException;
 use Illuminate\Support\Facades\Route;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 beforeEach(function () {
     Route::prefix('api/access')->group(function () {
@@ -56,6 +57,14 @@ it('renders other http exceptions in the envelope with the exception status', fu
     $this->getJson('api/access/throttled')->assertStatus(429)->assertJson(['success' => false, 'code' => 'too_many_requests']);
     $this->getJson('api/access/teapot')->assertStatus(418)->assertJson(['success' => false, 'code' => 'http_error']);
     $this->postJson('api/access/only-get')->assertStatus(405)->assertJson(['success' => false, 'code' => 'method_not_allowed']);
+});
+
+it('keeps the headers of the original http exception on the envelope', function () {
+    $this->postJson('api/access/only-get')->assertStatus(405)->assertHeader('Allow');
+    expect($this->postJson('api/access/only-get')->headers->get('Allow'))->toContain('GET');
+
+    Route::get('api/access/retry', fn () => throw new HttpException(429, 'Slow down.', null, ['Retry-After' => '42']));
+    $this->getJson('api/access/retry')->assertStatus(429)->assertHeader('Retry-After', '42')->assertJson(['code' => 'too_many_requests']);
 });
 
 it('maps an expired session and a csrf mismatch to session_expired with 419', function () {

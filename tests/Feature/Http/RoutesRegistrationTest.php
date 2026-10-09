@@ -34,7 +34,9 @@ it('throttles through the named access limiter and honours the configured limit'
 
     $this->actingAs($user)->getJson('/api/access/ping')->assertOk();
     $this->actingAs($user)->getJson('/api/access/ping')->assertOk();
-    $this->actingAs($user)->getJson('/api/access/ping')->assertStatus(429)->assertJson(['success' => false, 'code' => 'too_many_requests']);
+    $throttled = $this->actingAs($user)->getJson('/api/access/ping')->assertStatus(429)->assertJson(['success' => false, 'code' => 'too_many_requests']);
+    expect((int) $throttled->headers->get('Retry-After'))->toBeGreaterThan(0)
+        ->and($throttled->headers->get('X-RateLimit-Limit'))->toBe('2');
 
     $other = makeUser('other@example.test');
     $this->actingAs($other)->getJson('/api/access/ping')->assertOk();

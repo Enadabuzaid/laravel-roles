@@ -284,7 +284,7 @@ Users whose `user_access_states.status` is `suspended`, `deactivated`, `invited`
 
 ### Rate limiting
 
-Package routes use the named limiter `access` (`throttle:access`), registered by the package. To override it, define `RateLimiter::for('access', ...)` in a provider that boots later than the package's (application providers do). The key is the user id, or the IP for guests; the limit is `roles.http.rate_limit` requests per minute (default 60; `null` disables the limiter). Exceeding it answers 429 `too_many_requests` with the usual `Retry-After` headers.
+Package routes use the named limiter `access` (`throttle:access`), registered by the package. To override it, define `RateLimiter::for('access', ...)` in a provider that boots later than the package's (application providers do). The key is the user id, or the IP for guests; the limit is `roles.http.rate_limit` requests per minute (default 60; `null` disables the limiter). Exceeding it answers 429 `too_many_requests` with the usual `Retry-After` and `X-RateLimit-*` headers (the envelope keeps the headers of the original HTTP exception, so a 405 carries `Allow` too).
 
 ### Clients
 

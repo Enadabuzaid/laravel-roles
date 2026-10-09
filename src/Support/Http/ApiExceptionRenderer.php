@@ -35,7 +35,7 @@ final class ApiExceptionRenderer
             $e instanceof AuthorizationException, $e instanceof AccessDeniedHttpException => ApiResponse::error($e->getMessage() ?: 'This action is unauthorized.', 'forbidden', 403),
             $e instanceof TokenMismatchException => ApiResponse::error('Your session expired. Refresh the page and try again.', 'session_expired', 419),
             $e instanceof ModelNotFoundException, $e instanceof NotFoundHttpException => ApiResponse::error('Resource not found.', 'not_found', 404),
-            $e instanceof HttpExceptionInterface => ApiResponse::error(
+            $e instanceof HttpExceptionInterface => self::withHeaders(ApiResponse::error(
                 $e->getMessage() !== '' ? $e->getMessage() : 'HTTP error.',
                 match ($e->getStatusCode()) {
                     405 => 'method_not_allowed',
@@ -45,8 +45,18 @@ final class ApiExceptionRenderer
                     default => 'http_error',
                 },
                 $e->getStatusCode(),
-            ),
+            ), $e->getHeaders()),
             default => null,
         };
+    }
+
+    /** @param  array<string, mixed>  $headers */
+    private static function withHeaders(JsonResponse $response, array $headers): JsonResponse
+    {
+        foreach ($headers as $name => $value) {
+            $response->headers->set((string) $name, is_array($value) ? array_map('strval', $value) : (string) $value);
+        }
+
+        return $response;
     }
 }
