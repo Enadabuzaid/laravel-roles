@@ -38,6 +38,7 @@ it('fails loudly on a missing, malformed, duplicate or invalid file', function (
     'bad risk' => fn () => registryFile('bad-risk'),
     'module not array' => fn () => registryFile('bad-module'),
     'array spec without label key' => fn () => registryFile('no-label-key'),
+    'bare map with non-string value' => fn () => registryFile('bare-map-bad'),
     'non-string label' => fn () => registryFile('bad-label'),
     'non-string risk' => fn () => registryFile('bad-risk-type'),
 ])->throws(PermissionRegistryException::class);
@@ -46,4 +47,18 @@ it('ships arabic labels for package permissions', function () {
     $defs = collect((new PermissionRegistry(null, ['users']))->definitions())->keyBy('name');
 
     expect($defs['access.users.suspend']->label)->toHaveKeys(['en', 'ar'])->and($defs['access.users.suspend']->risk)->toBe('high');
+});
+
+it('treats a bare locale map as the label', function () {
+    $bare = (new PermissionRegistry(registryFile('bare-map'), []))->definitions()[0];
+    $keyed = collect((new PermissionRegistry(registryFile('valid'), []))->definitions())->keyBy('name')['orders.update'];
+
+    expect($bare->label)->toBe(['en' => 'View orders', 'ar' => 'عرض الطلبات'])
+        ->and($bare->risk)->toBe('low')->and($bare->description)->toBeNull()
+        ->and([$bare->module, $bare->sortOrder])->toBe(['orders', 1])
+        ->and($keyed->label)->toHaveKeys(['en', 'ar']);
+});
+
+it('ships a stub that the registry accepts', function () {
+    expect((new PermissionRegistry(dirname(__DIR__, 2).'/stubs/permissions.php', []))->definitions())->toBe([]);
 });

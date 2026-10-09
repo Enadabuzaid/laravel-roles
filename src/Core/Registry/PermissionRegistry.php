@@ -64,7 +64,11 @@ final class PermissionRegistry
                 $name = (string) $name;
 
                 if (is_array($spec) && ! array_key_exists('label', $spec)) {
-                    throw new PermissionRegistryException("Permission [{$name}] is an array without a [label] key; use 'label' => ... (or a plain string).");
+                    if (array_intersect(array_keys($spec), ['description', 'risk']) !== [] || $spec === []) {
+                        throw new PermissionRegistryException("Permission [{$name}] is an array without a [label] key; use 'label' => ... (or a plain string or a locale map).");
+                    }
+
+                    $spec = ['label' => $spec]; // bare locale map shorthand
                 }
 
                 $spec = is_array($spec) ? $spec : ['label' => $spec];
