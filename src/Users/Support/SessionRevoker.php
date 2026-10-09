@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Enadstack\LaravelRoles\Users\Support;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
@@ -34,7 +35,7 @@ final class SessionRevoker
             $schema = Schema::connection(is_string($connection) ? $connection : null);
 
             if ($schema->hasTable($table) && $schema->hasColumn($table, 'user_id')) {
-                DB::connection(is_string($connection) ? $connection : null)->table($table)->where('user_id', $user->getKey())->delete();
+                DB::connection(is_string($connection) ? $connection : null)->transaction(static fn () => DB::connection(is_string($connection) ? $connection : null)->table($table)->where('user_id', $user->getKey())->delete());
             }
         } catch (Throwable $e) {
             report($e);
@@ -50,8 +51,10 @@ final class SessionRevoker
         try {
             $tokens = $user->tokens();
 
-            if (is_object($tokens) && method_exists($tokens, 'delete')) {
-                $tokens->delete();
+            // Real relations forward delete() through __call, so method_exists() is false for them.
+            if ($tokens instanceof Relation || (is_object($tokens) && is_callable([$tokens, 'delete']))) {
+                // A savepoint keeps a failing delete from aborting an enclosing transaction (PostgreSQL).
+                DB::transaction(static fn () => $tokens->delete());
             }
         } catch (Throwable $e) {
             report($e);

@@ -34,7 +34,13 @@ final class ReactivateUser extends UserLifecycleAction
                 throw $this->invalidTransition($current, 'reactivated');
             }
 
-            $this->writeState($target, $state, ['status' => UserStatus::Active->value, 'status_reason' => null, 'activated_at' => now()]);
+            $this->writeState($target, $state, [
+                'status' => UserStatus::Active->value,
+                'status_reason' => null,
+                'locked_until' => null,
+                'failed_login_count' => 0,
+                'activated_at' => $state->activated_at ?? now(),
+            ]);
 
             app(AuditRecorder::class)->record('users', 'reactivated', $target, ['status' => $current->value], ['status' => UserStatus::Active->value]);
 

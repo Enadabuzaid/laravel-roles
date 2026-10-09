@@ -10,6 +10,9 @@ use Enadstack\LaravelRoles\Support\ActorContext;
 use Enadstack\LaravelRoles\Support\Exceptions\AccessException;
 use Enadstack\LaravelRoles\Users\Models\UserAccessState;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Tests\Support\TestUser;
 
 function makeUser(string $email = 'a@example.test'): TestUser
@@ -83,4 +86,30 @@ function usersActor(?array $permissions = null, string $email = 'actor@example.t
     $user->assignRole(makeRole('actor-'.uniqid(), $permissions ?? ['access.users.view']));
 
     return $user;
+}
+
+function createSessionsTable(): void
+{
+    if (Schema::hasTable('sessions')) {
+        DB::table('sessions')->delete();
+        if (! Schema::hasColumn('sessions', 'user_id')) {
+            Schema::table('sessions', fn (Blueprint $table) => $table->unsignedBigInteger('user_id')->nullable());
+        }
+
+        return;
+    }
+
+    Schema::create('sessions', function (Blueprint $table): void {
+        $table->string('id')->primary();
+        $table->foreignId('user_id')->nullable()->index();
+        $table->string('ip_address', 45)->nullable();
+        $table->text('user_agent')->nullable();
+        $table->longText('payload');
+        $table->integer('last_activity')->index();
+    });
+}
+
+function insertSession(string $id, ?int $userId): void
+{
+    DB::table('sessions')->insert(['id' => $id, 'user_id' => $userId, 'payload' => 'x', 'last_activity' => time()]);
 }

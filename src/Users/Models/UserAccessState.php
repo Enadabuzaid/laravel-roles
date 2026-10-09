@@ -55,6 +55,18 @@ class UserAccessState extends Model
         return $this->belongsTo($model, 'user_id');
     }
 
+    /**
+     * The user's state row, locked for update, created (status active) first when missing. The insert ignores a
+     * concurrent insert of the same `user_id` (unique index), so two writers can never collide on creation.
+     */
+    public static function lockedFor(int|string $userId): self
+    {
+        $now = now();
+        static::query()->insertOrIgnore(['user_id' => $userId, 'status' => UserStatus::Active->value, 'created_at' => $now, 'updated_at' => $now]);
+
+        return static::query()->where('user_id', $userId)->lockForUpdate()->firstOrFail();
+    }
+
     /** Active signs in; Locked only once `locked_until` is in the past; everything else never. */
     public function canSignInNow(): bool
     {

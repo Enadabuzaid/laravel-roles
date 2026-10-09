@@ -9,15 +9,18 @@ use Enadstack\LaravelRoles\Users\Actions\DeactivateUser;
 use Enadstack\LaravelRoles\Users\Actions\DeleteUser;
 use Enadstack\LaravelRoles\Users\Actions\ForcePasswordReset;
 use Enadstack\LaravelRoles\Users\Actions\ReactivateUser;
+use Enadstack\LaravelRoles\Users\Actions\RecordLastLogin;
 use Enadstack\LaravelRoles\Users\Actions\SuspendUser;
 use Enadstack\LaravelRoles\Users\Actions\UnlockUser;
+use Enadstack\LaravelRoles\Users\Actions\UserLifecycleAction;
 use Enadstack\LaravelRoles\Users\Models\AccessInvitation;
 use Enadstack\LaravelRoles\Users\Models\SavedView;
 use Enadstack\LaravelRoles\Users\Models\UserAccessState;
-use Enadstack\LaravelRoles\Users\Support\SessionRevoker;
 use Enadstack\LaravelRoles\Users\Support\SignInGate;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -29,32 +32,6 @@ use Tests\Support\TestUser;
 function asSystem(Closure $callback): mixed
 {
     return app(ActorContext::class)->runAs(null, $callback);
-}
-
-function createSessionsTable(): void
-{
-    if (Schema::hasTable('sessions')) {
-        DB::table('sessions')->delete();
-        if (! Schema::hasColumn('sessions', 'user_id')) {
-            Schema::table('sessions', fn (Blueprint $table) => $table->unsignedBigInteger('user_id')->nullable());
-        }
-
-        return;
-    }
-
-    Schema::create('sessions', function (Blueprint $table): void {
-        $table->string('id')->primary();
-        $table->foreignId('user_id')->nullable()->index();
-        $table->string('ip_address', 45)->nullable();
-        $table->text('user_agent')->nullable();
-        $table->longText('payload');
-        $table->integer('last_activity')->index();
-    });
-}
-
-function insertSession(string $id, ?int $userId): void
-{
-    DB::table('sessions')->insert(['id' => $id, 'user_id' => $userId, 'payload' => 'x', 'last_activity' => time()]);
 }
 
 it('ends database sessions of the suspended user only', function (): void {
@@ -100,33 +77,95 @@ it('does not fail the action when the sessions table is missing or the driver is
     expect(asSystem(fn () => app(SuspendUser::class)->handle($other, 'x')))->toBeTrue();
 });
 
-class FakeTokenUser extends TestUser
+class PersonalToken extends Model
 {
-    public static ?object $tokens = null;
+    protected $table = 'personal_access_tokens';
 
-    public function tokens(): object
+    protected $guarded = [];
+}
+
+class TokenOwner extends TestUser
+{
+    public function tokens(): MorphMany
     {
-        return self::$tokens ?? throw new RuntimeException('no table');
+        return $this->morphMany(PersonalToken::class, 'tokenable');
     }
 }
 
-it('revokes API tokens when the user has a tokens relation and survives failures', function (): void {
-    FakeTokenUser::$tokens = new class
-    {
-        public int $deleted = 0;
+function createTokensTable(): void
+{
+    Schema::create('personal_access_tokens', function (Blueprint $table): void {
+        $table->id();
+        $table->morphs('tokenable');
+        $table->string('name');
+        $table->timestamps();
+    });
+}
 
-        public function delete(): void
+function issueToken(TestUser $user, string $name = 'api'): void
+{
+    PersonalToken::create(['tokenable_type' => $user->getMorphClass(), 'tokenable_id' => $user->id, 'name' => $name]);
+}
+
+it('revokes the tokens of a real morphMany relation on suspend, deactivate and delete, and only that users', function (string $action): void {
+    createTokensTable();
+    $target = TokenOwner::create(['name' => 'T', 'email' => 't@example.test', 'password' => 'x']);
+    $other = TokenOwner::create(['name' => 'O', 'email' => 'o@example.test', 'password' => 'x']);
+    issueToken($target, 'a');
+    issueToken($target, 'b');
+    issueToken($other);
+
+    asSystem(fn () => match ($action) {
+        'suspend' => app(SuspendUser::class)->handle($target, 'x'),
+        'deactivate' => app(DeactivateUser::class)->handle($target, 'x'),
+        'delete' => app(DeleteUser::class)->handle($target, 't@example.test'),
+        'reset' => app(ForcePasswordReset::class)->handle($target),
+    });
+
+    expect(PersonalToken::where('tokenable_id', $target->id)->count())->toBe(0)->and(PersonalToken::where('tokenable_id', $other->id)->count())->toBe(1);
+})->with(['suspend', 'deactivate', 'delete', 'reset']);
+
+it('keeps tokens on reactivate and never fails the action when revoking tokens throws', function (): void {
+    createTokensTable();
+    $target = TokenOwner::create(['name' => 'T', 'email' => 't@example.test', 'password' => 'x']);
+    makeState($target, 'suspended');
+    issueToken($target);
+    asSystem(fn () => app(ReactivateUser::class)->handle($target));
+    expect(PersonalToken::count())->toBe(1);
+
+    Schema::drop('personal_access_tokens');
+    expect(asSystem(fn () => app(SuspendUser::class)->handle($target, 'x')))->toBeTrue();
+    expect(UserAccessState::where('user_id', $target->id)->first()->status->value)->toBe('suspended');
+});
+
+it('creates the state row idempotently when another writer inserted it first', function (): void {
+    $user = makeUser('t@example.test');
+    $writer = new class extends UserLifecycleAction
+    {
+        /** @param  array<string, mixed>  $attributes */
+        public function write(Model $user, array $attributes): void
         {
-            $this->deleted++;
+            DB::transaction(fn () => $this->writeState($user, null, $attributes));
         }
     };
-    app(SessionRevoker::class)->revoke(new FakeTokenUser);
-    expect(FakeTokenUser::$tokens->deleted)->toBe(1);
+    makeState($user, 'active', ['failed_login_count' => 3]); // inserted between our read (null) and our write
 
-    FakeTokenUser::$tokens = null;
-    app(SessionRevoker::class)->revoke(new FakeTokenUser);
-    app(SessionRevoker::class)->revoke(new TestUser);
-    expect(true)->toBeTrue();
+    $writer->write($user, ['status' => 'suspended', 'status_reason' => 'x']);
+    $writer->write($user, ['status' => 'suspended', 'status_reason' => 'y']);
+
+    expect(UserAccessState::where('user_id', $user->id)->count())->toBe(1)
+        ->and(UserAccessState::where('user_id', $user->id)->first()->status_reason)->toBe('y');
+});
+
+it('records the last login on a row that appeared concurrently', function (): void {
+    $user = makeUser('t@example.test');
+    makeState($user, 'active', ['failed_login_count' => 3]);
+
+    asSystem(fn () => app(RecordLastLogin::class)->handle($user, '203.0.113.1'));
+    asSystem(fn () => app(RecordLastLogin::class)->handle($user, '203.0.113.2'));
+
+    $state = UserAccessState::where('user_id', $user->id)->sole();
+    expect($state->last_login_ip)->toBe('203.0.113.2')->and($state->failed_login_count)->toBe(0);
 });
 
 it('blocks login after suspend and allows it again after reactivate', function (): void {
@@ -316,3 +355,27 @@ it('locks the super role before reading anything else on postgres', function (st
 
     expect($lock)->not->toBeFalse()->and($queries[$lock])->toContain('"roles"')->and($lock)->toBeLessThan($firstTargetRead);
 })->with(['suspend', 'deactivate', 'reactivate', 'unlock', 'reset', 'delete']);
+
+it('locks the super role before the active-owner count on postgres', function (string $action): void {
+    if (DB::getDriverName() !== 'pgsql') {
+        $this->markTestSkipped('FOR UPDATE row locking is asserted on pgsql only; sqlite has no row locks.');
+    }
+
+    makeOwner();
+    $target = makeOwner('target@example.test');
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    asSystem(fn () => match ($action) {
+        'suspend' => app(SuspendUser::class)->handle($target, 'x'),
+        'deactivate' => app(DeactivateUser::class)->handle($target, 'x'),
+        'delete' => app(DeleteUser::class)->handle($target, 'target@example.test'),
+    });
+    $queries = collect(DB::getQueryLog())->pluck('query')->map(fn (string $q): string => strtolower($q))->values();
+    DB::disableQueryLog();
+
+    $lock = $queries->search(fn (string $q): bool => str_contains($q, 'for update') && str_contains($q, '"roles"'));
+    $count = $queries->search(fn (string $q): bool => str_contains($q, 'count(*)') && str_contains($q, 'model_has_roles'));
+
+    expect($lock)->not->toBeFalse()->and($count)->not->toBeFalse()->and($lock)->toBeLessThan($count);
+})->with(['suspend', 'deactivate', 'delete']);

@@ -8,8 +8,9 @@ use Enadstack\LaravelRoles\Users\Actions\SuspendUser;
 use Enadstack\LaravelRoles\Users\Models\AccessInvitation;
 use Enadstack\LaravelRoles\Users\Models\SavedView;
 use Enadstack\LaravelRoles\Users\Models\UserAccessState;
+use Illuminate\Contracts\Auth\PasswordBroker;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
 use Tests\Support\TestUser;
 
@@ -113,7 +114,79 @@ it('answers 409 user.invalid_transition with the current status for illegal tran
     'deactivate invited' => ['deactivate', 'invited', ['reason' => 'x']],
     'unlock active' => ['unlock', 'active'],
     'unlock suspended' => ['unlock', 'suspended'],
+    'unlock deactivated' => ['unlock', 'deactivated'],
+    'unlock invited' => ['unlock', 'invited'],
+    'unlock pending' => ['unlock', 'pending_verification'],
+    'suspend pending' => ['suspend', 'pending_verification', ['reason' => 'x']],
+    'deactivate pending' => ['deactivate', 'pending_verification', ['reason' => 'x']],
+    'reactivate pending' => ['reactivate', 'pending_verification'],
+    'reactivate invited' => ['reactivate', 'invited'],
 ]);
+
+it('follows the documented transitions from locked and for owners', function (string $uri, string $from, string $to, array $body): void {
+    $actor = lifecycleActor();
+    $target = makeUser('t@example.test');
+    makeState($target, $from);
+
+    $this->actingAs($actor)->postJson("/api/access/users/{$target->id}/{$uri}", $body)->assertOk()->assertJsonPath('data.status', $to);
+
+    expect(statusOfUser($target))->toBe($to);
+})->with([
+    'suspend locked' => ['suspend', 'locked', 'suspended', ['reason' => 'x']],
+    'deactivate locked' => ['deactivate', 'locked', 'deactivated', ['reason' => 'x']],
+    'deactivate suspended' => ['deactivate', 'suspended', 'deactivated', ['reason' => 'x']],
+    'unlock locked' => ['unlock', 'locked', 'active', []],
+]);
+
+it('deactivating an owner is critical', function (): void {
+    $actor = makeOwner();
+    $other = makeOwner('second@example.test');
+    ActionLog::query()->delete();
+
+    $this->actingAs($actor)->postJson("/api/access/users/{$other->id}/deactivate", ['reason' => 'x'])->assertOk();
+
+    expect(ActionLog::sole()->severity)->toBe('critical');
+});
+
+it('clears the lockout on reactivate and keeps an existing activated_at', function (): void {
+    $actor = lifecycleActor();
+    $first = now()->subYear()->startOfSecond();
+    $target = makeUser('t@example.test');
+    $fresh = makeUser('f@example.test');
+    makeState($target, 'suspended', ['activated_at' => $first, 'locked_until' => now()->addDay(), 'failed_login_count' => 7]);
+    makeState($fresh, 'deactivated');
+
+    $this->actingAs($actor)->postJson("/api/access/users/{$target->id}/reactivate")->assertOk();
+    $this->actingAs($actor)->postJson("/api/access/users/{$fresh->id}/reactivate")->assertOk();
+
+    $state = UserAccessState::where('user_id', $target->id)->first();
+    expect($state->locked_until)->toBeNull()->and($state->failed_login_count)->toBe(0)->and($state->activated_at->equalTo($first))->toBeTrue()
+        ->and(UserAccessState::where('user_id', $fresh->id)->first()->activated_at)->not->toBeNull();
+});
+
+it('answers 409 user.in_use when a host foreign key blocks the delete and changes nothing', function (): void {
+    $actor = lifecycleActor();
+    $target = makeUser('t@example.test');
+    makeState($target);
+    SavedView::create(['user_id' => $target->id, 'page' => 'users', 'name' => 'v', 'filters' => []]);
+    $target->assignRole(makeRole('viewer'));
+    TestUser::deleting(static function (): never {
+        $integrity = new class('FK') extends PDOException
+        {
+            protected $code = '23000';
+        };
+
+        throw new QueryException('sqlite', 'delete from users', [], $integrity);
+    });
+    ActionLog::query()->delete();
+
+    $this->actingAs($actor)->deleteJson("/api/access/users/{$target->id}", ['confirmation' => 't@example.test'])->assertStatus(409)
+        ->assertJson(['success' => false, 'code' => 'user.in_use']);
+    TestUser::flushEventListeners();
+
+    expect(TestUser::find($target->id))->not->toBeNull()->and(SavedView::count())->toBe(1)->and(UserAccessState::count())->toBe(1)
+        ->and(DB::table('model_has_roles')->where('model_id', $target->id)->count())->toBe(1)->and(ActionLog::count())->toBe(0);
+});
 
 it('unlocks a locked user and resets the counters', function (): void {
     $actor = lifecycleActor();
@@ -138,19 +211,56 @@ it('requires a reason of at most 500 characters to suspend or deactivate', funct
     expect(UserAccessState::count())->toBe(0);
 })->with(['suspend', 'deactivate']);
 
-it('sends the reset link, audits it and never exposes a token', function (): void {
-    Notification::fake();
+function fakeBroker(string $status, string $name = 'users'): void
+{
+    $broker = Mockery::mock(PasswordBroker::class);
+    $broker->shouldReceive('sendResetLink')->with(['email' => 't@example.test'])->andReturn($status);
+    $expectation = Password::shouldReceive('broker');
+    $name === null ? $expectation->withNoArgs()->andReturn($broker) : $expectation->with($name)->andReturn($broker);
+}
+
+it('sends the reset link, ends access, audits once and never exposes a token', function (): void {
+    config(['session.driver' => 'database']);
+    createSessionsTable();
+    fakeBroker(Password::RESET_LINK_SENT);
     $actor = lifecycleActor();
     $target = makeUser('t@example.test');
-    $target->forceFill(['password_changed_at' => null]);
+    makeState($target, 'active', ['password_changed_at' => now()]);
+    insertSession('s1', $target->id);
     ActionLog::query()->delete();
 
-    $response = $this->actingAs($actor)->postJson("/api/access/users/{$target->id}/force-password-reset")->assertOk();
+    $response = $this->actingAs($actor)->postJson("/api/access/users/{$target->id}/force-password-reset")->assertOk()
+        ->assertJsonPath('meta.link_sent', true)->assertJsonPath('meta.broker_status', 'passwords.sent')->assertJsonPath('data.status', 'active');
 
-    expect($response->json('meta.link_sent'))->toBeBool()->and($response->getContent())->not->toContain('token');
+    expect($response->getContent())->not->toContain('"token"')
+        ->and(DB::table('sessions')->where('user_id', $target->id)->count())->toBe(0)
+        ->and(UserAccessState::where('user_id', $target->id)->first()->password_changed_at)->toBeNull();
     $log = ActionLog::sole();
-    expect($log->event)->toBe('users.password_reset_forced')->and($log->severity)->toBe('info')->and($log->subject_id)->toBe($target->id);
+    expect($log->event)->toBe('users.password_reset_forced')->and($log->severity)->toBe('info')->and($log->subject_id)->toBe($target->id)
+        ->and($log->meta)->toEqual(['broker_status' => 'passwords.sent']);
+});
+
+it('does not create a state row just to force a reset', function (): void {
+    fakeBroker(Password::RESET_LINK_SENT);
+    $target = makeUser('t@example.test');
+
+    $this->actingAs(lifecycleActor())->postJson("/api/access/users/{$target->id}/force-password-reset")->assertOk();
+
     expect(UserAccessState::count())->toBe(0);
+});
+
+it('reports a throttled broker without link_sent and still ends access', function (): void {
+    config(['session.driver' => 'database']);
+    createSessionsTable();
+    fakeBroker(Password::RESET_THROTTLED);
+    $target = makeUser('t@example.test');
+    insertSession('s1', $target->id);
+    ActionLog::query()->delete();
+
+    $this->actingAs(lifecycleActor())->postJson("/api/access/users/{$target->id}/force-password-reset")->assertOk()
+        ->assertJsonPath('meta.link_sent', false)->assertJsonPath('meta.broker_status', 'passwords.throttled');
+
+    expect(DB::table('sessions')->where('user_id', $target->id)->count())->toBe(0)->and(ActionLog::sole()->meta)->toEqual(['broker_status' => 'passwords.throttled']);
 });
 
 it('reports link_sent false when mail fails without undoing the audit entry', function (): void {
@@ -159,9 +269,22 @@ it('reports link_sent false when mail fails without undoing the audit entry', fu
     Password::shouldReceive('broker')->andThrow(new RuntimeException('smtp down'));
     ActionLog::query()->delete();
 
-    $this->actingAs($actor)->postJson("/api/access/users/{$target->id}/force-password-reset")->assertOk()->assertJsonPath('meta.link_sent', false);
+    $this->actingAs($actor)->postJson("/api/access/users/{$target->id}/force-password-reset")->assertOk()
+        ->assertJsonPath('meta.link_sent', false)->assertJsonPath('meta.broker_status', 'mail_failed');
 
     expect(ActionLog::where('event', 'users.password_reset_forced')->count())->toBe(1);
+});
+
+it('resolves the broker of the package guards provider', function (): void {
+    config([
+        'auth.providers.staff' => ['driver' => 'eloquent', 'model' => TestUser::class],
+        'auth.guards.web.provider' => 'staff',
+        'auth.passwords.staff' => ['provider' => 'staff', 'table' => 'password_reset_tokens', 'expire' => 60, 'throttle' => 60],
+    ]);
+    fakeBroker(Password::RESET_LINK_SENT, 'staff');
+    $target = makeUser('t@example.test');
+
+    $this->actingAs(lifecycleActor())->postJson("/api/access/users/{$target->id}/force-password-reset")->assertOk()->assertJsonPath('meta.link_sent', true);
 });
 
 it('deletes a user, cleaning access rows and keeping invitations', function (): void {

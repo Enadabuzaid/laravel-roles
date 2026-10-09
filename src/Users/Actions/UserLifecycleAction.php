@@ -47,13 +47,8 @@ abstract class UserLifecycleAction extends Action
     /** @param  array<string, mixed>  $attributes */
     protected function writeState(Model $user, ?UserAccessState $state, array $attributes): void
     {
-        if ($state === null) {
-            UserAccessState::query()->create(['user_id' => $user->getKey(), ...$attributes]);
-
-            return;
-        }
-
-        $state->update($attributes);
+        // A missing row is created with insert-or-ignore, then re-read under lock: a concurrent creator can't collide.
+        ($state ?? UserAccessState::lockedFor($user->getKey()))->update($attributes);
     }
 
     protected function invalidTransition(UserStatus $current, string $action): AccessException

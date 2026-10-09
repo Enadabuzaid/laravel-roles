@@ -68,9 +68,9 @@ final class UserLifecycleController
     {
         $this->authorizePermission($request, 'access.users.update');
         $user = $request->targetUser();
-        $sent = $action->handle($user);
+        $result = $action->handle($user);
 
-        return $this->represent($request, $user, ['link_sent' => $sent]);
+        return $this->represent($request, $user, $result);
     }
 
     public function destroy(DeleteUserRequest $request, DeleteUser $action): JsonResponse

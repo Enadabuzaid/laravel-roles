@@ -19,16 +19,11 @@ final class RecordLastLogin extends Action
         }
 
         $this->transaction(function () use ($user, $ip): void {
-            $state = UserAccessState::query()->where('user_id', $user->getKey())->first();
-            $attributes = ['last_login_at' => now(), 'last_login_ip' => $ip === null ? null : mb_substr($ip, 0, 45), 'failed_login_count' => 0];
-
-            if ($state === null) {
-                UserAccessState::query()->create(['user_id' => $user->getKey(), ...$attributes]);
-
-                return;
-            }
-
-            $state->update($attributes);
+            UserAccessState::lockedFor($user->getKey())->update([
+                'last_login_at' => now(),
+                'last_login_ip' => $ip === null ? null : mb_substr($ip, 0, 45),
+                'failed_login_count' => 0,
+            ]);
         });
     }
 }
