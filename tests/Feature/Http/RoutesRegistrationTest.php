@@ -24,14 +24,41 @@ it('registers a module routes file under the prefix, name prefix, middleware and
 
     expect($route)->not->toBeNull()
         ->and($route->uri())->toBe('api/access/ping')
-        ->and($route->gatherMiddleware())->toContain('web', 'auth', 'throttle:60,1');
+        ->and($route->gatherMiddleware())->toContain('web', 'auth', 'throttle:access');
 });
 
-it('uses the configured rate limit', function (): void {
-    config(['roles.http.rate_limit' => '10,2']);
+it('throttles through the named access limiter and honours the configured limit', function (): void {
+    config(['roles.http.rate_limit' => 2]);
+    RoutesRegistrar::register('roles', pingFixture());
+    $user = makeUser();
+
+    $this->actingAs($user)->getJson('/api/access/ping')->assertOk();
+    $this->actingAs($user)->getJson('/api/access/ping')->assertOk();
+    $this->actingAs($user)->getJson('/api/access/ping')->assertStatus(429)->assertJson(['success' => false, 'code' => 'too_many_requests']);
+
+    $other = makeUser('other@example.test');
+    $this->actingAs($other)->getJson('/api/access/ping')->assertOk();
+});
+
+it('still parses the legacy attempts,minutes string', function (): void {
+    config(['roles.http.rate_limit' => '1,5']);
+    expect(RoutesRegistrar::rateLimit())->toBe(['attempts' => 1, 'minutes' => 5]);
+
+    config(['roles.http.rate_limit' => '30']);
+    expect(RoutesRegistrar::rateLimit())->toBe(['attempts' => 30, 'minutes' => 1]);
+
+    RoutesRegistrar::register('roles', pingFixture());
+    $user = makeUser();
+    config(['roles.http.rate_limit' => '1,5']);
+    $this->actingAs($user)->getJson('/api/access/ping')->assertOk();
+    $this->actingAs($user)->getJson('/api/access/ping')->assertStatus(429);
+});
+
+it('does not throttle when the rate limit is disabled', function (): void {
+    config(['roles.http.rate_limit' => null]);
     RoutesRegistrar::register('roles', pingFixture());
 
-    expect(pingRoute()->gatherMiddleware())->toContain('throttle:10,2');
+    expect(RoutesRegistrar::rateLimit())->toBeNull()->and(pingRoute()->gatherMiddleware())->not->toContain('throttle:access');
 });
 
 it('skips the routes file when the module is disabled', function (): void {

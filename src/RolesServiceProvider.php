@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Enadstack\LaravelRoles;
 
 use Enadstack\LaravelRoles\Support\Http\ApiExceptionRenderer;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Foundation\Exceptions\Handler;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -77,6 +79,17 @@ class RolesServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->app->make(Router::class)->aliasMiddleware('access', Http\Middleware\RequireAccess::class);
+
+        RateLimiter::for('access', static function (Request $request): Limit {
+            $limit = Http\Support\RoutesRegistrar::rateLimit();
+            if ($limit === null) {
+                return Limit::none();
+            }
+
+            $user = $request->user();
+
+            return Limit::perMinutes($limit['minutes'], $limit['attempts'])->by($user !== null ? 'user:'.$user->getAuthIdentifier() : 'ip:'.$request->ip());
+        });
 
         Gate::before(new Roles\OwnerGate);
 

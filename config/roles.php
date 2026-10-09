@@ -44,7 +44,7 @@ return [
         'middleware' => ['api', 'auth:sanctum'],
     ],
 
-    'http' => ['rate_limit' => '60,1'], // throttle:<attempts>,<minutes> on every package route
+    'http' => ['rate_limit' => 60], // requests per minute per user (IP when guest) on every package route via the `access` limiter; null disables. The legacy 'attempts,minutes' string still works.
 
     'permissions_file' => base_path('access/permissions.php'),
 
