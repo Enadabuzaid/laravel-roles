@@ -7,6 +7,7 @@ namespace Enadstack\LaravelRoles;
 use Enadstack\LaravelRoles\Contracts\AccessUser;
 use Enadstack\LaravelRoles\Support\Http\ApiExceptionRenderer;
 use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Foundation\Exceptions\Handler;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -52,8 +53,6 @@ class RolesServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
-
         Gate::before(function ($user): ?bool {
             $super = config('roles.super_role');
 
@@ -62,7 +61,10 @@ class RolesServiceProvider extends ServiceProvider
 
         if ($this->app->runningInConsole()) {
             $this->publishes([__DIR__.'/../config/roles.php' => config_path('roles.php')], 'roles-config');
-            $this->publishes([__DIR__.'/../database/migrations' => database_path('migrations')], 'roles-migrations');
+            $this->publishes(
+                (new Support\MigrationPublisher(new Filesystem, database_path('migrations')))->targets(),
+                'roles-migrations',
+            );
             $this->publishes([__DIR__.'/../stubs/permissions.php' => base_path('access/permissions.php')], 'roles-permissions');
         }
     }

@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 2.0.0-alpha.2 — 2026-10-09
+
+### Changed
+- Extension migrations are no longer auto-loaded. They ship as stubs and are published with install-time timestamps (`roles-migrations` tag, done by `roles:install`) so they always run after Spatie's permission tables migration.
+- `roles:install` publishes Spatie's migration first (if missing), then the extension migrations.
+- The stubs throw a clear `RuntimeException` when the Spatie tables are missing.
+
+### Upgrading from alpha.1
+- Run `php artisan vendor:publish --tag=roles-migrations` only on fresh databases; existing installs already have the columns.
+
 ## 2.0.0-alpha.1 — 2026-10-09
 
 ### Breaking changes

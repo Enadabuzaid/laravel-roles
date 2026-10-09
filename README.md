@@ -12,7 +12,7 @@ PHP ^8.3, Laravel ^13, spatie/laravel-permission ^8.
 
 ```bash
 composer require enadstack/laravel-roles
-php artisan roles:install            # publishes config/roles.php, access/permissions.php, Spatie config + migration
+php artisan roles:install            # publishes config/roles.php, access/permissions.php, Spatie config + migrations, then the extension migrations
 php artisan migrate
 php artisan roles:sync               # registry file -> permissions table
 php artisan roles:seed               # default roles (owner, admin, manager, viewer)
@@ -20,6 +20,10 @@ php artisan roles:owner you@example.com
 ```
 
 `roles:install` accepts `--teams=1|0`, `--id-type=int|uuid|ulid` and `--force`. The options are only applied when `config/roles.php` is created (or with `--force`); otherwise a warning is printed.
+
+### Migrations are published, not auto-loaded
+
+The package ships two migration stubs (`extend_roles_table`, `extend_permissions_table`) that add columns to Spatie's `roles` and `permissions` tables. They are published with install-time timestamps (`php artisan vendor:publish --tag=roles-migrations`, done for you by `roles:install`) instead of being auto-loaded, so they always sort after Spatie's `create_permission_tables` migration regardless of when that was published. Republishing never creates duplicates. If the Spatie tables are missing, the migration fails with a clear message rather than a raw SQL error.
 
 ### Your user model
 

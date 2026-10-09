@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Enadstack\LaravelRoles\Console;
 
+use Enadstack\LaravelRoles\Support\MigrationPublisher;
 use Illuminate\Console\Command;
+use Illuminate\Filesystem\Filesystem;
 use Spatie\Permission\PermissionServiceProvider;
 
 class InstallCommand extends Command
@@ -38,8 +40,17 @@ class InstallCommand extends Command
         $this->callSilently('vendor:publish', ['--tag' => 'roles-permissions', '--force' => $force]);
 
         if (! file_exists(config_path('permission.php'))) {
-            $this->callSilently('vendor:publish', ['--provider' => PermissionServiceProvider::class]);
+            $this->callSilently('vendor:publish', ['--provider' => PermissionServiceProvider::class, '--tag' => 'permission-config']);
         }
+
+        $migrations = database_path('migrations');
+        $files = new Filesystem;
+
+        if ($files->glob($migrations.'/*_create_permission_tables.php') === []) {
+            $this->callSilently('vendor:publish', ['--provider' => PermissionServiceProvider::class, '--tag' => 'permission-migrations']);
+        }
+
+        (new MigrationPublisher($files, $migrations))->publish();
 
         if (! $configExisted || $force) {
             $this->applyOptions($teams, $idType);

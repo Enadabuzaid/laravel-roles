@@ -10,6 +10,12 @@ return new class extends Migration
 {
     public function up(): void
     {
+        $base = config('permission.table_names.permissions', 'permissions');
+
+        if (! Schema::hasTable($base)) {
+            throw new RuntimeException("laravel-roles: the Spatie permission tables are missing — run Spatie's permission migrations first");
+        }
+
         Schema::table(config('permission.table_names.permissions', 'permissions'), function (Blueprint $table) {
             $table->string('module', 64)->nullable()->index();
             $table->jsonb('label')->nullable();

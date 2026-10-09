@@ -14,6 +14,35 @@ abstract class TestCase extends Orchestra
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        self::removePublishedExtensionMigrations();
+
+        parent::setUp();
+    }
+
+    protected function tearDown(): void
+    {
+        parent::tearDown();
+
+        self::removePublishedExtensionMigrations();
+    }
+
+    /**
+     * roles:install publishes the extension migrations into the Testbench skeleton; they
+     * must not leak into other tests, which load the stubs through tests/database/migrations.
+     */
+    private static function removePublishedExtensionMigrations(): void
+    {
+        $directory = \Orchestra\Testbench\default_skeleton_path('database/migrations');
+
+        foreach (['extend_roles_table', 'extend_permissions_table'] as $name) {
+            foreach (glob($directory.'/*_'.$name.'.php') ?: [] as $file) {
+                @unlink($file);
+            }
+        }
+    }
+
     /** @return list<class-string> */
     protected function getPackageProviders($app): array
     {
