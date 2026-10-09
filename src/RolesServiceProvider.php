@@ -26,6 +26,11 @@ class RolesServiceProvider extends ServiceProvider
             }
         }
 
+        $this->app->singleton(Core\Registry\PermissionRegistry::class, fn () => new Core\Registry\PermissionRegistry(
+            config('roles.permissions_file'),
+            array_keys(array_filter((array) config('roles.modules'))),
+        ));
+
         $this->callAfterResolving(ExceptionHandler::class, function (ExceptionHandler $handler): void {
             if ($handler instanceof Handler) {
                 $handler->renderable(fn (\Throwable $e, Request $request) => ApiExceptionRenderer::render($e, $request));

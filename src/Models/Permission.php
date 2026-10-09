@@ -7,8 +7,19 @@ namespace Enadstack\LaravelRoles\Models;
 use Enadstack\LaravelRoles\Concerns\HasTranslations;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Support\Carbon;
 use Spatie\Permission\Models\Permission as SpatiePermission;
 
+/**
+ * @property array<string, string>|null $label
+ * @property array<string, string>|null $description
+ * @property string|null $module
+ * @property string $risk
+ * @property int $sort_order
+ * @property string $source
+ * @property Carbon|null $deprecated_at
+ * @property Carbon|null $last_synced_at
+ */
 class Permission extends SpatiePermission
 {
     use HasTranslations;
