@@ -294,29 +294,27 @@ it('refuses every guardrail on both endpoints without changing anything', functi
 it('is atomic over HTTP when the violation is on the second processed role', function (string $guardrail) {
     expect($this->one->id)->toBeLessThan($this->two->id);
 
+    makePermission('c.view');
     $actor = matrixActor();
     $actor->givePermissionTo('a.view', 'b.view');
-    $second = ['grant' => ['b.view']];
 
     if ($guardrail === 'self_role_change') {
         $actor->assignRole($this->two);
-    } else {
-        $actor = matrixActor(['access.permissions.view', 'access.roles.update']);
-        $actor->givePermissionTo('a.view');
-        $second = ['grant' => ['b.view']];
     }
 
     $actor = $actor->fresh();
     $pivot = pivotSnapshot();
     ActionLog::query()->delete();
 
+    // `one` gets a real change (b.view, which the actor holds); the violation is on `two`, processed second.
     $this->actingAs($actor)->putJson('/api/access/matrix', ['changes' => [
-        $this->two->id => $second,
-        $this->one->id => ['grant' => ['a.view'], 'revoke' => []],
+        $this->two->id => ['grant' => [$guardrail === 'escalation' ? 'c.view' : 'b.view']],
+        $this->one->id => ['grant' => ['b.view']],
     ]])->assertForbidden()->assertJsonPath('code', "guardrail.{$guardrail}");
 
     expect(pivotSnapshot())->toBe($pivot)->and(ActionLog::count())->toBe(0)
-        ->and($this->one->fresh()->permissions->pluck('name')->all())->toBe(['a.view']);
+        ->and($this->one->fresh()->permissions->pluck('name')->all())->toBe(['a.view'])
+        ->and($this->two->fresh()->permissions)->toHaveCount(0);
 })->with(['self_role_change', 'escalation']);
 
 it('treats a role of another guard as 404 on both endpoints', function () {
