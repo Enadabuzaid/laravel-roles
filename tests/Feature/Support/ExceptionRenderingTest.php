@@ -8,6 +8,7 @@ use Illuminate\Auth\AuthenticationException;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
+use Illuminate\Session\TokenMismatchException;
 use Illuminate\Support\Facades\Route;
 
 beforeEach(function () {
@@ -20,6 +21,8 @@ beforeEach(function () {
         Route::get('conflict', fn () => abort(409, 'Already exists.'));
         Route::get('throttled', fn () => abort(429));
         Route::get('teapot', fn () => abort(418));
+        Route::get('expired', fn () => abort(419));
+        Route::get('csrf', fn () => throw new TokenMismatchException('CSRF token mismatch.'));
         Route::get('only-get', fn () => 'ok');
     });
     Route::get('other/boom', fn () => throw new AccessException('x', 'guardrail.last_owner', 403));
@@ -53,6 +56,11 @@ it('renders other http exceptions in the envelope with the exception status', fu
     $this->getJson('api/access/throttled')->assertStatus(429)->assertJson(['success' => false, 'code' => 'too_many_requests']);
     $this->getJson('api/access/teapot')->assertStatus(418)->assertJson(['success' => false, 'code' => 'http_error']);
     $this->postJson('api/access/only-get')->assertStatus(405)->assertJson(['success' => false, 'code' => 'method_not_allowed']);
+});
+
+it('maps an expired session and a csrf mismatch to session_expired with 419', function () {
+    $this->getJson('api/access/expired')->assertStatus(419)->assertJson(['success' => false, 'code' => 'session_expired']);
+    $this->getJson('api/access/csrf')->assertStatus(419)->assertJson(['success' => false, 'code' => 'session_expired']);
 });
 
 it('also covers the bare prefix url', function () {
