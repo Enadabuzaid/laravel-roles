@@ -18,7 +18,7 @@ function assigner(array $permissions = []): TestUser
 }
 
 it('assigns a role by name or id and audits once as the authenticated actor', function (): void {
-    $actor = assigner();
+    $actor = assigner(['access.users.view']);
     $target = makeUser('t@example.test');
     $role = makeRole('editor', [], ['label' => ['en' => 'Editor'], 'color' => '#112233']);
     ActionLog::query()->delete();
@@ -195,4 +195,28 @@ it('uses a constant number of queries regardless of the role permission count', 
     $large = $measure(60);
 
     expect($large)->toBe($small);
+});
+
+it('returns the target name and email only to actors who may view users', function (): void {
+    $target = makeUser('t@example.test');
+    makeRole('editor');
+
+    $without = assigner();
+    $this->actingAs($without)->postJson("/api/access/users/{$target->id}/roles", ['role' => 'editor'])->assertOk()
+        ->assertJsonPath('data.user', ['id' => $target->id]);
+    $this->actingAs($without)->putJson("/api/access/users/{$target->id}/roles", ['roles' => ['editor']])->assertOk()
+        ->assertJsonPath('data.user', ['id' => $target->id]);
+
+    $with = assigner(['access.users.view']);
+    $this->actingAs($with)->putJson("/api/access/users/{$target->id}/roles", ['roles' => ['editor']])->assertOk()
+        ->assertJsonPath('data.user', ['id' => $target->id, 'name' => 'A', 'email' => 't@example.test']);
+});
+
+it('hides name and email on removal for actors without users view', function (): void {
+    $target = makeUser('t@example.test');
+    $role = makeRole('editor');
+    $target->assignRole($role);
+
+    $this->actingAs(assigner())->deleteJson("/api/access/users/{$target->id}/roles/{$role->id}")->assertOk()
+        ->assertJsonPath('data.user', ['id' => $target->id]);
 });
