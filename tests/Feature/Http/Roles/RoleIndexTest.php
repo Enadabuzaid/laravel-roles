@@ -33,7 +33,7 @@ it('lists roles in the paginated envelope with counts and abilities', function (
 
     expect($row['members_count'])->toBe(1)
         ->and($row['permissions_count'])->toBe(2)
-        ->and($row['abilities'])->toBe(['update' => true, 'delete' => false, 'assign' => false]);
+        ->and($row['abilities'])->toBe(['create' => false, 'update' => true, 'rename' => true, 'update_permissions' => false, 'delete' => false, 'assign' => false]);
 });
 
 it('filters by type and status', function (): void {

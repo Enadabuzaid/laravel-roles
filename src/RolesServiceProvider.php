@@ -9,6 +9,7 @@ use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Foundation\Exceptions\Handler;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Spatie\Permission\Models\Permission;
@@ -75,6 +76,8 @@ class RolesServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->app->make(Router::class)->aliasMiddleware('access', Http\Middleware\RequireAccess::class);
+
         Gate::before(new Roles\OwnerGate);
 
         Gate::policy((string) config('permission.models.role'), Roles\Policies\RolePolicy::class);

@@ -51,10 +51,10 @@ it('answers 404 for a permission of another guard', function (): void {
 it('keeps roles and permissions of another guard out of lists, overviews, modules and the matrix', function (): void {
     $this->foreignPermission->forceFill(['module' => 'foreignmod'])->save();
 
-    $roles = $this->actingAs($this->admin)->getJson('/api/access/roles?status=all&per_page=100')->assertOk()->json('data');
+    $roles = $this->actingAs($this->admin)->getJson('/api/access/roles?filter[status]=all&per_page=100')->assertOk()->json('data');
     expect(collect($roles)->pluck('name'))->not->toContain('foreign', 'foreign-trashed');
 
-    $permissions = $this->actingAs($this->admin)->getJson('/api/access/permissions?status=all&per_page=100')->assertOk()->json('data');
+    $permissions = $this->actingAs($this->admin)->getJson('/api/access/permissions?filter[status]=all&per_page=100')->assertOk()->json('data');
     expect(collect($permissions)->pluck('name'))->not->toContain('foreign.view');
 
     $modules = $this->actingAs($this->admin)->getJson('/api/access/permissions/modules')->assertOk()->json('data');

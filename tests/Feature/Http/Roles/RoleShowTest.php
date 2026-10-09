@@ -19,7 +19,7 @@ it('shows a role with permissions and abilities', function (): void {
         ->assertJsonPath('data.name', 'auditor')
         ->assertJsonPath('data.permissions_count', 1)
         ->assertJsonPath('data.permissions.0.name', 'access.roles.view')
-        ->assertJsonPath('data.abilities', ['update' => false, 'delete' => false, 'assign' => true]);
+        ->assertJsonPath('data.abilities', ['create' => false, 'update' => false, 'rename' => false, 'update_permissions' => false, 'delete' => false, 'assign' => true]);
 });
 
 it('shows a trashed role', function (): void {

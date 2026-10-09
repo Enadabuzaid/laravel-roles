@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Enadstack\LaravelRoles\Roles\Http\Resources;
 
 use Enadstack\LaravelRoles\Models\Role;
+use Enadstack\LaravelRoles\Roles\Support\ActorRoles;
+use Enadstack\LaravelRoles\Roles\Support\RoleRisk;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Gate;
@@ -15,6 +17,7 @@ final class RoleResource extends JsonResource
     public function toArray(Request $request): array
     {
         $role = $this->role();
+        $lock = self::lock($request, $role);
 
         return [
             'id' => $role->getKey(),
@@ -39,7 +42,10 @@ final class RoleResource extends JsonResource
             'deleted_at' => $role->getAttribute('deleted_at'),
             'created_at' => $role->created_at,
             'updated_at' => $role->updated_at,
-            'abilities' => self::abilities($request),
+            'is_owner' => $lock['is_owner'],
+            'locked' => $lock['reason'] !== null,
+            'lock_reason' => $lock['reason'],
+            'abilities' => self::abilities($request, $lock),
         ];
     }
 
@@ -55,18 +61,41 @@ final class RoleResource extends JsonResource
     }
 
     /**
-     * The policy abilities do not depend on the role, so they are resolved once per request.
+     * Why the role can't be freely edited: the owner role, a system role, or a role the current user holds.
      *
-     * @return array{update: bool, delete: bool, assign: bool}
+     * @return array{is_owner: bool, reason: 'owner'|'system'|'held'|null, actor_is_owner: bool}
      */
-    private static function abilities(Request $request): array
+    private static function lock(Request $request, Role $role): array
     {
-        /** @var array{update: bool, delete: bool, assign: bool}|null $cached */
+        $actor = ActorRoles::for($request);
+        $isOwner = RoleRisk::isOwnerRole($role) && $role->guard_name === (string) config('roles.guard');
+
+        $reason = match (true) {
+            $isOwner => 'owner',
+            (bool) $role->is_system => 'system',
+            ! $actor['is_owner'] && isset($actor['held'][(int) $role->getKey()]) => 'held',
+            default => null,
+        };
+
+        return ['is_owner' => $isOwner, 'reason' => $reason, 'actor_is_owner' => $actor['is_owner']];
+    }
+
+    /**
+     * The policy abilities do not depend on the role and are resolved once per request; the per-role flags
+     * only narrow them to what the server would actually accept.
+     *
+     * @param  array{is_owner: bool, reason: 'owner'|'system'|'held'|null, actor_is_owner: bool}  $lock
+     * @return array{create: bool, update: bool, rename: bool, update_permissions: bool, delete: bool, assign: bool}
+     */
+    private static function abilities(Request $request, array $lock): array
+    {
+        /** @var array{create: bool, update: bool, delete: bool, assign: bool}|null $cached */
         $cached = $request->attributes->get('roles.abilities');
 
         if ($cached === null) {
             $model = (string) config('permission.models.role');
             $cached = [
+                'create' => Gate::allows('create', $model),
                 'update' => Gate::allows('update', $model),
                 'delete' => Gate::allows('delete', $model),
                 'assign' => Gate::allows('assign', $model),
@@ -74,6 +103,15 @@ final class RoleResource extends JsonResource
             $request->attributes->set('roles.abilities', $cached);
         }
 
-        return $cached;
+        $fixed = in_array($lock['reason'], ['owner', 'system'], true);
+
+        return [
+            'create' => $cached['create'],
+            'update' => $cached['update'],
+            'rename' => $cached['update'] && ! $fixed,
+            'update_permissions' => $cached['update'] && $lock['reason'] !== 'owner' && $lock['reason'] !== 'held',
+            'delete' => $cached['delete'] && ! $fixed,
+            'assign' => $cached['assign'] && ! ($lock['is_owner'] && ! $lock['actor_is_owner']),
+        ];
     }
 }
