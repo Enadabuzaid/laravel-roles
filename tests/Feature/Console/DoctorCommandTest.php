@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use Enadstack\LaravelRoles\Core\Doctor\Check;
+use Enadstack\LaravelRoles\Core\Doctor\CheckResult;
+use Enadstack\LaravelRoles\Core\Doctor\Checks\RoutesProtectedCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\UserModelCheck;
 use Enadstack\LaravelRoles\Core\Doctor\CheckStatus;
 use Enadstack\LaravelRoles\Core\Registry\PermissionRegistry;
@@ -56,3 +59,41 @@ it('fails the user model check for a plain class or a missing class', function (
 
     expect(app(UserModelCheck::class)->run()->status)->toBe(CheckStatus::Fail);
 })->with([stdClass::class, 'App\\Missing\\Nope']);
+
+it('does not match every route when the prefix is empty', function () {
+    config(['roles.routes.prefix' => '']);
+    Route::get('some/open/route', fn () => 'x');
+
+    $result = app(RoutesProtectedCheck::class)->run();
+
+    expect($result->status)->toBe(CheckStatus::Pass)->and($result->message)->toContain('No package routes');
+});
+
+it('matches the route prefix on a path segment boundary', function () {
+    Route::get('api/accessory/list', fn () => 'x');
+
+    expect(app(RoutesProtectedCheck::class)->run()->message)->toContain('No package routes');
+
+    Route::get('api/access', fn () => 'x');
+
+    expect(app(RoutesProtectedCheck::class)->run()->status)->toBe(CheckStatus::Fail);
+});
+
+it('reports a throwing check as FAIL instead of crashing', function () {
+    config(['roles.doctor.checks' => [ThrowingCheck::class]]);
+
+    $this->artisan('roles:doctor')->expectsOutputToContain('FAIL  throwing — boom')->assertExitCode(1);
+});
+
+final class ThrowingCheck implements Check
+{
+    public function name(): string
+    {
+        return 'throwing';
+    }
+
+    public function run(): CheckResult
+    {
+        throw new RuntimeException('boom');
+    }
+}

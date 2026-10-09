@@ -7,6 +7,7 @@ namespace Enadstack\LaravelRoles\Console;
 use Enadstack\LaravelRoles\Core\Doctor\Check;
 use Enadstack\LaravelRoles\Core\Doctor\CheckStatus;
 use Illuminate\Console\Command;
+use Throwable;
 
 class DoctorCommand extends Command
 {
@@ -19,17 +20,28 @@ class DoctorCommand extends Command
         $failed = false;
 
         foreach ((array) config('roles.doctor.checks', []) as $class) {
-            $check = app($class);
-            if (! $check instanceof Check) {
-                $this->line('FAIL  '.(is_string($class) ? $class : 'check').' — does not implement '.Check::class);
+            $label = is_string($class) ? $class : 'check';
+
+            try {
+                $check = app($class);
+                if (! $check instanceof Check) {
+                    $this->line('FAIL  '.$label.' — does not implement '.Check::class);
+                    $failed = true;
+
+                    continue;
+                }
+
+                $label = $check->name();
+                $result = $check->run();
+            } catch (Throwable $e) {
+                $this->line('FAIL  '.$label.' — '.$e->getMessage());
                 $failed = true;
 
                 continue;
             }
 
-            $result = $check->run();
             $failed = $failed || $result->status === CheckStatus::Fail;
-            $this->line(strtoupper($result->status->value).'  '.$check->name().' — '.$result->message);
+            $this->line(strtoupper($result->status->value).'  '.$label.' — '.$result->message);
         }
 
         return $failed ? self::FAILURE : self::SUCCESS;

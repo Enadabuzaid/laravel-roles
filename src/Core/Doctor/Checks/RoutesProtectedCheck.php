@@ -21,9 +21,13 @@ final class RoutesProtectedCheck implements Check
     public function run(): CheckResult
     {
         $prefix = trim((string) config('roles.routes.prefix'), '/');
+        if ($prefix === '') {
+            return CheckResult::pass('No package routes registered.');
+        }
+
         $routes = array_filter(
             Router::getRoutes()->getRoutes(),
-            fn (Route $route): bool => str_starts_with($route->uri(), $prefix),
+            fn (Route $route): bool => $route->uri() === $prefix || str_starts_with($route->uri(), $prefix.'/'),
         );
 
         if ($routes === []) {

@@ -43,6 +43,8 @@ class InstallCommand extends Command
 
         if (! $configExisted || $force) {
             $this->applyOptions($teams, $idType);
+        } elseif ($teamsOption !== null || $idOption !== null) {
+            $this->components->warn('config/roles.php already exists: --teams / --id-type were not applied. Re-run with --force or edit the file.');
         }
 
         $this->components->info('Installed. Next steps:');

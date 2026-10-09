@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 2.0.0-alpha.1 — 2026-10-09
+
+### Breaking changes
+- Requires Laravel ^13 and spatie/laravel-permission ^8 (PHP ^8.3).
+- The Vue UI, v1 routes (`/admin/acl`) and v1 services are removed.
+- New `config/roles.php` shape; re-publish and migrate your settings.
+- v1 continues on the `1.x` branch.
+
+### Added
+- File-based permission registry with AR/EN labels, descriptions and risk levels; `roles:sync` (`--dry-run`, `--prune`).
+- `Role` and `Permission` models with translatable labels, soft-deprecation and system roles.
+- `HasAccess` trait and `AccessUser` contract; owner (super role) gate; role actions that enforce guardrails.
+- Commands: `roles:install`, `roles:sync`, `roles:seed`, `roles:owner`, `roles:doctor` (7 checks, throwing checks reported as FAIL).
+- Support layer: `ApiResponse` envelope, `ListQuery`/`ListDefinition` with escaped search, base `Action`.
+- Architecture and query-count guard tests; sqlite and pgsql test runs.
+
 ## [1.3.6] - 2025-12-24
 
 ### 🔧 Critical Route Fix & Installation Enhancements
