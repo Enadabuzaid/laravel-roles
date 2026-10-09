@@ -13,6 +13,7 @@ enum OperationType: string
     case ForceDeleteRole = 'force_delete_role';
     case DeletePermission = 'delete_permission';
     case RenameRole = 'rename_role';
+    case UpdateRolePermissions = 'update_role_permissions';
     case SuspendUser = 'suspend_user';
     case DeactivateUser = 'deactivate_user';
     case DeleteUser = 'delete_user';

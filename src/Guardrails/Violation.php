@@ -33,6 +33,11 @@ final class Violation
         return self::make('guardrail.high_risk_confirm_required', 'This grants high-risk access. Confirm to continue.');
     }
 
+    public static function ownerRoleLocked(): AccessException
+    {
+        return self::make('guardrail.owner_role_locked', "The Owner role always has full access and can't be edited.");
+    }
+
     public static function systemRole(): AccessException
     {
         return self::make('guardrail.system_role', "System roles can't be deleted or renamed.");

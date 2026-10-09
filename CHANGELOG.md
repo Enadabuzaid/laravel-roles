@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 2.0.0-alpha.5 — 2026-10-09
+
+### Added
+- Permission matrix: `GET matrix`, `PUT matrix` and `PUT roles/{role}/permissions`, backed by the `UpdateRolePermissions` and `UpdateMatrix` Actions (all guardrails asserted for every role before the first write, one transaction, one `roles.permissions_updated` audit entry per changed role, permission cache cleared).
+- Guardrails: `OperationType::UpdateRolePermissions` and `Operation::$addedPermissions` / `$removedPermissions`. New always-on `OwnerRoleLockedRule` (`guardrail.owner_role_locked`, applies to the system actor too); `SelfChangeRule`, `EscalationRule` and `HighRiskConfirmRule` now cover role-permission edits. Hosts get the new rule automatically (rules merge additively).
+- New error codes `permission.not_found` (404), `permission.deprecated` (409) and `permission.conflicting_changes` (422).
+
+### Changed
+- `SelfChangeRule` takes an `OwnerCounter` constructor argument (resolved by the container).
+
 ## 2.0.0-alpha.4 — 2026-10-09
 
 ### Added

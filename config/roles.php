@@ -15,6 +15,7 @@ use Enadstack\LaravelRoles\Guardrails\Rules\DestructiveConfirmationRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\EscalationRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\HighRiskConfirmRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\LastOwnerRule;
+use Enadstack\LaravelRoles\Guardrails\Rules\OwnerRoleLockedRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\SelfChangeRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\SelfDestructiveRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\SystemRoleRule;
@@ -57,6 +58,7 @@ return [
         'disabled' => [], // rule classes to switch off (a security decision)
         'rules' => [
             SystemRoleRule::class,
+            OwnerRoleLockedRule::class,
             SelfChangeRule::class,
             SelfDestructiveRule::class,
             EscalationRule::class,

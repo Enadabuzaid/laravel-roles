@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Enadstack\LaravelRoles\Roles\Http\Controllers\MatrixController;
 use Enadstack\LaravelRoles\Roles\Http\Controllers\RoleAssignmentController;
 use Enadstack\LaravelRoles\Roles\Http\Controllers\RoleController;
 use Enadstack\LaravelRoles\Roles\Http\Controllers\RoleMemberController;
@@ -30,3 +31,8 @@ Route::delete('users/{user}/roles/{role}', [RoleAssignmentController::class, 're
     ->middleware('can:access.roles.assign')->where(['user' => '[0-9]{1,18}', 'role' => '[0-9]{1,18}']);
 Route::put('users/{user}/roles', [RoleAssignmentController::class, 'sync'])->name('users.roles.sync')
     ->middleware('can:access.roles.assign')->where('user', '[0-9]{1,18}');
+
+Route::get('matrix', [MatrixController::class, 'show'])->name('matrix.show')->middleware('can:access.permissions.view');
+Route::put('matrix', [MatrixController::class, 'update'])->name('matrix.update')->middleware('can:access.roles.update');
+Route::put('roles/{role}/permissions', [MatrixController::class, 'updateRole'])->name('roles.permissions.update')
+    ->middleware('can:access.roles.update')->where('role', '[0-9]{1,18}');

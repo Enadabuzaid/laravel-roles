@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Enadstack\LaravelRoles\Guardrails;
 
+use Enadstack\LaravelRoles\Models\Permission;
 use Enadstack\LaravelRoles\Models\Role;
 use Illuminate\Database\Eloquent\Model;
 
@@ -12,6 +13,8 @@ final class Operation
     /**
      * @param  list<Role>  $added
      * @param  list<Role>  $removed
+     * @param  list<Permission>  $addedPermissions  permissions an UpdateRolePermissions operation grants to `role`
+     * @param  list<Permission>  $removedPermissions  permissions an UpdateRolePermissions operation revokes from `role`
      */
     public function __construct(
         public readonly OperationType $type,
@@ -23,6 +26,8 @@ final class Operation
         public readonly ?string $newName = null,
         public readonly bool $confirmed = false,
         public readonly ?string $confirmation = null,
+        public readonly array $addedPermissions = [],
+        public readonly array $removedPermissions = [],
     ) {}
 
     public function actorIsTarget(): bool
