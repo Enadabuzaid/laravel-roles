@@ -124,3 +124,43 @@ it('refuses writes without the sync permission', function (): void {
     $this->actingAs($viewer)->putJson('/api/access/permissions/'.$p->id, ['risk' => 'high'])->assertForbidden();
     $this->actingAs($viewer)->deleteJson('/api/access/permissions/'.$p->id, ['confirmation' => 'man.one'])->assertForbidden();
 });
+
+it('blocks lowering a high risk while the permission is held, and keeps state and audit untouched', function (): void {
+    $permission = manual(['name' => 'man.risky', 'risk' => 'high']);
+    $role = makeRole('holder');
+    $role->givePermissionTo($permission);
+    ActionLog::query()->delete();
+
+    $this->actingAs(permWriter())->putJson("/api/access/permissions/{$permission->id}", ['risk' => 'low'])
+        ->assertStatus(409)->assertJson(['code' => 'permission.in_use']);
+
+    expect($permission->fresh()->risk)->toBe('high')->and(ActionLog::count())->toBe(0);
+});
+
+it('blocks lowering a high risk while a user holds it directly', function (): void {
+    $permission = manual(['name' => 'man.direct', 'risk' => 'high']);
+    makeUser('direct@example.test')->givePermissionTo($permission);
+
+    $this->actingAs(permWriter())->putJson("/api/access/permissions/{$permission->id}", ['risk' => 'medium'])
+        ->assertStatus(409)->assertJson(['code' => 'permission.in_use']);
+    expect($permission->fresh()->risk)->toBe('high');
+});
+
+it('lowers an unheld high risk with a warning audit entry, and records raising or other edits as info', function (): void {
+    $permission = manual(['name' => 'man.free', 'risk' => 'high']);
+    ActionLog::query()->delete();
+
+    $this->actingAs(permWriter())->putJson("/api/access/permissions/{$permission->id}", ['risk' => 'low'])->assertOk()->assertJsonPath('data.risk', 'low');
+    expect(ActionLog::sole()->severity)->toBe('warning');
+
+    ActionLog::query()->delete();
+    $this->actingAs(permWriter())->putJson("/api/access/permissions/{$permission->id}", ['risk' => 'high'])->assertOk();
+    expect(ActionLog::sole()->severity)->toBe('info');
+});
+
+it('allows lowering a risk that is not high while held', function (): void {
+    $permission = manual(['name' => 'man.mid', 'risk' => 'medium']);
+    makeRole('holder2')->givePermissionTo($permission);
+
+    $this->actingAs(permWriter())->putJson("/api/access/permissions/{$permission->id}", ['risk' => 'low'])->assertOk();
+});

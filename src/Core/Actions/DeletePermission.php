@@ -6,6 +6,7 @@ namespace Enadstack\LaravelRoles\Core\Actions;
 
 use Enadstack\LaravelRoles\Audit\AuditRecorder;
 use Enadstack\LaravelRoles\Audit\Severity;
+use Enadstack\LaravelRoles\Core\Support\PermissionHolders;
 use Enadstack\LaravelRoles\Guardrails\Guardrails;
 use Enadstack\LaravelRoles\Guardrails\Operation;
 use Enadstack\LaravelRoles\Guardrails\OperationType;
@@ -13,7 +14,6 @@ use Enadstack\LaravelRoles\Models\Permission;
 use Enadstack\LaravelRoles\Support\Action;
 use Enadstack\LaravelRoles\Support\ActorContext;
 use Enadstack\LaravelRoles\Support\Exceptions\AccessException;
-use Illuminate\Support\Facades\DB;
 use Spatie\Permission\PermissionRegistrar;
 
 final class DeletePermission extends Action
@@ -29,7 +29,7 @@ final class DeletePermission extends Action
                 throw new AccessException('Registry permissions cannot be deleted here; remove it from the registry and sync with prune.', 'permission.registry_managed', 409);
             }
 
-            $holders = $this->holderCount($fresh);
+            $holders = PermissionHolders::count($fresh);
             if ($holders > 0) {
                 throw new AccessException(
                     "The permission is held by {$holders} role or user grant(s); revoke it first.",
@@ -53,14 +53,5 @@ final class DeletePermission extends Action
         });
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
-    }
-
-    private function holderCount(Permission $permission): int
-    {
-        $tables = (array) config('permission.table_names');
-        $key = (string) (config('permission.column_names.permission_pivot_key') ?: 'permission_id');
-
-        return (int) DB::table((string) $tables['role_has_permissions'])->where($key, $permission->getKey())->count()
-            + (int) DB::table((string) $tables['model_has_permissions'])->where($key, $permission->getKey())->count();
     }
 }
