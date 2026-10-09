@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Enadstack\LaravelRoles;
 
+use Enadstack\LaravelRoles\Contracts\AccessUser;
 use Enadstack\LaravelRoles\Support\Http\ApiExceptionRenderer;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Foundation\Exceptions\Handler;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -47,6 +49,12 @@ class RolesServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+
+        Gate::before(function ($user): ?bool {
+            $super = config('roles.super_role');
+
+            return $super && $user instanceof AccessUser && $user->hasRole($super) ? true : null;
+        });
 
         if ($this->app->runningInConsole()) {
             $this->publishes([__DIR__.'/../config/roles.php' => config_path('roles.php')], 'roles-config');
