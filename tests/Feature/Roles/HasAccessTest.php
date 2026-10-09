@@ -11,12 +11,6 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Spatie\Permission\Events\RoleDetachedEvent;
 use Spatie\Permission\Exceptions\RoleDoesNotExist;
-use Tests\Support\TestUser;
-
-function makeUser(string $email = 'a@example.test'): TestUser
-{
-    return TestUser::create(['name' => 'A', 'email' => $email, 'password' => 'x']);
-}
 
 it('assigns, removes and syncs roles through actions', function () {
     $user = makeUser();

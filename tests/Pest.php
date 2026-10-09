@@ -15,3 +15,5 @@ function seedUsers(int $count): void
     }
     DB::table('users')->insert($rows);
 }
+
+require_once __DIR__.'/Support/helpers.php';

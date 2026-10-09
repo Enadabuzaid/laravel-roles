@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests;
 
+use Enadstack\ActionLogger\ActionLoggerServiceProvider;
 use Enadstack\LaravelRoles\RolesServiceProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Orchestra\Testbench\TestCase as Orchestra;
@@ -46,7 +47,7 @@ abstract class TestCase extends Orchestra
     /** @return list<class-string> */
     protected function getPackageProviders($app): array
     {
-        return [PermissionServiceProvider::class, RolesServiceProvider::class];
+        return [PermissionServiceProvider::class, ActionLoggerServiceProvider::class, RolesServiceProvider::class];
     }
 
     protected function defineEnvironment($app): void
@@ -60,6 +61,7 @@ abstract class TestCase extends Orchestra
         }
         $app['config']->set('cache.default', 'array');
         $app['config']->set('roles.permissions_file', null);
+        $app['config']->set('action-logger.immutable', true);
         $app['config']->set('roles.user_model', TestUser::class);
         $app['config']->set('auth.providers.users.model', TestUser::class);
     }

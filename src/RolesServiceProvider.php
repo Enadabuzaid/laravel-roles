@@ -42,6 +42,9 @@ class RolesServiceProvider extends ServiceProvider
             array_keys(array_filter((array) config('roles.modules'))),
         ));
 
+        $this->app->scoped(Support\ActorContext::class);
+        $this->app->scoped(Audit\AuditRecorder::class);
+
         if ($this->app->runningInConsole()) {
             $this->commands([
                 Console\SyncCommand::class,

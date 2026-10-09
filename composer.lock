@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "d9dba4641448efb67ea1fa5316f8a240",
+    "content-hash": "4d6327d0743de20e4f9c1db80da0f0af",
     "packages": [
         {
             "name": "brick/math",
@@ -510,6 +510,101 @@
                 }
             ],
             "time": "2025-03-06T22:45:56+00:00"
+        },
+        {
+            "name": "enadstack/laravel-action-logger",
+            "version": "dev-main",
+            "dist": {
+                "type": "path",
+                "url": "../laravel-action-logger",
+                "reference": "2b212ee81c88b7451aab73577d4471bb35605aef"
+            },
+            "require": {
+                "illuminate/contracts": "^11.0|^12.0|^13.0",
+                "illuminate/database": "^11.0|^12.0|^13.0",
+                "illuminate/http": "^11.0|^12.0|^13.0",
+                "illuminate/support": "^11.0|^12.0|^13.0",
+                "php": "^8.2"
+            },
+            "require-dev": {
+                "laravel/pint": "^1.0",
+                "orchestra/testbench": "^9.0|^10.0|^11.0",
+                "phpunit/phpunit": "^11.0"
+            },
+            "suggest": {
+                "inertiajs/inertia-laravel": "Required only if you enable the bundled action-logger UI (config('action-logger.ui.enabled'))."
+            },
+            "type": "library",
+            "extra": {
+                "branch-alias": {
+                    "dev-main": "1.x-dev"
+                },
+                "laravel": {
+                    "providers": [
+                        "Enadstack\\ActionLogger\\ActionLoggerServiceProvider"
+                    ],
+                    "aliases": {
+                        "ActionLogger": "Enadstack\\ActionLogger\\Facades\\ActionLogger"
+                    }
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Enadstack\\ActionLogger\\": "src/"
+                },
+                "files": [
+                    "src/helpers.php"
+                ]
+            },
+            "autoload-dev": {
+                "psr-4": {
+                    "Enadstack\\ActionLogger\\Tests\\": "tests/"
+                }
+            },
+            "scripts": {
+                "test": [
+                    "vendor/bin/phpunit"
+                ],
+                "format": [
+                    "vendor/bin/pint"
+                ],
+                "analyse": [
+                    "vendor/bin/phpstan analyse"
+                ]
+            },
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Enad Abu Zaid",
+                    "email": "enad@enadstack.com",
+                    "homepage": "https://enadstack.com",
+                    "role": "Developer"
+                }
+            ],
+            "description": "A powerful, flexible Action Logger / Audit Log package for Laravel with multi-tenancy support and optional Vue UI",
+            "homepage": "https://github.com/enadstack/laravel-action-logger",
+            "keywords": [
+                "action-logger",
+                "activity-log",
+                "audit",
+                "audit-log",
+                "enadstack",
+                "history",
+                "laravel",
+                "logging",
+                "multi-tenant",
+                "tracking"
+            ],
+            "support": {
+                "issues": "https://github.com/enadstack/laravel-action-logger/issues",
+                "source": "https://github.com/enadstack/laravel-action-logger"
+            },
+            "transport-options": {
+                "symlink": true,
+                "relative": true
+            }
         },
         {
             "name": "fruitcake/php-cors",

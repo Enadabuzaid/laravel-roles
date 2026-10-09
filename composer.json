@@ -6,7 +6,8 @@
   "require": {
     "php": "^8.3",
     "illuminate/support": "^13.0",
-    "spatie/laravel-permission": "^8.0"
+    "spatie/laravel-permission": "^8.0",
+    "enadstack/laravel-action-logger": "^1.1"
   },
   "require-dev": {
     "larastan/larastan": "^3.0",
@@ -23,5 +24,13 @@
   },
   "config": { "allow-plugins": { "pestphp/pest-plugin": true, "phpstan/extension-installer": true } },
   "minimum-stability": "dev",
-  "prefer-stable": true
+  "prefer-stable": true,
+  "repositories": [{
+    "name": "action-logger",
+    "type": "path",
+    "url": "../laravel-action-logger",
+    "options": {
+      "symlink": true
+    }
+  }]
 }

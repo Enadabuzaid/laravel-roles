@@ -27,6 +27,8 @@ return [
         'invitations' => true,
     ],
 
+    'audit' => ['enabled' => true],
+
     'routes' => [
         'prefix' => 'api/access',
         'middleware' => ['api', 'auth:sanctum'],
