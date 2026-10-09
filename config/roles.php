@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use Enadstack\LaravelRoles\Core\Doctor\Checks\AuditReadyCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\CacheWorkingCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\ConfigConsistencyCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\DeprecatedStillHeldCheck;
@@ -104,6 +105,7 @@ return [
             NoEmptyRolesCheck::class,
             DeprecatedStillHeldCheck::class,
             CacheWorkingCheck::class,
+            AuditReadyCheck::class,
         ],
         'disabled' => [],
     ],

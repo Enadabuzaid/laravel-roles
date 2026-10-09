@@ -60,7 +60,7 @@ class User extends Authenticatable implements AccessUser
 | `security` | see file | Lockout, MFA roles, login history |
 | `pagination` | `default 15`, `max 100` | List defaults |
 | `default_roles` | owner, admin, manager, viewer | Seeded by `roles:seed` |
-| `doctor.checks` | 8 built-in checks | Classes implementing `Core\Doctor\Check` |
+| `doctor.checks` | 9 built-in checks (incl. `audit-ready`) | Classes implementing `Core\Doctor\Check` |
 
 ## Permission registry
 
