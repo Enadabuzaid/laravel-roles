@@ -6,9 +6,8 @@ namespace Enadstack\LaravelRoles\Guardrails\Rules;
 
 use Enadstack\LaravelRoles\Guardrails\Guardrail;
 use Enadstack\LaravelRoles\Guardrails\Operation;
-use Enadstack\LaravelRoles\Guardrails\OwnerCounter;
 use Enadstack\LaravelRoles\Guardrails\Violation;
-use Illuminate\Database\Eloquent\Model;
+use Enadstack\LaravelRoles\Users\Support\TargetStanding;
 
 /**
  * A non-owner may not manage (suspend, deactivate, delete, unlock, force a password reset for)
@@ -30,7 +29,7 @@ final class TargetAboveActorRule implements Guardrail
         'force_password_reset',
     ];
 
-    public function __construct(private readonly OwnerCounter $owners) {}
+    public function __construct(private readonly TargetStanding $standing) {}
 
     public function check(Operation $operation): void
     {
@@ -45,34 +44,8 @@ final class TargetAboveActorRule implements Guardrail
             return;
         }
 
-        if ($this->owners->isOwner($actor)) {
-            return;
-        }
-
-        if ($this->owners->isOwner($target)) {
+        if (in_array($this->standing->reasonFor($actor, $target), ['owner', 'above'], true)) {
             throw Violation::targetAboveActor();
         }
-
-        $held = array_fill_keys($this->permissionNames($actor), true);
-
-        foreach ($this->permissionNames($target) as $name) {
-            if (! isset($held[$name])) {
-                throw Violation::targetAboveActor();
-            }
-        }
-    }
-
-    /** @return list<string> */
-    private function permissionNames(Model $user): array
-    {
-        if (! method_exists($user, 'getAllPermissions')) {
-            return [];
-        }
-
-        /** @var list<string> */
-        return array_values($user->getAllPermissions()
-            ->where('guard_name', (string) config('roles.guard'))
-            ->pluck('name')
-            ->all());
     }
 }

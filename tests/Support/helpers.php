@@ -8,6 +8,8 @@ use Enadstack\LaravelRoles\Models\Permission;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Support\ActorContext;
 use Enadstack\LaravelRoles\Support\Exceptions\AccessException;
+use Enadstack\LaravelRoles\Users\Models\UserAccessState;
+use Illuminate\Database\Eloquent\Model;
 use Tests\Support\TestUser;
 
 function makeUser(string $email = 'a@example.test'): TestUser
@@ -62,4 +64,23 @@ function guardrailCode(Operation $operation): ?string
 function makePermission(string $name, string $risk = 'low'): Permission
 {
     return Permission::updateOrCreate(['name' => $name, 'guard_name' => 'web'], ['risk' => $risk]);
+}
+
+/** @param  array<string, mixed>  $attributes */
+function makeState(Model $user, string $status = 'active', array $attributes = []): UserAccessState
+{
+    return UserAccessState::create(['user_id' => $user->getKey(), 'status' => $status, ...$attributes]);
+}
+
+/**
+ * A signed-in actor holding a role with the given permissions (all users read permissions by default).
+ *
+ * @param  list<string>|null  $permissions
+ */
+function usersActor(?array $permissions = null, string $email = 'actor@example.test'): TestUser
+{
+    $user = makeUser($email);
+    $user->assignRole(makeRole('actor-'.uniqid(), $permissions ?? ['access.users.view']));
+
+    return $user;
 }

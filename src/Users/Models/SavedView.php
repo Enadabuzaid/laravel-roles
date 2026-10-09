@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Enadstack\LaravelRoles\Users\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -12,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $page
  * @property string $name
  * @property array<string, mixed> $filters
+ * @property Carbon|null $created_at
  */
 class SavedView extends Model
 {

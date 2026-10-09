@@ -178,6 +178,13 @@ All paths are relative to `roles.routes.prefix` (default `api/access`) and run u
 | POST | `users/{user}/roles` | `access.roles.assign` | `role` (name or id), `confirm` for the Owner role or high-risk roles. Returns `{user, roles}` |
 | PUT | `users/{user}/roles` | `access.roles.assign` | `roles: [...]` replaces the set (empty list allowed), `confirm`. Returns `{user, roles}` |
 | DELETE | `users/{user}/roles/{role}` | `access.roles.assign` | Last-owner and self-change guardrails apply. Returns `{user, roles}` |
+| GET | `users` | `access.users.view` | Paginated users of `roles.user_model`, joined to their access state (a user without a state row is `active`). `search` matches `name` and `email` literally. Filters: `status` (one or more of the user statuses), `role` (role id or name, repeatable), `mfa` (`on`/`off`), `last_login_from` / `last_login_to` and `joined_from` / `joined_to` (`YYYY-MM-DD`, both bounds inclusive; malformed dates are ignored), `no_role` (`yes`). Sorts: `name` (default), `email`, `status`, `last_login`, `created`. `include=roles` adds each user's roles as RoleLite. Returns User rows |
+| GET | `users/overview` | `access.users.view` | Counts and weekly series; see Overview payloads |
+| GET | `users/{user}` | `access.users.view` | User profile; 404 for an unknown user |
+| GET | `users/{user}/permissions` | `access.users.view` | The user's effective permissions grouped by module, with where each comes from; see Payloads |
+| GET | `saved-views` | `access.users.view` | The current user's saved filter views (never anyone else's), optionally `?page=users`. An unknown `page` is 422 |
+| POST | `saved-views` | `access.users.view` | `page` (one of `roles.users.saved_view_pages`), `name` (1 to 80 chars, unique per user and page, 422 on a duplicate), `filters` (optional object: at most 20 keys, each value a scalar or a list of scalars, at most 2 KB as JSON). At most 25 views per user and page (422 `saved_view.limit`). Saved views are a personal preference and are not audited. 201 with the SavedView |
+| DELETE | `saved-views/{view}` | `access.users.view` | Own views only; another user's id is 404, never 403. 204 |
 | GET | `permissions` | `access.permissions.view` | Paginated Permission list. `search` matches `name` and the per-locale `label` / `description`. Filters: `module`, `risk` (`low`/`medium`/`high`), `source` (`registry`/`manual`), `status` (`active` default, `deprecated`, `all`), `held` (`yes`/`no`: held by at least one role). Sorts: `name`, `module`, `risk`, `roles`, `updated`, `sort_order` (default) |
 | GET | `permissions/overview` | `access.permissions.view` | Counts; see Overview payloads |
 | GET | `permissions/modules` | `access.permissions.view` | `[{key, label, permissions_count}]` of active permissions |
@@ -224,6 +231,14 @@ These flags are computed without per-role queries (one query for the current use
 
 **Member** (the `user` of assignment responses and the members list): `id` always; `name` and `email` only when the current user holds `access.users.view` (the members list requires it).
 
+**User** (`GET users` rows): `id`, `name`, `email`, `status`, `status_reason`, `last_login_at`, `last_login_ip`, `mfa_enabled` (the state column, or the host column `roles.users.mfa_enabled_column` when that column exists on the user table, a nullable timestamp such as Fortify's `two_factor_confirmed_at`), `email_verified_at`, `created_at`, `roles` (only with `include=roles`), `is_self`, `is_owner`, `locked`, `lock_reason` (`self`, `owner`, `above` or null) and `abilities` `{view, update, suspend, delete, assign}`. `owner` means the user holds the Owner role and you do not; `above` means they hold a permission you lack (the same computation the `guardrail.target_above_actor` rule uses); Owners are never locked by either. The flags are computed with a fixed number of queries however many rows are listed, and only narrow the permission-based abilities to what the server would accept.
+
+**UserProfile** (`GET users/{user}`): the User fields plus `state` `{status, reason, activated_at, last_login_at, last_login_ip, failed_login_count, locked_until, mfa_enabled_at, mfa_method, password_changed_at}` (defaults for a user without a state row), `roles` (RoleLite plus `permissions_count`) and `effective_permissions_count` (distinct permissions through live roles plus direct grants).
+
+**UserPermissions** (`GET users/{user}/permissions`): `data` is `[{module, permissions_count, permissions: [{id, name, module, label_text, risk, is_deprecated, sources, roles, direct}]}]`, modules and permissions sorted by name (permissions without a module are grouped under `other`). `sources` lists `role:<name>` for each live role granting it and `direct` for a direct grant; `roles` and `direct` give the same split. `meta` has `total` and `is_owner`.
+
+**SavedView:** `id`, `page`, `name`, `filters` (an object), `created_at`.
+
 **Permission:** `id`, `name`, `module`, `label`, `label_text`, `description`, `description_text`, `risk` (`low`/`medium`/`high`), `source` (`registry`/`manual`), `deprecated_at`, `is_deprecated`, `last_synced_at`, `sort_order`, `roles_count` (live roles of the configured guard holding it; present on list and detail), `created_at`, `updated_at`.
 
 **SyncResult** (`POST permissions/sync`): `added`, `updated`, `restored`, `deprecated`, `pruned` (lists of permission names), `has_changes` (bool), `dry_run` (bool).
@@ -237,6 +252,7 @@ These flags are computed without per-role queries (one query for the current use
 
 **Overview payloads.**
 - Roles (`GET roles/overview`): `total_roles` (includes trashed), `active_roles`, `system_roles`, `custom_roles`, `trashed_roles` (`active_roles` + `trashed_roles` = `total_roles`; `system_roles` + `custom_roles` = `active_roles`), `members_with_role`, `members_without_role` (users of `roles.user_model` holding at least one / no role of the configured guard), `avg_permissions_per_role`.
+- Users (`GET users/overview`): `total_members`, `active`, `pending_invites` (usable invitations: not accepted, not revoked, not expired), `suspended`, `locked`, `deactivated` (users without a state row count as `active`), `without_mfa`, `without_role`, `joined_last_30_days` and `series` `{members, joined}`: eight rolling weekly buckets ending now, oldest first. `joined[i]` counts users created in the week `(b[i], b[i+1]]` and `members[i]` those created up to `b[i+1]` (cumulative). One SQL statement computes everything except the role and invitation counts.
 - Permissions (`GET permissions/overview`): `total`, `active`, `deprecated`, `high_risk`, `manual`, `modules_count`, `unused` (active permissions held by no live role), `total_grants`, `avg_per_role`, `by_module` (`[{module, count, high_risk}]`) and `owner_only`. `owner_only` lists up to 5 active permissions (ordered by `sort_order`, then name) that no live role other than the Owner role holds, as `{id, name, label_text, module, risk}`: the permissions only the Owner can use today.
 
 All roles and permissions are scoped to `roles.guard`: rows of another guard are 404 on `{role}` / `{permission}` routes and never appear in lists, overviews, modules, the matrix or the access check.

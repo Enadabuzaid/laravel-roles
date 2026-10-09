@@ -57,6 +57,7 @@ class RolesServiceProvider extends ServiceProvider
 
         $this->app->scoped(Support\ActorContext::class);
         $this->app->scoped(Audit\AuditRecorder::class);
+        $this->app->scoped(Users\Support\HostMfaColumn::class);
         $this->app->scoped(Guardrails\Guardrails::class, fn ($app) => new Guardrails\Guardrails(
             array_map(static fn (string $rule): Guardrails\Guardrail => $app->make($rule), array_values((array) config('roles.guardrails.rules', []))),
         ));
@@ -104,9 +105,15 @@ class RolesServiceProvider extends ServiceProvider
         Gate::policy((string) config('permission.models.role'), Roles\Policies\RolePolicy::class);
         Gate::policy((string) config('permission.models.permission'), Core\Policies\PermissionPolicy::class);
 
+        $userModel = (string) config('roles.user_model');
+        if ($userModel !== '' && class_exists($userModel) && Gate::getPolicyFor($userModel) === null) {
+            Gate::policy($userModel, Users\Policies\UserPolicy::class);
+        }
+
         if (! $this->app->routesAreCached()) {
             Http\Support\RoutesRegistrar::register('roles', __DIR__.'/Roles/routes.php');
             Http\Support\RoutesRegistrar::register('permissions', __DIR__.'/Core/routes.php');
+            Http\Support\RoutesRegistrar::register('users', __DIR__.'/Users/routes.php');
         }
 
         if ($this->app->runningInConsole()) {
