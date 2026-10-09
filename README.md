@@ -56,7 +56,7 @@ class User extends Authenticatable implements AccessUser
 | `modules` | all `true` | Feature toggles for later phases |
 | `routes.prefix` / `routes.middleware` | `api/access` / `['api','auth:sanctum']` | API routes (later phases) |
 | `permissions_file` | `access/permissions.php` | Permission registry |
-| `guardrails` | see file | Reserved: enforced from Phase 2, not yet active |
+| `guardrails` | see file | Rule list, toggles (`min_owners`, `prevent_self_escalation`, `prevent_self_destructive`, `prevent_escalation`, `confirm_high_risk`, `type_to_confirm_destructive`) and `disabled` rule classes. Enforced; see Guardrails |
 | `security` | see file | Lockout, MFA roles, login history |
 | `pagination` | `default 15`, `max 100` | List defaults |
 | `default_roles` | owner, admin, manager, viewer | Seeded by `roles:seed` |
@@ -103,7 +103,9 @@ Never call Spatie's `assignRole`, `removeRole`, `syncRoles`, `givePermissionTo`,
 
 ## Guardrails
 
-Every role change goes through `Guardrails::assert()` inside the Action's transaction. A violation throws `AccessException` (HTTP 403, rendered in the API envelope), changes nothing and writes no audit entry. Rules are listed in `roles.guardrails.rules`; each can be toggled in `roles.guardrails`. Guardrail rules and doctor checks merge additively: the package defaults are always applied first, then any extras your published config lists, so a config that omits `rules` (or lists only custom rules) still enforces all seven built-ins. To switch a rule off, list its class in `roles.guardrails.disabled` (doctor checks use `roles.doctor.disabled`). Disabling a built-in guardrail is a security decision; do it deliberately.
+**Wired now:** `AssignRoleToUser`, `RemoveRoleFromUser` and `SyncUserRoles` enforce last owner, self role change, escalation and high-risk confirmation. **Implemented and unit-tested, wired when the operation exists (Phase 3/4):** self destructive, system role (delete/rename), destructive confirmation, and last-owner for suspend/deactivate/delete user. Toggles: `prevent_self_escalation` controls the self role change rule and `prevent_self_destructive` controls the self destructive rule (independent).
+
+Every user role change goes through `Guardrails::assert()` inside the Action's transaction. A violation throws `AccessException` (HTTP 403, rendered in the API envelope), changes nothing and writes no audit entry. Rules are listed in `roles.guardrails.rules`; each can be toggled in `roles.guardrails`. Guardrail rules and doctor checks merge additively: the package defaults are always applied first, then any extras your published config lists, so a config that omits `rules` (or lists only custom rules) still enforces all seven built-ins. To switch a rule off, list its class in `roles.guardrails.disabled` (doctor checks use `roles.doctor.disabled`). Disabling a built-in guardrail is a security decision; do it deliberately.
 
 | Code | Meaning | Applies to system actor |
 | --- | --- | --- |
@@ -111,11 +113,12 @@ Every role change goes through `Guardrails::assert()` inside the Action's transa
 | `guardrail.self_role_change` | You changed your own role | no |
 | `guardrail.self_destructive` | You suspended, deactivated or deleted yourself | no |
 | `guardrail.escalation` | Granting a role with permissions you lack, or adding/removing the owner role as a non-owner | no |
+| `guardrail.actor_required` | A guarded write ran outside console with no authenticated actor and no explicit `runAs(null)` | n/a |
 | `guardrail.high_risk_confirm_required` | Adding a high-risk or owner role without `confirmed: true` | yes |
 | `guardrail.system_role` | Deleting or renaming a system role (or the super role) | yes |
 | `guardrail.confirmation_mismatch` | Type-to-confirm text missing or wrong (an empty expected value, such as a user without an email, always mismatches) | yes |
 
-**Actor context.** The actor is `ActorContext::actor()`: the authenticated user on the `roles.guard`, or `null` (system/console). Force it with `runAs`:
+**Actor context.** The actor is resolved in this order: an explicit `set`/`runAs` actor, then the user of the default guard (the one your route middleware selected, e.g. `auth:sanctum`), then the user of `roles.guard`, otherwise none. "No actor" means the system only in console (commands, queued jobs, seeders, tinker) or inside an explicit `runAs(null, ...)`. An HTTP request without an authenticated user is never treated as the system: guarded writes fail with `guardrail.actor_required` (403) and change nothing. Force an actor with `runAs`:
 
 ```php
 app(ActorContext::class)->runAs($admin, fn () => $user->assignAccessRole('manager'));
@@ -127,6 +130,13 @@ app(ActorContext::class)->runAs(null, fn () => $user->assignAccessRole('viewer')
 **Confirmation flags.** `confirmed: true` acknowledges a high-risk or owner role. Re-assigning a role the user already holds is a silent no-op (no exception, no audit entry).
 
 **Concurrency.** Assign/remove/sync lock the super-role row (`SELECT ... FOR UPDATE`) before the guardrails run, so two concurrent owner removals serialize and the last-owner rule cannot be raced.
+
+**Known limitations.**
+- Role-permission edits (the matrix) have no `Operation` type yet, so escalation, high-risk and owner-lock rules do not cover them.
+- Suspended owners are still counted by the last-owner rule.
+- The last-owner lock relies on `SELECT ... FOR UPDATE`; on MySQL under REPEATABLE READ the snapshot read can still race. PostgreSQL and SQLite are supported.
+- Spatie's `permission:*` artisan commands and raw `HasRoles` mutators (`assignRole`, `syncRoles`, `givePermissionTo`, ...) bypass guardrails and audit. Use the `HasAccess` methods; `roles:doctor` warns about the gap.
+- `syncAccessRoles` replaces roles of every guard (Spatie semantics): other-guard roles count as removed.
 
 ## Audit
 

@@ -8,7 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## 2.0.0-alpha.4 — 2026-10-09
 
 ### Added
-- Guardrails: seven configurable rules enforced inside `AssignRoleToUser`, `RemoveRoleFromUser` and `SyncUserRoles` (last owner, self role change, escalation, high-risk confirmation, system role, destructive confirmation, self destructive), with stable `guardrail.*` codes.
+- Guardrails: seven configurable rules with stable `guardrail.*` codes. Wired now into `AssignRoleToUser`, `RemoveRoleFromUser` and `SyncUserRoles`: last owner, self role change, escalation, high-risk confirmation. Implemented and tested but wired when the operation exists (Phase 3/4): self destructive, system role, destructive confirmation, last-owner for suspend/deactivate/delete user. See README "Known limitations".
+- Actor resolution follows the default guard selected by middleware (e.g. `auth:sanctum`), then `roles.guard`. Unauthenticated guarded writes outside console fail closed with `guardrail.actor_required`; console and `runAs(null)` are the system.
+- `guardrails.prevent_self_destructive` toggle (separate from `prevent_self_escalation`); `GuardrailConfigCheck` doctor check; `AccessException` renders itself (JSON envelope or plain status) and is not reported.
+- `SyncUserRoles` writes no audit entry and does not touch the pivot when the set is unchanged (order-insensitive); roles of other guards count as removed.
+- Type-to-confirm for user deletion is case-insensitive and trims whitespace.
 - Guardrail rules and doctor checks merge additively with the package defaults (host configs cannot silently drop built-ins); disable via `guardrails.disabled` / `doctor.disabled`. New `audit-ready` doctor check.
 - Audit: `roles.assigned|removed|synced|seeded` and `permissions.synced` entries written after commit through action-logger, with `Info`/`Warning`/`Critical` severity (`RoleChangeSeverity`).
 - `ActorContext` is honored by every Action; `roles:seed`, `roles:owner` and `roles:sync` run as the system actor.
