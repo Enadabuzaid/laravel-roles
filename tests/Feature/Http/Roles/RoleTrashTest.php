@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use Enadstack\ActionLogger\Models\ActionLog;
 use Enadstack\LaravelRoles\Models\Role;
+use Illuminate\Support\Facades\DB;
+use Tests\Support\TestUser;
 
 it('trashes a memberless role without confirmation', function (): void {
     $role = makeRole('empty');
@@ -26,7 +28,7 @@ it('requires type-to-confirm for a role with members and drops their access', fu
 
     $this->actingAs($actor)->deleteJson("/api/access/roles/{$role->id}")->assertForbidden()->assertJson(['code' => 'guardrail.confirmation_mismatch']);
     $this->actingAs($actor)->deleteJson("/api/access/roles/{$role->id}", ['confirmation' => 'nope'])->assertForbidden()->assertJson(['code' => 'guardrail.confirmation_mismatch']);
-    expect(ActionLog::count())->toBe(0);
+    expect(ActionLog::count())->toBe(0)->and(Role::withTrashed()->find($role->id)->trashed())->toBeFalse();
 
     $this->actingAs($actor)->deleteJson("/api/access/roles/{$role->id}", ['confirmation' => 'crew'])->assertOk();
 
@@ -35,15 +37,28 @@ it('requires type-to-confirm for a role with members and drops their access', fu
     expect($member->fresh()->can('reports.view'))->toBeFalse();
 });
 
-it('refuses trashing system and owner roles', function (): void {
+it('refuses trashing system and owner roles and leaves them live', function (): void {
     $system = makeRole('sys', [], ['is_system' => true]);
     $owner = makeRole('owner');
     ActionLog::query()->delete();
 
     foreach ([$system, $owner] as $role) {
         $this->actingAs(roleWriter())->deleteJson("/api/access/roles/{$role->id}")->assertForbidden()->assertJson(['code' => 'guardrail.system_role']);
+        expect(Role::withTrashed()->find($role->id)->trashed())->toBeFalse();
     }
-    expect(ActionLog::count())->toBe(0)->and(Role::count())->toBeGreaterThanOrEqual(2);
+    expect(ActionLog::count())->toBe(0);
+});
+
+it('refuses renaming the owner role and force deleting a trashed owner role', function (): void {
+    $owner = makeRole('owner');
+    ActionLog::query()->delete();
+
+    $this->actingAs(roleWriter())->putJson("/api/access/roles/{$owner->id}", ['name' => 'boss'])->assertForbidden()->assertJson(['code' => 'guardrail.system_role']);
+    expect(Role::find($owner->id)->name)->toBe('owner')->and(ActionLog::count())->toBe(0);
+
+    $owner->delete();
+    $this->actingAs(roleWriter())->deleteJson("/api/access/roles/{$owner->id}/force", ['confirmation' => 'owner'])->assertForbidden()->assertJson(['code' => 'guardrail.system_role']);
+    expect(Role::withTrashed()->find($owner->id)->trashed())->toBeTrue()->and(ActionLog::count())->toBe(0);
 });
 
 it('restores a trashed role', function (): void {
@@ -55,12 +70,8 @@ it('restores a trashed role', function (): void {
     expect(ActionLog::sole()->event)->toBe('roles.restored')->and(Role::find($role->id))->not->toBeNull();
 });
 
-it('answers 409 for restore of a live role and when the name is taken', function (): void {
+it('answers 409 for restore of a live role and 404 for a missing one', function (): void {
     $live = makeRole('live');
-    $trashed = makeRole('dupe');
-    $trashed->delete();
-    // simulate a live role now holding the name (unique index includes trashed rows, so rename the trashed one first)
-    Role::withTrashed()->whereKey($trashed->id)->update(['name' => 'dupe']);
     $actor = roleWriter();
 
     $this->actingAs($actor)->postJson("/api/access/roles/{$live->id}/restore")->assertStatus(409)->assertJson(['code' => 'role.not_trashed']);
@@ -77,7 +88,7 @@ it('force deletes only trashed roles with the exact name', function (): void {
 
     $this->actingAs($actor)->deleteJson("/api/access/roles/{$role->id}/force", ['confirmation' => 'wrong'])->assertForbidden()->assertJson(['code' => 'guardrail.confirmation_mismatch']);
     $this->actingAs($actor)->deleteJson("/api/access/roles/{$role->id}/force")->assertForbidden();
-    expect(ActionLog::count())->toBe(0);
+    expect(ActionLog::count())->toBe(0)->and(Role::withTrashed()->find($role->id)->trashed())->toBeTrue();
 
     $this->actingAs($actor)->deleteJson("/api/access/roles/{$role->id}/force", ['confirmation' => 'doomed'])->assertNoContent();
 
@@ -92,4 +103,17 @@ it('refuses force deleting a system role and requires delete permission', functi
     $role->delete();
     $this->actingAs(roleWriter())->deleteJson("/api/access/roles/{$role->id}/force", ['confirmation' => 'sys2'])->assertForbidden()->assertJson(['code' => 'guardrail.system_role']);
     $this->actingAs(roleWriter(['access.roles.view']))->postJson("/api/access/roles/{$role->id}/restore")->assertForbidden();
+});
+
+it('removes pivot rows of every model type on force delete', function (): void {
+    $role = makeRole('pivoted');
+    $table = config('permission.table_names.model_has_roles');
+    DB::table($table)->insert([
+        ['role_id' => $role->id, 'model_type' => 'App\\Other', 'model_id' => 5],
+        ['role_id' => $role->id, 'model_type' => TestUser::class, 'model_id' => 99],
+    ]);
+    $role->delete();
+
+    $this->actingAs(roleWriter())->deleteJson("/api/access/roles/{$role->id}/force", ['confirmation' => 'pivoted'])->assertNoContent();
+    expect(DB::table($table)->where('role_id', $role->id)->count())->toBe(0);
 });

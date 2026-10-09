@@ -24,6 +24,7 @@ final class RestoreRole extends Action
                 throw new AccessException('The role is not trashed.', 'role.not_trashed', 409);
             }
 
+            // Defensive: the unique (name, guard_name) index covers trashed rows, so this is unreachable on a consistent schema.
             $taken = Role::query()->where('name', $fresh->name)->where('guard_name', $fresh->guard_name)->whereKeyNot($fresh->getKey())->exists();
             if ($taken) {
                 throw new AccessException('A role with this name already exists.', 'role.name_taken', 409);

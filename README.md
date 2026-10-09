@@ -148,6 +148,10 @@ Writes go to `enadstack/laravel-action-logger` (^1.1), module `roles` or `permis
 | `roles.seeded` | none | roles were created or restored |
 | `permissions.synced` | none | a non-dry-run sync changed something; counts per change type plus names (capped at 200 per list) |
 
+Role write events (`roles.created`, `roles.updated`, `roles.trashed`, `roles.restored`, `roles.deleted`) are written once per effective change; a no-op update writes nothing. Moving `is_default` records `default_cleared_from` in `meta`.
+
+**Role endpoint notes.** `PUT`/`PATCH roles/{role}` replaces the `label` and `description` maps wholesale: sending only `en` drops `ar`. Renaming or creating onto the name of a trashed role answers 409 `role.name_taken_trashed` (restore it instead).
+
 Severity: `critical` when the owner role is added or removed, `warning` when a high-risk role is added (or a sync deprecated/pruned permissions), otherwise `info`.
 
 **After-commit semantics.** Entries are written after the surrounding transaction commits: a rollback (including an outer transaction) writes nothing. A failing logger is reported via `report()` and never breaks the role change. Disable with `roles.audit.enabled` or `roles.modules.audit`.

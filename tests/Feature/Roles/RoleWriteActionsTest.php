@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Enadstack\ActionLogger\Models\ActionLog;
+use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Roles\Actions\CreateRole;
 use Enadstack\LaravelRoles\Roles\Actions\ForceDeleteRole;
 use Enadstack\LaravelRoles\Roles\Actions\RestoreRole;
@@ -27,15 +28,38 @@ it('runs the full lifecycle as the system actor with one audit entry per write',
     expect(ActionLog::orderBy('id')->pluck('event')->all())->toBe(['roles.created', 'roles.updated', 'roles.trashed', 'roles.restored', 'roles.trashed', 'roles.deleted']);
 });
 
-it('fails closed without an actor outside console', function (): void {
-    $role = makeRole('x');
+it('fails closed without an actor outside console for every action', function (): void {
+    $live = makeRole('x');
+    $trashed = makeRole('y');
+    $trashed->delete();
     $context = Mockery::mock(ActorContext::class)->makePartial();
     $context->shouldReceive('actor')->andReturn(null);
     $context->shouldReceive('runningInConsole')->andReturn(false);
     app()->instance(ActorContext::class, $context);
+    ActionLog::query()->delete();
 
-    expect(fn () => app(UpdateRole::class)->handle($role, ['color' => '#111111']))->toThrow(AccessException::class);
-    expect(fn () => app(TrashRole::class)->handle($role))->toThrow(AccessException::class);
+    expect(fn () => app(CreateRole::class)->handle(['name' => 'zz', 'label' => ['en' => 'z']]))->toThrow(AccessException::class)
+        ->and(fn () => app(UpdateRole::class)->handle($live, ['color' => '#111111']))->toThrow(AccessException::class)
+        ->and(fn () => app(TrashRole::class)->handle($live))->toThrow(AccessException::class)
+        ->and(fn () => app(RestoreRole::class)->handle($trashed))->toThrow(AccessException::class)
+        ->and(fn () => app(ForceDeleteRole::class)->handle($trashed, 'y'))->toThrow(AccessException::class);
+
+    expect(Role::where('name', 'zz')->exists())->toBeFalse()->and(Role::withTrashed()->find($trashed->id)->trashed())->toBeTrue()
+        ->and($live->fresh()->trashed())->toBeFalse()->and(ActionLog::count())->toBe(0);
+});
+
+it('refuses a rename onto a trashed name through the action', function (): void {
+    makeRole('spirit')->delete();
+    $role = makeRole('body');
+
+    try {
+        systemRun(fn () => app(UpdateRole::class)->handle($role, ['name' => 'spirit']));
+        $code = 'none';
+    } catch (AccessException $e) {
+        $code = $e->errorCode;
+    }
+
+    expect($code)->toBe('role.name_taken_trashed')->and($role->fresh()->name)->toBe('body');
 });
 
 it('maps conflicts and guardrails to access exceptions', function (): void {

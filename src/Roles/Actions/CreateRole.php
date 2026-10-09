@@ -44,11 +44,16 @@ final class CreateRole extends Action
             ]);
             $role->save();
 
+            $meta = [];
             if ($role->is_default) {
-                Role::query()->whereKeyNot($role->getKey())->where('is_default', true)->update(['is_default' => false]);
+                $previous = Role::query()->lockForUpdate()->whereKeyNot($role->getKey())->where('is_default', true)->get(['id', 'name']);
+                if ($previous->isNotEmpty()) {
+                    Role::query()->whereKey($previous->modelKeys())->update(['is_default' => false]);
+                    $meta['default_cleared_from'] = $previous->map(fn (Role $other): array => ['id' => $other->getKey(), 'name' => $other->name])->all();
+                }
             }
 
-            app(AuditRecorder::class)->record('roles', 'created', $role, null, $role->attributesToArray());
+            app(AuditRecorder::class)->record('roles', 'created', $role, null, $role->attributesToArray(), $meta);
 
             return $role;
         });

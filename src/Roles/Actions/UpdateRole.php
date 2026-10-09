@@ -11,6 +11,7 @@ use Enadstack\LaravelRoles\Guardrails\OperationType;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Support\Action;
 use Enadstack\LaravelRoles\Support\ActorContext;
+use Enadstack\LaravelRoles\Support\Exceptions\AccessException;
 use Spatie\Permission\PermissionRegistrar;
 
 final class UpdateRole extends Action
@@ -33,6 +34,16 @@ final class UpdateRole extends Action
             }
 
             if ($fresh->isDirty('name')) {
+                // The unique (name, guard_name) index includes trashed rows, so a trashed holder must be reported, not hit as a QueryException.
+                if (Role::onlyTrashed()->where('name', $fresh->name)->where('guard_name', $fresh->guard_name)->exists()) {
+                    throw new AccessException(
+                        'A trashed role already uses this name; restore it or pick another name.',
+                        'role.name_taken_trashed',
+                        409,
+                        ['name' => ['Restore the trashed role or choose a different name.']],
+                    );
+                }
+
                 app(Guardrails::class)->assert(new Operation(
                     OperationType::RenameRole,
                     actor: app(ActorContext::class)->actor(),
@@ -45,12 +56,17 @@ final class UpdateRole extends Action
             $old = array_intersect_key($fresh->getOriginal(), array_flip($dirty));
             $fresh->save();
 
+            $meta = [];
             if ($fresh->is_default && in_array('is_default', $dirty, true)) {
-                Role::query()->whereKeyNot($fresh->getKey())->where('is_default', true)->update(['is_default' => false]);
+                $previous = Role::query()->lockForUpdate()->whereKeyNot($fresh->getKey())->where('is_default', true)->get(['id', 'name']);
+                if ($previous->isNotEmpty()) {
+                    Role::query()->whereKey($previous->modelKeys())->update(['is_default' => false]);
+                    $meta['default_cleared_from'] = $previous->map(fn (Role $other): array => ['id' => $other->getKey(), 'name' => $other->name])->all();
+                }
             }
 
             $new = array_intersect_key($fresh->attributesToArray(), array_flip(array_diff($dirty, ['updated_at'])));
-            app(AuditRecorder::class)->record('roles', 'updated', $fresh, array_intersect_key($old, $new), $new);
+            app(AuditRecorder::class)->record('roles', 'updated', $fresh, array_intersect_key($old, $new), $new, $meta);
             $this->adopt($role, $fresh);
 
             return true;

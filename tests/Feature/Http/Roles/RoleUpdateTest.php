@@ -66,3 +66,28 @@ it('refuses a rename onto an existing name', function (): void {
     $role = makeRole('mine');
     $this->actingAs(roleWriter())->putJson("/api/access/roles/{$role->id}", ['name' => 'taken'])->assertStatus(422);
 });
+
+it('answers 409 when renaming onto a trashed role name and changes nothing', function (): void {
+    makeRole('ghost')->delete();
+    $role = makeRole('living');
+    ActionLog::query()->delete();
+
+    $this->actingAs(roleWriter())->putJson("/api/access/roles/{$role->id}", ['name' => 'ghost'])
+        ->assertStatus(409)->assertJson(['code' => 'role.name_taken_trashed']);
+    expect(Role::find($role->id)->name)->toBe('living')->and(ActionLog::count())->toBe(0);
+});
+
+it('replaces label maps wholesale', function (): void {
+    $role = makeRole('maps', [], ['label' => ['en' => 'Maps', 'ar' => 'خرائط']]);
+    $this->actingAs(roleWriter())->patchJson("/api/access/roles/{$role->id}", ['label' => ['en' => 'Maps 2']])
+        ->assertOk()->assertJsonPath('data.label', ['en' => 'Maps 2']);
+});
+
+it('records which role lost the default flag', function (): void {
+    $a = makeRole('first', [], ['is_default' => true]);
+    $b = makeRole('second');
+    ActionLog::query()->delete();
+
+    $this->actingAs(roleWriter())->putJson("/api/access/roles/{$b->id}", ['is_default' => true])->assertOk();
+    expect(ActionLog::sole()->meta['default_cleared_from'])->toBe([['id' => $a->id, 'name' => 'first']]);
+});
