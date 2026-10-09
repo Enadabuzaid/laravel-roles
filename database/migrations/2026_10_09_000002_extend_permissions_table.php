@@ -1,0 +1,37 @@
+<?php
+
+declare(strict_types=1);
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table(config('permission.table_names.permissions', 'permissions'), function (Blueprint $table) {
+            $table->string('module', 64)->nullable()->index();
+            $table->jsonb('label')->nullable();
+            $table->jsonb('description')->nullable();
+            $table->string('risk', 8)->default('low')->index();
+            $table->string('source', 16)->default('registry');
+            $table->timestamp('deprecated_at')->nullable()->index();
+            $table->timestamp('last_synced_at')->nullable();
+            $table->unsignedInteger('sort_order')->default(0);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table(config('permission.table_names.permissions', 'permissions'), function (Blueprint $table) {
+            $table->dropIndex(['module']);
+            $table->dropIndex(['risk']);
+            $table->dropIndex(['deprecated_at']);
+        });
+
+        Schema::table(config('permission.table_names.permissions', 'permissions'), function (Blueprint $table) {
+            $table->dropColumn(['module', 'label', 'description', 'risk', 'source', 'deprecated_at', 'last_synced_at', 'sort_order']);
+        });
+    }
+};

@@ -9,12 +9,22 @@ use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Foundation\Exceptions\Handler;
 use Illuminate\Http\Request;
 use Illuminate\Support\ServiceProvider;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 
 class RolesServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/roles.php', 'roles');
+
+        foreach (['role' => Models\Role::class, 'permission' => Models\Permission::class] as $key => $class) {
+            $spatie = $key === 'role' ? Role::class : Permission::class;
+            $current = config("permission.models.{$key}");
+            if ($current === null || $current === $spatie) {
+                config(["permission.models.{$key}" => $class]);
+            }
+        }
 
         $this->callAfterResolving(ExceptionHandler::class, function (ExceptionHandler $handler): void {
             if ($handler instanceof Handler) {
