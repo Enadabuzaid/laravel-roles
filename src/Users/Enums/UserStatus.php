@@ -27,4 +27,13 @@ enum UserStatus: string
     {
         return $this === self::Deactivated;
     }
+
+    /**
+     * Whether an owner in this status counts towards `min_owners`. Locked is transient and self-healing, so a locked
+     * owner still counts; suspended, deactivated and not-yet-activated owners do not.
+     */
+    public function countsAsActiveOwner(): bool
+    {
+        return ! in_array($this, [self::Suspended, self::Deactivated, self::Invited, self::PendingVerification], true);
+    }
 }

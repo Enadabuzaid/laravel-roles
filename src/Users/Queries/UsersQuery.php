@@ -152,7 +152,7 @@ final class UsersQuery
 
     public static function defaultStatus(): string
     {
-        return (UserStatus::tryFrom((string) config('roles.users.default_status', 'active')) ?? UserStatus::Active)->value;
+        return UserStatus::Active->value;
     }
 
     public static function stateTable(): string

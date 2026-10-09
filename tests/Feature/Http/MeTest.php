@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Enadstack\LaravelRoles\Models\Role;
+use Enadstack\LaravelRoles\Users\Support\SignInGate;
 use Illuminate\Support\Facades\DB;
 
 it('describes the owner', function (): void {
@@ -47,6 +48,7 @@ it('answers 401 with the envelope when unauthenticated', function (): void {
 it('uses a constant number of queries', function (): void {
     $user = makeUser('q@example.test');
     $user->assignRole(makeRole('q-role', ['access.roles.view']));
+    app(SignInGate::class)->blocksIdentifier(0); // warm the memoized users-table check
     $count = function () use ($user): int {
         DB::flushQueryLog();
         DB::enableQueryLog();

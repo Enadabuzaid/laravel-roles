@@ -16,6 +16,10 @@ final class RoutesRegistrar
 
         $middleware = array_values((array) config('roles.routes.middleware', []));
 
+        if (config('roles.routes.enforce_active', true)) {
+            $middleware[] = 'access.active';
+        }
+
         if (self::rateLimit() !== null) {
             $middleware[] = 'throttle:access';
         }

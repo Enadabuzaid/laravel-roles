@@ -6,6 +6,9 @@ use Enadstack\LaravelRoles\Guardrails\Operation;
 use Enadstack\LaravelRoles\Guardrails\OperationType as T;
 use Enadstack\LaravelRoles\Guardrails\Rules\SelfDestructiveRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\TargetAboveActorRule;
+use Enadstack\LaravelRoles\Models\Permission;
+use Enadstack\LaravelRoles\Users\Enums\UserStatus;
+use Enadstack\LaravelRoles\Users\Models\UserAccessState;
 use Tests\Support\TestUser;
 
 /** @param list<string> $permissions */
@@ -90,4 +93,45 @@ it('is listed right after the self destructive rule', function () {
     $position = array_search(SelfDestructiveRule::class, $rules, true);
 
     expect($rules[$position + 1])->toBe(TargetAboveActorRule::class);
+});
+
+it('does not let a suspended owner with a surviving session skip the rule', function () {
+    $owner = makeOwner();
+    $other = makeOwner('other@example.test');
+    $target = userWith('target@example.test', ['billing.view']);
+    UserAccessState::create(['user_id' => $owner->id, 'status' => UserStatus::Suspended]);
+
+    expect(guardrailCode(new Operation(T::SuspendUser, actor: $owner, target: $target)))->toBe('guardrail.target_above_actor')
+        ->and(guardrailCode(new Operation(T::SuspendUser, actor: $owner, target: $other)))->toBe('guardrail.target_above_actor');
+});
+
+it('keeps a locked owner as an owner actor', function () {
+    $owner = makeOwner();
+    makeOwner('other@example.test');
+    $target = userWith('target@example.test', ['billing.view']);
+    UserAccessState::create(['user_id' => $owner->id, 'status' => UserStatus::Locked]);
+
+    expect(guardrailCode(new Operation(T::SuspendUser, actor: $owner, target: $target)))->toBeNull();
+});
+
+it('ignores deprecated permissions of the target', function () {
+    makeOwner();
+    $actor = userWith('actor@example.test', ['reports.view']);
+    $target = userWith('target@example.test', ['reports.view', 'old.thing']);
+
+    expect(guardrailCode(new Operation(T::SuspendUser, actor: $actor, target: $target)))->toBe('guardrail.target_above_actor');
+
+    Permission::where('name', 'old.thing')->update(['deprecated_at' => now()]);
+
+    expect(guardrailCode(new Operation(T::SuspendUser, actor: $actor, target: $target)))->toBeNull();
+});
+
+it('ignores permissions of another guard', function () {
+    makeOwner();
+    $actor = userWith('actor@example.test', ['reports.view']);
+    $target = userWith('target@example.test', ['reports.view']);
+    $foreign = Permission::create(['name' => 'foreign.thing', 'guard_name' => 'api']);
+    $target->permissions()->attach($foreign);
+
+    expect(guardrailCode(new Operation(T::SuspendUser, actor: $actor, target: $target)))->toBeNull();
 });

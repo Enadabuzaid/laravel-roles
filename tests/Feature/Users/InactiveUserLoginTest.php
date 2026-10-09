@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 use Enadstack\LaravelRoles\Users\Enums\UserStatus;
 use Enadstack\LaravelRoles\Users\Models\UserAccessState;
+use Illuminate\Auth\Events\Login;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Tests\Support\TestUser;
 
@@ -65,4 +68,80 @@ it('has an arabic translation', function () {
     app()->setLocale('ar');
 
     expect(trans('access::auth.inactive'))->not->toBe('access::auth.inactive')->not->toBe(trans('access::auth.inactive', [], 'en'));
+});
+
+it('refuses suspended users on every non-attempt login path and leaves them a guest', function (string $path) {
+    $user = loginUser();
+    UserAccessState::create(['user_id' => $user->id, 'status' => UserStatus::Suspended]);
+    $guard = Auth::guard('web');
+
+    $login = match ($path) {
+        'login' => fn () => $guard->login($user),
+        'login remember' => fn () => $guard->login($user, true),
+        'loginUsingId' => fn () => $guard->loginUsingId($user->id),
+        'Auth::login' => fn () => Auth::login($user),
+    };
+
+    try {
+        $login();
+        $this->fail('The login should have been refused.');
+    } catch (ValidationException $e) {
+        expect($e->errors()['email'])->toBe([trans('access::auth.inactive')]);
+    }
+
+    expect($guard->check())->toBeFalse();
+})->with(['login', 'login remember', 'loginUsingId', 'Auth::login']);
+
+it('refuses a remember-me recall of a suspended user', function () {
+    $user = loginUser();
+    UserAccessState::create(['user_id' => $user->id, 'status' => UserStatus::Suspended]);
+    $guard = Auth::guard('web');
+    $guard->setUser($user);
+
+    expect(fn () => event(new Login('web', $user, true)))->toThrow(ValidationException::class);
+    expect($guard->check())->toBeFalse();
+});
+
+it('lets active, state-less and expired-lock users through the login paths', function (?UserStatus $status, ?string $lockedUntil) {
+    $user = loginUser();
+    if ($status !== null) {
+        UserAccessState::create(['user_id' => $user->id, 'status' => $status, 'locked_until' => $lockedUntil]);
+    }
+
+    Auth::guard('web')->login($user, true);
+    expect(Auth::guard('web')->check())->toBeTrue();
+    Auth::guard('web')->logout();
+    expect(Auth::guard('web')->loginUsingId($user->id))->not->toBeFalse();
+})->with([[null, null], [UserStatus::Active, null], [UserStatus::Locked, '2000-01-01 00:00:00']]);
+
+it('does not double the refusal on a validated attempt', function () {
+    $user = loginUser();
+    UserAccessState::create(['user_id' => $user->id, 'status' => UserStatus::Suspended]);
+
+    try {
+        Auth::guard('web')->attempt(credentials($user));
+    } catch (ValidationException $e) {
+        expect($e->errors()['email'])->toHaveCount(1);
+    }
+});
+
+it('fails open when the state table is missing', function () {
+    $user = loginUser();
+    Schema::drop('user_access_states');
+    Route::middleware(['web', 'access.active'])->get('/_probe', fn () => response('ok'));
+
+    expect(Auth::guard('web')->attempt(credentials($user)))->toBeTrue();
+    Auth::guard('web')->logout();
+    expect(Auth::guard('web')->login($user))->toBeNull();
+
+    $this->actingAs($user)->get('/_probe')->assertOk();
+    $this->actingAs($user)->getJson('/api/access/me')->assertForbidden()->assertJson(['code' => 'forbidden']);
+});
+
+it('fails open when the users module is disabled', function () {
+    $user = loginUser();
+    UserAccessState::create(['user_id' => $user->id, 'status' => UserStatus::Suspended]);
+    config(['roles.modules.users' => false]);
+
+    expect(Auth::guard('web')->attempt(credentials($user)))->toBeTrue();
 });

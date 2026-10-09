@@ -69,7 +69,7 @@ it('reads the state once per request', function (): void {
     DB::flushQueryLog();
     DB::enableQueryLog();
     $this->actingAs($user)->get('/_twice')->assertOk();
-    $reads = collect(DB::getQueryLog())->filter(fn (array $q): bool => str_contains($q['query'], 'user_access_states'))->count();
+    $reads = collect(DB::getQueryLog())->filter(fn (array $q): bool => str_starts_with($q['query'], 'select * from "user_access_states"'))->count();
     DB::disableQueryLog();
 
     expect($reads)->toBe(1);

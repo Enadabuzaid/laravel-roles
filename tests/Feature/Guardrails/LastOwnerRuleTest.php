@@ -77,7 +77,7 @@ it('does not count an inactive second owner towards the minimum', function (User
         ->and(guardrailCode(new Operation(T::SuspendUser, target: $owner)))->toBe('guardrail.last_owner')
         ->and(guardrailCode(new Operation(T::DeactivateUser, target: $owner)))->toBe('guardrail.last_owner')
         ->and(guardrailCode(new Operation(T::DeleteUser, target: $owner, confirmation: $owner->email)))->toBe('guardrail.last_owner');
-})->with([UserStatus::Suspended, UserStatus::Deactivated, UserStatus::Locked, UserStatus::Invited, UserStatus::PendingVerification]);
+})->with([UserStatus::Suspended, UserStatus::Deactivated, UserStatus::Invited, UserStatus::PendingVerification]);
 
 it('lets an already inactive owner be suspended, deactivated, deleted or lose the role without changing the count', function (T $type) {
     makeOwner();
@@ -107,3 +107,15 @@ it('treats an owner with an active state row like one without a row', function (
 
     expect(guardrailCode(new Operation(T::SuspendUser, target: $owner)))->toBeNull();
 });
+
+it('keeps protecting a locked sole owner', function (?string $lockedUntil, T $type) {
+    $owner = makeOwner();
+    UserAccessState::create(['user_id' => $owner->id, 'status' => UserStatus::Locked, 'locked_until' => $lockedUntil]);
+    $role = Role::where('name', 'owner')->first();
+
+    $operation = $type === T::RemoveRole
+        ? new Operation($type, target: $owner, removed: [$role])
+        : new Operation($type, target: $owner, confirmation: $owner->email);
+
+    expect(guardrailCode($operation))->toBe('guardrail.last_owner');
+})->with([[null], ['2099-01-01 00:00:00'], ['2000-01-01 00:00:00']])->with([T::SuspendUser, T::DeactivateUser, T::DeleteUser, T::RemoveRole]);

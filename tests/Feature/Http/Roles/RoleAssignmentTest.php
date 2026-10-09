@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Enadstack\ActionLogger\Models\ActionLog;
+use Enadstack\LaravelRoles\Users\Support\SignInGate;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\TestUser;
 
@@ -176,6 +177,7 @@ it('refuses removing the last owner via DELETE and via PUT sync', function (): v
 });
 
 it('uses a constant number of queries regardless of the role permission count', function (): void {
+    app(SignInGate::class)->blocksIdentifier(0); // warm the memoized users-table check
     $measure = function (int $count): int {
         $permissions = array_map(fn (int $i): string => "gen{$count}.perm{$i}", range(1, $count));
         $actor = assigner($permissions);

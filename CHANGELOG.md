@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `POST roles` with a non-empty `permissions` list also requires `access.roles.update`; `access:<arg>` rejects anything but `any`; `access:any` and `GET me` only consider non-deprecated permissions of the configured guard; the access check detects owners by the configured guard; the previous default role lookup is guard-scoped; README rate limiter wording.
 
+- Login enforcement also covers `Login` (two-factor completion, `Auth::login`, remember-me), package routes append `access.active` (`roles.routes.enforce_active`), a missing state table fails open, locked owners count as active owners, `TargetStanding` ignores deprecated permissions and suspended owner actors; users without a state row are always active (`default_status` only seeds backfilled rows).
+
 Upgrading: run `php artisan roles:install` (or republish migrations), `php artisan migrate`, then `php artisan roles:backfill-users`.
 
 ## 2.0.0-alpha.5 — 2026-10-09

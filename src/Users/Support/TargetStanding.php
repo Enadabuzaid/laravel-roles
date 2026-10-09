@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Enadstack\LaravelRoles\Users\Support;
 
+use Enadstack\LaravelRoles\Users\Enums\UserStatus;
+use Enadstack\LaravelRoles\Users\Models\UserAccessState;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
@@ -37,7 +39,8 @@ final class TargetStanding
 
         $actorKey = $actor->getKey();
         $owners = $this->ownerKeys($actor, [...$keys, $actorKey]);
-        $actorIsOwner = isset($owners[$actorKey]);
+        // An owner who is suspended (e.g. with a surviving session) is no owner for this purpose.
+        $actorIsOwner = isset($owners[$actorKey]) && $this->countsAsActive($actorKey);
 
         $needPermissions = [];
         if (! $actorIsOwner) {
@@ -74,6 +77,13 @@ final class TargetStanding
     public function reasonFor(Model $actor, Model $target): ?string
     {
         return $this->evaluate($actor, [$target])[$target->getKey()]['reason'];
+    }
+
+    private function countsAsActive(int|string $key): bool
+    {
+        $status = DB::table((new UserAccessState)->getTable())->where('user_id', $key)->value('status');
+
+        return ! is_string($status) || (UserStatus::tryFrom($status)?->countsAsActiveOwner() ?? true);
     }
 
     /**
@@ -133,6 +143,7 @@ final class TargetStanding
             ->where($roles.'.guard_name', $guard)
             ->whereNull($roles.'.deleted_at')
             ->where($permissions.'.guard_name', $guard)
+            ->whereNull($permissions.'.deprecated_at')
             ->get([$modelRoles.'.'.$morphKey.' as user_key', $permissions.'.name as permission_name']);
 
         $direct = DB::table($modelPermissions)
@@ -140,6 +151,7 @@ final class TargetStanding
             ->where($modelPermissions.'.model_type', $sample->getMorphClass())
             ->whereIn($modelPermissions.'.'.$morphKey, $keys)
             ->where($permissions.'.guard_name', $guard)
+            ->whereNull($permissions.'.deprecated_at')
             ->get([$modelPermissions.'.'.$morphKey.' as user_key', $permissions.'.name as permission_name']);
 
         $names = [];

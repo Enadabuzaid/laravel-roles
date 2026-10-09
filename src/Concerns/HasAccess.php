@@ -57,7 +57,7 @@ trait HasAccess
 
         return $state instanceof UserAccessState
             ? $state->status
-            : (UserStatus::tryFrom((string) config('roles.users.default_status', 'active')) ?? UserStatus::Active);
+            : UserStatus::Active;
     }
 
     public function isAccessActive(): bool

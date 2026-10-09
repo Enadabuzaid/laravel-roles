@@ -6,7 +6,7 @@ namespace Enadstack\LaravelRoles\Users\Http\Middleware;
 
 use Closure;
 use Enadstack\LaravelRoles\Support\ApiResponse;
-use Enadstack\LaravelRoles\Users\Models\UserAccessState;
+use Enadstack\LaravelRoles\Users\Support\SignInGate;
 use Illuminate\Contracts\Auth\StatefulGuard;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -52,8 +52,7 @@ final class EnsureUserIsActive
             return $cached;
         }
 
-        $state = UserAccessState::query()->where('user_id', $identifier)->first();
-        $blocked = $state !== null && ! $state->canSignInNow();
+        $blocked = app(SignInGate::class)->blocksIdentifier($identifier);
         $request->attributes->set(self::ATTRIBUTE, $blocked);
 
         return $blocked;

@@ -100,7 +100,7 @@ $user->syncAccessRoles(['manager', 'viewer']);
 $user->isOwner();
 ```
 
-The users module adds `$user->accessState()` (HasOne), `$user->accessStatus()` (a `UserStatus`; `Active` when the user has no row in `user_access_states`) and `$user->isAccessActive()`. These are additive: the `AccessUser` contract is unchanged. Existing installs run `php artisan roles:install`, `php artisan migrate` and `php artisan roles:backfill-users` once. Settings live under `roles.users` (`mfa_enabled_column`, `invitation_ttl_hours`, `default_status`, `accept_url`, `saved_view_pages`).
+The users module adds `$user->accessState()` (HasOne), `$user->accessStatus()` (a `UserStatus`; `Active` when the user has no row in `user_access_states`, whatever `roles.users.default_status` says: that key only seeds rows created by `roles:backfill-users`) and `$user->isAccessActive()`. These are additive: the `AccessUser` contract is unchanged. Existing installs run `php artisan roles:install`, `php artisan migrate` and `php artisan roles:backfill-users` once. Settings live under `roles.users` (`mfa_enabled_column`, `invitation_ttl_hours`, `default_status`, `accept_url`, `saved_view_pages`).
 
 Never call Spatie's `assignRole`, `removeRole`, `syncRoles`, `givePermissionTo`, `revokePermissionTo` or `syncPermissions` directly; an architecture test enforces this inside the package.
 
@@ -112,7 +112,7 @@ Every user role change goes through `Guardrails::assert()` inside the Action's t
 
 | Code | Meaning | Applies to system actor |
 | --- | --- | --- |
-| `guardrail.last_owner` | Fewer than `min_owners` ACTIVE owners would remain (owners that are suspended, deactivated, locked or not yet activated do not count) | yes |
+| `guardrail.last_owner` | Fewer than `min_owners` ACTIVE owners would remain (owners that are suspended, deactivated, invited or pending verification do not count; a locked owner does) | yes |
 | `guardrail.self_role_change` | You changed your own role, edited a role you hold, or restored a role you hold | no |
 | `guardrail.self_destructive` | You suspended, deactivated or deleted yourself | no |
 | `guardrail.target_above_actor` | A non-owner suspended, deactivated, deleted (later also unlocked or forced a password reset for) an owner or a user whose effective permissions exceed their own | no (system actors and owners skip it) |
@@ -296,7 +296,9 @@ Errors are `{success: false, message, code, errors}`. `errors` is a field map fo
 
 ### Inactive users
 
-Users whose `user_access_states.status` is `suspended`, `deactivated`, `invited`, `pending_verification` or `locked` (until `locked_until` passes) cannot sign in: the package listens to `Illuminate\Auth\Events\Validated` and throws a `ValidationException` on the `fortify.username` field (default `email`) with the translatable message `access::auth.inactive` (English and Arabic; publish with `--tag=roles-lang`). Users without a state row, and models that are not `AccessUser`, pass. To also end sessions that are already open, add the `access.active` alias to your web group, for example `$middleware->appendToGroup('web', 'access.active')` in `bootstrap/app.php` (the package does not add it for you; `roles:install` prints the reminder). The middleware logs the user out, invalidates the session and regenerates the CSRF token, then redirects web requests to the `login` route (403 when none exists) and answers JSON requests with 403 `account_inactive`. It reads the state once per request.
+Users whose `user_access_states.status` is `suspended`, `deactivated`, `invited`, `pending_verification` or `locked` (until `locked_until` passes) cannot sign in. Two listeners cover the entry points: `Illuminate\Auth\Events\Validated` (`attempt()` and `validate()`) and `Illuminate\Auth\Events\Login` (Fortify's two-factor completion, `Auth::login()`, `loginUsingId()` and remember-me recall, which all skip `Validated`). Both throw a `ValidationException` on the `fortify.username` field (default `email`) with the translatable message `access::auth.inactive` (English and Arabic; publish with `--tag=roles-lang`); a refusal on `Login` also logs the guard out and invalidates its session. Users without a state row, models that are not `AccessUser`, a disabled `modules.users` and a missing `user_access_states` table all fail OPEN (everyone is treated as active; the doctor `users-state` check reports the missing table). The owner count behind the guardrails stays fail-closed: guardrailed writes need the table.
+
+The `access.active` middleware is the backstop for sessions that are already open (and for token guards): it logs the user out, invalidates the session and regenerates the CSRF token, then redirects web requests to the `login` route (403 when none exists) and answers JSON requests with HTTP 403 and code `account_inactive` (a deliberate choice: 403, not 401, because the credentials are fine but the account may not act). It reads the state once per request. The package appends it to its own API routes after the configured middleware (`roles.routes.enforce_active`, default `true`); add it to your web group yourself, for example `$middleware->appendToGroup('web', 'access.active')` in `bootstrap/app.php` (`roles:install` prints the reminder). An owner who is suspended, deactivated, invited or pending verification does not count towards `min_owners`; a locked owner does (lockouts are transient).
 
 ### Rate limiting
 

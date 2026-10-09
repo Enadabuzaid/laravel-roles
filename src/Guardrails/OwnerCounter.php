@@ -14,8 +14,10 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 final class OwnerCounter
 {
     /**
-     * Active owners: users holding the super role whose access state is active or missing.
-     * Suspended, deactivated, locked and not-yet-activated owners never count towards `min_owners`.
+     * Active owners: users holding the super role whose access state is not suspended, deactivated, invited or
+     * pending verification (a locked owner still counts: lockouts are transient). A missing state row counts as active.
+     * Fail-closed on purpose: it needs the `user_access_states` table, so guardrailed writes fail loudly without it
+     * (the doctor `users-state` check reports that state).
      */
     public function count(): int
     {
@@ -65,7 +67,10 @@ final class OwnerCounter
         return $users->whereNotExists(static function (QueryBuilder $query) use ($users, $states): void {
             $query->from($states)
                 ->whereColumn($states.'.user_id', $users->getModel()->getQualifiedKeyName())
-                ->where($states.'.status', '!=', UserStatus::Active->value);
+                ->whereIn($states.'.status', array_map(
+                    static fn (UserStatus $status): string => $status->value,
+                    array_values(array_filter(UserStatus::cases(), static fn (UserStatus $status): bool => ! $status->countsAsActiveOwner())),
+                ));
         });
     }
 

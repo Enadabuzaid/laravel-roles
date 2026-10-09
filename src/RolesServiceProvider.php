@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Enadstack\LaravelRoles;
 
 use Enadstack\LaravelRoles\Support\Http\ApiExceptionRenderer;
+use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Validated;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Debug\ExceptionHandler;
@@ -56,6 +57,7 @@ class RolesServiceProvider extends ServiceProvider
         ));
 
         $this->app->scoped(Support\ActorContext::class);
+        $this->app->singleton(Users\Support\SignInGate::class);
         $this->app->scoped(Audit\AuditRecorder::class);
         $this->app->scoped(Users\Support\HostMfaColumn::class);
         $this->app->scoped(Guardrails\Guardrails::class, fn ($app) => new Guardrails\Guardrails(
@@ -88,6 +90,7 @@ class RolesServiceProvider extends ServiceProvider
 
         $this->loadTranslationsFrom(__DIR__.'/../resources/lang', 'access');
         Event::listen(Validated::class, Users\Listeners\BlockInactiveUser::class);
+        Event::listen(Login::class, [Users\Listeners\BlockInactiveUser::class, 'onLogin']);
 
         RateLimiter::for('access', static function (Request $request): Limit {
             $limit = Http\Support\RoutesRegistrar::rateLimit();

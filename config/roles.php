@@ -44,6 +44,7 @@ return [
     'routes' => [
         'prefix' => 'api/access',
         'middleware' => ['api', 'auth:sanctum'],
+        'enforce_active' => true, // append the `access.active` middleware so inactive users are refused on package routes
     ],
 
     'http' => ['rate_limit' => 60], // requests per minute per user (IP when guest) on every package route via the `access` limiter; null disables. The legacy 'attempts,minutes' string still works.
@@ -82,7 +83,7 @@ return [
     'users' => [
         'mfa_enabled_column' => 'two_factor_confirmed_at', // optional host column read for the MFA flag
         'invitation_ttl_hours' => 72,
-        'default_status' => 'active', // status of users without a state row
+        'default_status' => 'active', // status of state rows created by roles:backfill-users (users without a row are always active)
         'accept_url' => null, // null resolves lazily to url('/accept-invitation')
         'saved_view_pages' => ['users', 'roles', 'permissions', 'audit', 'reports'],
         'lockout' => [], // reserved for the security phase

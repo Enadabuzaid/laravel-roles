@@ -44,10 +44,10 @@ it('defaults accessStatus to Active without a row and reads the row otherwise', 
         ->and($user->fresh()->isAccessActive())->toBeFalse();
 });
 
-it('honours the configured default status when there is no row', function (): void {
+it('is active when there is no row whatever default_status says (it only seeds backfilled rows)', function (): void {
     config(['roles.users.default_status' => 'invited']);
 
-    expect(makeUser()->accessStatus())->toBe(UserStatus::Invited);
+    expect(makeUser()->accessStatus())->toBe(UserStatus::Active);
 });
 
 it('has the sign in truth table', function (UserStatus $status, ?string $lockedUntil, bool $statusOnly, bool $now): void {

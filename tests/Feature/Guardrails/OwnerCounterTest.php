@@ -24,7 +24,7 @@ it('counts only active owners', function (UserStatus $status) {
     UserAccessState::create(['user_id' => $inactive->id, 'status' => $status]);
 
     expect(app(OwnerCounter::class)->count())->toBe(1);
-})->with([UserStatus::Suspended, UserStatus::Deactivated, UserStatus::Locked, UserStatus::Invited, UserStatus::PendingVerification]);
+})->with([UserStatus::Suspended, UserStatus::Deactivated, UserStatus::Invited, UserStatus::PendingVerification]);
 
 it('counts an owner with an active state row', function () {
     $owner = makeOwner();
@@ -69,3 +69,11 @@ it('counts active owners with one query', function () {
     // One for the super role lookup and one for the active owner count.
     expect($queries)->toBe(2);
 });
+
+it('counts a locked owner as active whether or not the lock expired', function (?string $lockedUntil) {
+    $owner = makeOwner();
+    UserAccessState::create(['user_id' => $owner->id, 'status' => UserStatus::Locked, 'locked_until' => $lockedUntil]);
+    $counter = app(OwnerCounter::class);
+
+    expect($counter->count())->toBe(1)->and($counter->isActiveOwner($owner))->toBeTrue();
+})->with([null, '2099-01-01 00:00:00', '2000-01-01 00:00:00']);
