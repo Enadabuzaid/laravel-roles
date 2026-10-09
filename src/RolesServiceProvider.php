@@ -91,6 +91,7 @@ class RolesServiceProvider extends ServiceProvider
         $this->loadTranslationsFrom(__DIR__.'/../resources/lang', 'access');
         Event::listen(Validated::class, Users\Listeners\BlockInactiveUser::class);
         Event::listen(Login::class, [Users\Listeners\BlockInactiveUser::class, 'onLogin']);
+        Event::listen(Login::class, Users\Listeners\RecordLastLogin::class);
 
         RateLimiter::for('access', static function (Request $request): Limit {
             $limit = Http\Support\RoutesRegistrar::rateLimit();

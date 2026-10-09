@@ -34,7 +34,7 @@ final class SignInGate
         return $state !== null && ! $state->canSignInNow();
     }
 
-    private function enabled(): bool
+    public function enabled(): bool
     {
         if (! config('roles.modules.users')) {
             return false;

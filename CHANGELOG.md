@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Guardrails for the user lifecycle: `OwnerCounter` counts only ACTIVE owners (`isActiveOwner()` added), the last-owner rule uses it, and the new `TargetAboveActorRule` (`prevent_target_above_actor`, code `guardrail.target_above_actor`) sits right after the self-destructive rule.
 - Login enforcement: `BlockInactiveUser` listener (translatable `access::auth.inactive`) and the `access.active` middleware (ends the session, 403 `account_inactive` for JSON).
 
+- User lifecycle: `POST users/{user}/suspend|reactivate|deactivate|unlock|force-password-reset` and `DELETE users/{user}` backed by the `SuspendUser`, `ReactivateUser`, `DeactivateUser`, `UnlockUser`, `ForcePasswordReset` and `DeleteUser` Actions (transaction, super-role lock, guardrails, one audit entry after commit; no-ops write nothing; illegal transitions are 409 `user.invalid_transition`). Suspend, deactivate and delete end database sessions and Sanctum tokens (best effort). New operation types `ReactivateUser`, `UnlockUser`, `ForcePasswordReset` covered by `TargetAboveActorRule`.
+- `RecordLastLogin` listener on `Login` (last login time and IP, failed-login counter reset; never throws into the login flow, fails open without the state table).
+
 ### Fixed
 - `POST roles` with a non-empty `permissions` list also requires `access.roles.update`; `access:<arg>` rejects anything but `any`; `access:any` and `GET me` only consider non-deprecated permissions of the configured guard; the access check detects owners by the configured guard; the previous default role lookup is guard-scoped; README rate limiter wording.
 

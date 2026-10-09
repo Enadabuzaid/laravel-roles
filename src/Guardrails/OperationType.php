@@ -18,6 +18,9 @@ enum OperationType: string
     case SuspendUser = 'suspend_user';
     case DeactivateUser = 'deactivate_user';
     case DeleteUser = 'delete_user';
+    case ReactivateUser = 'reactivate_user';
+    case UnlockUser = 'unlock_user';
+    case ForcePasswordReset = 'force_password_reset';
 
     public function isRoleChange(): bool
     {

@@ -13,6 +13,7 @@ use Enadstack\LaravelRoles\Users\Support\HostMfaColumn;
 use Enadstack\LaravelRoles\Users\Support\TargetStanding;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Grammar;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -115,6 +116,22 @@ final class UsersQuery
         $query->orders = null;
         $query->orderByRaw('CASE WHEN user_access_states.last_login_at IS NULL THEN 1 ELSE 0 END');
         $query->orders = array_merge($query->orders ?? [], $orders);
+    }
+
+    /**
+     * One user row as the list returns it (fresh access state, standing relative to `$actor` attached).
+     *
+     * @throws ModelNotFoundException
+     */
+    public static function row(string|int $id, ?Model $actor): Model
+    {
+        $user = self::base()->findOrFail($id);
+
+        if ($actor !== null) {
+            self::annotate($actor, [$user]);
+        }
+
+        return $user;
     }
 
     /**

@@ -115,7 +115,7 @@ Every user role change goes through `Guardrails::assert()` inside the Action's t
 | `guardrail.last_owner` | Fewer than `min_owners` ACTIVE owners would remain (owners that are suspended, deactivated, invited or pending verification do not count; a locked owner does) | yes |
 | `guardrail.self_role_change` | You changed your own role, edited a role you hold, or restored a role you hold | no |
 | `guardrail.self_destructive` | You suspended, deactivated or deleted yourself | no |
-| `guardrail.target_above_actor` | A non-owner suspended, deactivated, deleted (later also unlocked or forced a password reset for) an owner or a user whose effective permissions exceed their own | no (system actors and owners skip it) |
+| `guardrail.target_above_actor` | A non-owner suspended, reactivated, deactivated, deleted, unlocked or forced a password reset for an owner or a user whose effective permissions exceed their own | no (system actors and owners skip it) |
 | `guardrail.escalation` | Granting or restoring a role with permissions you lack, or adding/removing/restoring the owner role as a non-owner | no |
 | `guardrail.actor_required` | A guarded write ran outside console with no authenticated actor and no explicit `runAs(null)` | n/a |
 | `guardrail.high_risk_confirm_required` | Adding or restoring a high-risk or owner role, or granting a high-risk permission, without `confirmed: true` | yes |
@@ -182,6 +182,12 @@ All paths are relative to `roles.routes.prefix` (default `api/access`) and run u
 | GET | `users/overview` | `access.users.view` | Counts and weekly series; see Overview payloads |
 | GET | `users/{user}` | `access.users.view` | User profile; 404 for an unknown user |
 | GET | `users/{user}/permissions` | `access.users.view` | The user's effective permissions grouped by module, with where each comes from; see Payloads |
+| POST | `users/{user}/suspend` | `access.users.suspend` | Body `reason` (required, max 500). Active or locked becomes suspended; already suspended is a 200 no-op (no write, no audit); any other status is 409 `user.invalid_transition`. Ends the user's database sessions and Sanctum tokens. Returns the User |
+| POST | `users/{user}/reactivate` | `access.users.suspend` | Suspended or deactivated becomes active (roles are untouched, so access returns as it was; `status_reason` is cleared, `activated_at` set). Active or locked is 409 `user.invalid_transition` (use `unlock` for locked). Returns the User |
+| POST | `users/{user}/deactivate` | `access.users.suspend` | Body `reason` (required, max 500). Active, locked or suspended becomes deactivated; already deactivated is a 200 no-op; invited / pending verification is 409. Deactivated is final except `reactivate`. Ends sessions and tokens. Returns the User |
+| POST | `users/{user}/unlock` | `access.users.update` | Locked becomes active with `locked_until` and `failed_login_count` cleared; any other status is 409 `user.invalid_transition`. Returns the User |
+| POST | `users/{user}/force-password-reset` | `access.users.update` | Sends the host's password reset link (`Password::broker()->sendResetLink`) after the audit transaction commits. Never returns a token; `meta.link_sent` says whether the link went out (a mail failure is reported and does not undo the audit entry). `password_changed_at` is not touched. Returns the User |
+| DELETE | `users/{user}` | `access.users.delete` | Body `confirmation` must equal the user's email (case-insensitive, trimmed; missing or wrong is 403 `guardrail.confirmation_mismatch`). Deletes through the host model (soft-deleted when it uses SoftDeletes), removes the role and permission pivot rows of that model, its state row and saved views, and sets `invited_by` to null on the invitations and state rows it created. Never the last active owner or yourself. Ends sessions and tokens. 204 |
 | GET | `saved-views` | `access.users.view` | The current user's saved filter views (never anyone else's), optionally `?page=users`. An unknown `page` is 422 |
 | POST | `saved-views` | `access.users.view` | `page` (one of `roles.users.saved_view_pages`), `name` (1 to 80 chars, unique per user and page, 422 on a duplicate), `filters` (optional object: at most 20 keys, each value a scalar or a list of scalars, at most 2 KB as JSON). At most 25 views per user and page (422 `saved_view.limit`). Names and filters must be valid UTF-8 (422 otherwise). Saved views of every page require `access.users.view` (a known limit). Saved views are a personal preference and are not audited. 201 with the SavedView |
 | DELETE | `saved-views/{view}` | `access.users.view` | Own views only; another user's id is 404, never 403. 204 |
@@ -274,6 +280,7 @@ Errors are `{success: false, message, code, errors}`. `errors` is a field map fo
 | `http_error` | other 4xx/5xx | Any other HTTP exception |
 | `guardrail.last_owner` | 403 | Fewer than `min_owners` active owners would remain |
 | `guardrail.target_above_actor` | 403 | "You can't manage a user with more access than you have." |
+| `user.invalid_transition` | 409 | A lifecycle action that does not apply to the user's current status; `errors.status` holds the current status |
 | `saved_view.limit` | 422 | The user already has 25 saved views on that page |
 | `account_inactive` | 403 | The signed-in user's access state no longer allows signing in; returned by the `access.active` middleware for JSON requests after it ended the session |
 | `guardrail.self_role_change` | 403 | Changing, or restoring, a role you hold; editing a role you hold |
@@ -311,7 +318,7 @@ With session authentication send the `X-XSRF-TOKEN` header (the value of the `XS
 
 ## Audit
 
-Writes go to `enadstack/laravel-action-logger` (^1.1), module `roles` or `permissions`. Each effective write is one entry; no-ops, refusals and rollbacks write none.
+Writes go to `enadstack/laravel-action-logger` (^1.1), module `roles`, `permissions` or `users`. Each effective write is one entry; no-ops, refusals and rollbacks write none.
 
 | Event | Module | Severity | Subject | When |
 | --- | --- | --- | --- | --- |
@@ -323,6 +330,11 @@ Writes go to `enadstack/laravel-action-logger` (^1.1), module `roles` or `permis
 | `roles.permissions_updated` | roles | `info` (`warning` when a high-risk permission was added) | the role | `old_values` / `new_values` hold `permissions`; `meta` holds `added` / `removed` |
 | `roles.assigned` / `roles.removed` / `roles.synced` | roles | `critical` when the Owner role is added or removed, `warning` when a high-risk role is added, else `info` | the user | Only if the role set changed; `old_values` / `new_values` hold `roles`, `meta` holds `role` or `added` / `removed` |
 | `roles.seeded` | roles | `info` | none | Roles were created or restored |
+| `users.suspended` | users | `warning` (`critical` when the target is an owner) | the user | `old_values` / `new_values` hold `status`; `meta.reason` |
+| `users.reactivated` / `users.unlocked` | users | `info` | the user | `old_values` / `new_values` hold `status` |
+| `users.deactivated` | users | `warning` (`critical` when the target is an owner) | the user | `meta.reason` |
+| `users.password_reset_forced` | users | `info` | the user | One entry per request |
+| `users.deleted` | users | `critical` | none | `old_values` hold `id`, `name`, `email`; `meta.was_owner` |
 | `permissions.created` | permissions | `info` | the permission | |
 | `permissions.updated` | permissions | `info` (`warning` when a high risk was lowered) | the permission | Changed attributes only |
 | `permissions.deleted` | permissions | `warning` | none | `meta` holds `id` and `name` |

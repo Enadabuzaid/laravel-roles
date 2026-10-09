@@ -1,0 +1,13 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Enadstack\LaravelRoles\Users\Http\Requests;
+
+final class ReactivateUserRequest extends UserLifecycleRequest
+{
+    protected function ability(): string
+    {
+        return 'suspend';
+    }
+}

@@ -6,27 +6,24 @@ namespace Enadstack\LaravelRoles\Guardrails\Rules;
 
 use Enadstack\LaravelRoles\Guardrails\Guardrail;
 use Enadstack\LaravelRoles\Guardrails\Operation;
+use Enadstack\LaravelRoles\Guardrails\OperationType;
 use Enadstack\LaravelRoles\Guardrails\Violation;
 use Enadstack\LaravelRoles\Users\Support\TargetStanding;
 
 /**
- * A non-owner may not manage (suspend, deactivate, delete, unlock, force a password reset for)
+ * A non-owner may not manage (suspend, reactivate, deactivate, delete, unlock, force a password reset for)
  * an owner or a user whose effective permissions exceed their own. The system actor and owners skip it.
  */
 final class TargetAboveActorRule implements Guardrail
 {
-    /**
-     * Operation type values this rule applies to. Matching by value lets the lifecycle operations that
-     * are added later (`unlock_user`, `force_password_reset`) be covered as soon as the cases exist.
-     *
-     * @var list<string>
-     */
+    /** @var list<OperationType> */
     private const TARGET_OPERATIONS = [
-        'suspend_user',
-        'deactivate_user',
-        'delete_user',
-        'unlock_user',
-        'force_password_reset',
+        OperationType::SuspendUser,
+        OperationType::DeactivateUser,
+        OperationType::DeleteUser,
+        OperationType::ReactivateUser,
+        OperationType::UnlockUser,
+        OperationType::ForcePasswordReset,
     ];
 
     public function __construct(private readonly TargetStanding $standing) {}
@@ -40,7 +37,7 @@ final class TargetAboveActorRule implements Guardrail
             return;
         }
 
-        if (! in_array($operation->type->value, self::TARGET_OPERATIONS, true) || $operation->actorIsTarget()) {
+        if (! in_array($operation->type, self::TARGET_OPERATIONS, true) || $operation->actorIsTarget()) {
             return;
         }
 
