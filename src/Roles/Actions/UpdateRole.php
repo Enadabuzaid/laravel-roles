@@ -32,7 +32,7 @@ final class UpdateRole extends Action
 
             $ids = [(int) $role->getKey()];
             if (filter_var($data['is_default'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
-                array_push($ids, ...array_map('intval', Role::query()->where('is_default', true)->pluck('id')->all()));
+                array_push($ids, ...array_map('intval', Role::query()->where('guard_name', (string) config('roles.guard'))->where('is_default', true)->pluck('id')->all()));
             }
 
             $fresh = Role::query()->whereIn('id', array_values(array_unique($ids)))->orderBy('id')->lockForUpdate()->get()->firstWhere('id', $role->getKey())
@@ -74,7 +74,7 @@ final class UpdateRole extends Action
 
             $meta = [];
             if ($fresh->is_default && in_array('is_default', $dirty, true)) {
-                $previous = Role::query()->lockForUpdate()->whereKeyNot($fresh->getKey())->where('is_default', true)->get(['id', 'name']);
+                $previous = Role::query()->lockForUpdate()->whereKeyNot($fresh->getKey())->where('guard_name', (string) config('roles.guard'))->where('is_default', true)->get(['id', 'name']);
                 if ($previous->isNotEmpty()) {
                     Role::query()->whereKey($previous->modelKeys())->update(['is_default' => false]);
                     $meta['default_cleared_from'] = $previous->map(fn (Role $other): array => ['id' => $other->getKey(), 'name' => $other->name])->all();

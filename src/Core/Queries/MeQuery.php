@@ -30,7 +30,7 @@ final class MeQuery
         if ($actor['is_owner']) {
             $held = $names;
         } elseif ($user !== null && method_exists($user, 'getAllPermissions')) {
-            $owned = array_flip($user->getAllPermissions()->pluck('name')->all());
+            $owned = array_flip($user->getAllPermissions()->where('guard_name', (string) config('roles.guard'))->whereNull('deprecated_at')->pluck('name')->all());
             $held = array_values(array_filter($names, static fn (string $name): bool => isset($owned[$name])));
         }
 

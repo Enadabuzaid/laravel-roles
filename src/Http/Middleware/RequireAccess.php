@@ -9,6 +9,7 @@ use Enadstack\LaravelRoles\Roles\Support\ActorRoles;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
+use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -18,6 +19,10 @@ final class RequireAccess
 {
     public function handle(Request $request, Closure $next, string $requirement = 'any'): Response
     {
+        if ($requirement !== 'any') {
+            throw new InvalidArgumentException("Unsupported access middleware argument [{$requirement}]; only [access:any] is supported.");
+        }
+
         $user = $request->user();
 
         if ($user === null) {
@@ -37,6 +42,8 @@ final class RequireAccess
             return false;
         }
 
-        return $user->getAllPermissions()->pluck('name')->contains(static fn (mixed $name): bool => is_string($name) && str_starts_with($name, 'access.'));
+        $guard = (string) config('roles.guard');
+
+        return $user->getAllPermissions()->where('guard_name', $guard)->whereNull('deprecated_at')->pluck('name')->contains(static fn (mixed $name): bool => is_string($name) && str_starts_with($name, 'access.'));
     }
 }

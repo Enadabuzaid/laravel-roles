@@ -14,7 +14,12 @@ class StoreRoleRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return Gate::forUser($this->user())->allows('create', Role::class);
+        $gate = Gate::forUser($this->user());
+
+        // Granting permissions at creation is a role update as well: `create` alone only makes an empty role.
+        $grantsPermissions = is_array($this->input('permissions')) && $this->input('permissions') !== [];
+
+        return $gate->allows('create', Role::class) && (! $grantsPermissions || $gate->allows('update', Role::class));
     }
 
     /** @return array<string, mixed> */

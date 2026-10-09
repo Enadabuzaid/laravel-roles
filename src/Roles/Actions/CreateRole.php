@@ -60,7 +60,7 @@ final class CreateRole extends Action
 
             $meta = [];
             if ($role->is_default) {
-                $previous = Role::query()->lockForUpdate()->whereKeyNot($role->getKey())->where('is_default', true)->get(['id', 'name']);
+                $previous = Role::query()->lockForUpdate()->whereKeyNot($role->getKey())->where('guard_name', $guard)->where('is_default', true)->get(['id', 'name']);
                 if ($previous->isNotEmpty()) {
                     Role::query()->whereKey($previous->modelKeys())->update(['is_default' => false]);
                     $meta['default_cleared_from'] = $previous->map(fn (Role $other): array => ['id' => $other->getKey(), 'name' => $other->name])->all();
