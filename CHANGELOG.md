@@ -5,9 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 2.0.0-alpha.6 — 2026-10-10
 
 ### Added
+- Users module (users list, overview, profile, effective permissions, lifecycle actions, invitations, saved views) with the host integration steps: publish migrations, `roles:backfill-users`, append `access.active` to the web group, point `roles.users.accept_url` at a guest page that posts to `invitations/accept`.
 - Users module foundation: `user_access_states`, `access_invitations` and `access_saved_views` tables (published by `roles:install` / `vendor:publish --tag=roles-migrations` after the roles/permissions extension stubs, no foreign keys), the `UserStatus` enum and the `UserAccessState`, `AccessInvitation` and `SavedView` models.
 - `HasAccess::accessState()`, `accessStatus()` (Active when no row exists) and `isAccessActive()`; the `AccessUser` contract is unchanged.
 - `roles:backfill-users` (chunked, idempotent, `--dry-run`) and the `users-state` doctor check (WARN for users without a state row, FAIL when `modules.users` is on and the table is missing).
