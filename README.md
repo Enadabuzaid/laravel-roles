@@ -269,7 +269,7 @@ Errors are `{success: false, message, code, errors}`. `errors` is a field map fo
 
 | Code | HTTP | When |
 | --- | --- | --- |
-| `validation_failed` | 422 | Request validation failed (`errors` lists the fields), including an unknown `permission` on the access check |
+| `validation_failed` | 422 | Request validation failed (`errors` lists the fields), including an unknown `permission` on the access check, and a remember-me recall of an inactive user on a package JSON route (`errors.email` holds `access::auth.inactive`; the guard is logged out) |
 | `unauthenticated` | 401 | No authenticated user |
 | `forbidden` | 403 | The user lacks the route permission |
 | `not_found` | 404 | Unknown, trashed (on routes that exclude them) or other-guard role, permission or user; unknown route |
@@ -305,6 +305,10 @@ Errors are `{success: false, message, code, errors}`. `errors` is a field map fo
 ### Inactive users
 
 Users whose `user_access_states.status` is `suspended`, `deactivated`, `invited`, `pending_verification` or `locked` (until `locked_until` passes) cannot sign in. Two listeners cover the entry points: `Illuminate\Auth\Events\Validated` (`attempt()` and `validate()`) and `Illuminate\Auth\Events\Login` (Fortify's two-factor completion, `Auth::login()`, `loginUsingId()` and remember-me recall, which all skip `Validated`). Both throw a `ValidationException` on the `fortify.username` field (default `email`) with the translatable message `access::auth.inactive` (English and Arabic; publish with `--tag=roles-lang`); a refusal on `Login` also logs the guard out and invalidates its session. Users without a state row, models that are not `AccessUser`, a disabled `modules.users` and a missing `user_access_states` table all fail OPEN (everyone is treated as active; the doctor `users-state` check reports the missing table). The owner count behind the guardrails stays fail-closed: guardrailed writes need the table.
+
+Remember-me: the recall happens when the guard first resolves the user, which fires `Login` before the `access.active` middleware runs. On a package JSON route that surfaces as 422 `validation_failed` (field `email`, message `access::auth.inactive`) and the guard is logged out; `403 account_inactive` is what an already-open session of a user suspended meanwhile receives. Both are tested.
+
+Invitation acceptance sets the new user's state to `active` BEFORE the role is assigned and before any `Auth::login`, so the host may sign the user in right after the accept call. Registration flows of the host must not create `pending_verification` state rows before they log the user in: such a row makes the sign-in refuse the user.
 
 The `access.active` middleware is the backstop for sessions that are already open (and for token guards): it logs the user out, invalidates the session and regenerates the CSRF token, then redirects web requests to the `login` route (403 when none exists) and answers JSON requests with HTTP 403 and code `account_inactive` (a deliberate choice: 403, not 401, because the credentials are fine but the account may not act). It reads the state once per request. The package appends it to its own API routes after the configured middleware (`roles.routes.enforce_active`, default `true`); add it to your web group yourself, for example `$middleware->appendToGroup('web', 'access.active')` in `bootstrap/app.php` (`roles:install` prints the reminder). An owner who is suspended, deactivated, invited or pending verification does not count towards `min_owners`; a locked owner does (lockouts are transient).
 

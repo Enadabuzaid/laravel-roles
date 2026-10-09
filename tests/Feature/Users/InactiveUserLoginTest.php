@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Enadstack\LaravelRoles\Users\Enums\UserStatus;
 use Enadstack\LaravelRoles\Users\Models\UserAccessState;
+use Enadstack\LaravelRoles\Users\Support\SignInGate;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -144,4 +145,49 @@ it('fails open when the users module is disabled', function () {
     config(['roles.modules.users' => false]);
 
     expect(Auth::guard('web')->attempt(credentials($user)))->toBeTrue();
+});
+
+it('picks the state table up once it exists instead of memoizing its absence', function () {
+    $user = loginUser();
+    $gate = app(SignInGate::class);
+    Schema::drop('user_access_states');
+
+    expect($gate->enabled())->toBeFalse();
+
+    Schema::create('user_access_states', function ($table): void {
+        $table->id();
+        $table->unsignedBigInteger('user_id')->unique();
+        $table->string('status', 24)->default('active');
+        $table->string('status_reason', 500)->nullable();
+        $table->timestamp('locked_until')->nullable();
+        $table->timestamp('activated_at')->nullable();
+        $table->unsignedBigInteger('invited_by')->nullable();
+        $table->timestamp('invited_at')->nullable();
+        $table->timestamp('last_login_at')->nullable();
+        $table->string('last_login_ip', 45)->nullable();
+        $table->unsignedInteger('failed_login_count')->default(0);
+        $table->timestamp('mfa_enabled_at')->nullable();
+        $table->string('mfa_method', 24)->nullable();
+        $table->timestamp('password_changed_at')->nullable();
+        $table->timestamps();
+    });
+    UserAccessState::create(['user_id' => $user->id, 'status' => UserStatus::Suspended]);
+
+    expect($gate->enabled())->toBeTrue()->and($gate->blocks($user))->toBeTrue();
+});
+
+it('refuses a remember-me recall of a suspended user on a package JSON route with 422 validation_failed', function () {
+    $user = loginUser('remember@example.test');
+    $user->forceFill(['remember_token' => 'remember-token-value'])->save();
+    UserAccessState::create(['user_id' => $user->id, 'status' => UserStatus::Suspended]);
+
+    $guard = Auth::guard('web');
+    $cookie = $guard->getRecallerName();
+    $value = $user->getAuthIdentifier().'|remember-token-value|'.$user->getAuthPassword();
+
+    $this->withCredentials()->withCookie($cookie, $value)->getJson('/api/access/me')
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'validation_failed')
+        ->assertJsonPath('errors.email.0', trans('access::auth.inactive'));
+    expect(Auth::guard('web')->check())->toBeFalse();
 });
