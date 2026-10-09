@@ -25,6 +25,8 @@ final class AssignRoleToUser extends Action
             /** @var Role $roleModel */
             $roleModel = $role instanceof Role ? $role : Role::findByName($role, (string) config('roles.guard'));
             app(OwnerCounter::class)->lockSuperRole();
+            // Fresh snapshot: a relation loaded earlier may be stale relative to the locked DB state.
+            $user->unsetRelation('roles');
             $before = $user->getRoleNames()->all();
 
             $added = in_array($roleModel->name, $before, true) ? [] : [$roleModel];

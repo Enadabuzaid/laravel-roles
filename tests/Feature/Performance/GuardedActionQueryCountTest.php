@@ -31,7 +31,6 @@ it('runs a guarded assignment in a constant number of queries regardless of role
 
     $smallCount = $run('t1@example.test', $small);
     $largeCount = $run('t2@example.test', $large);
-    fwrite(STDERR, "\nGUARDED_QUERY_COUNT small={$smallCount} large={$largeCount}\n");
 
     expect($largeCount)->toBe($smallCount);
 });

@@ -3,11 +3,14 @@
 declare(strict_types=1);
 
 use Enadstack\LaravelRoles\Models\Permission;
+use Enadstack\LaravelRoles\Roles\Actions\AssignRoleToUser;
 use Enadstack\LaravelRoles\Roles\Actions\RemoveRoleFromUser;
+use Enadstack\LaravelRoles\Roles\Actions\SyncUserRoles;
 use Enadstack\LaravelRoles\Support\ActorContext;
 use Enadstack\LaravelRoles\Support\Exceptions\AccessException;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Exceptions\RoleDoesNotExist;
+use Tests\Support\TestUser;
 
 function expectViolation(Closure $callback, string $code): void
 {
@@ -126,22 +129,63 @@ it('allows assigning and removing a non-owner role for the sole owner', function
     expect($owner->fresh()->getRoleNames()->all())->toBe(['owner']);
 });
 
-it('locks the super role row for a role removal on postgres', function () {
+it('locks the super role row before the guardrail queries on postgres', function (string $operation) {
     if (DB::getDriverName() !== 'pgsql') {
         $this->markTestSkipped('FOR UPDATE row locking is asserted on pgsql only; sqlite has no row locks.');
     }
 
     $owner = makeOwner();
     makeOwner('second@example.test');
+    $viewer = makeRole('viewer');
+    $target = makeUser('t@example.test');
+    $target->assignAccessRole($viewer);
 
     DB::flushQueryLog();
     DB::enableQueryLog();
-    app(RemoveRoleFromUser::class)->handle($owner, 'owner');
-    $queries = collect(DB::getQueryLog())->pluck('query')->map(fn (string $q): string => strtolower($q));
+    match ($operation) {
+        'assign' => app(AssignRoleToUser::class)->handle($owner, $viewer),
+        'remove' => app(RemoveRoleFromUser::class)->handle($target, 'viewer'),
+        'sync' => app(SyncUserRoles::class)->handle($target, []),
+    };
+    $queries = collect(DB::getQueryLog())->pluck('query')->map(fn (string $q): string => strtolower($q))->values();
     DB::disableQueryLog();
 
-    expect($queries->contains(fn (string $q): bool => str_contains($q, 'for update')))->toBeTrue();
-});
+    $lock = $queries->search(fn (string $q): bool => str_contains($q, 'for update'));
+    $firstMembershipRead = $queries->search(fn (string $q): bool => str_contains($q, 'model_has_roles'));
+
+    expect($lock)->not->toBeFalse()->and($firstMembershipRead)->not->toBeFalse()->and($lock)->toBeLessThan($firstMembershipRead);
+})->with(['assign', 'remove', 'sync']);
+
+it('uses the real DB state when the loaded roles relation is stale (user is actually the sole owner)', function (string $operation) {
+    $owner = makeOwner();
+    makeRole('viewer');
+    $stale = TestUser::find($owner->id);
+    $stale->roles()->detach();
+    $stale->unsetRelation('roles');
+    $stale->load('roles'); // loaded: no roles
+    TestUser::find($owner->id)->assignRole('owner'); // DB behind the model's back: now the sole owner
+
+    expectViolation(fn () => match ($operation) {
+        'remove' => $stale->removeAccessRole('owner'),
+        'sync' => $stale->syncAccessRoles(['viewer']),
+    }, 'guardrail.last_owner');
+
+    expect(TestUser::find($owner->id)->isOwner())->toBeTrue();
+})->with(['remove', 'sync']);
+
+it('does not raise a false violation when the loaded relation wrongly says the user is the sole owner', function (string $operation) {
+    $user = makeOwner();
+    makeRole('viewer');
+    $user->load('roles'); // loaded: owner
+    TestUser::find($user->id)->removeRole('owner'); // DB: no longer an owner
+
+    match ($operation) {
+        'remove' => $user->removeAccessRole('owner'),
+        'sync' => $user->syncAccessRoles(['viewer']),
+    };
+
+    expect(TestUser::find($user->id)->getRoleNames()->all())->toBe($operation === 'sync' ? ['viewer'] : []);
+})->with(['remove', 'sync']);
 
 it('behaves the same without row locks on sqlite', function () {
     if (DB::getDriverName() !== 'sqlite') {

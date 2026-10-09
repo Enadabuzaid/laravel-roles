@@ -35,6 +35,8 @@ final class SyncUserRoles extends Action
             }
 
             app(OwnerCounter::class)->lockSuperRole();
+            // Fresh snapshot: a relation loaded earlier may be stale relative to the locked DB state.
+            $user->unsetRelation('roles');
             $before = $user->getRoleNames()->all();
             /** @var array<string, Role> $current */
             $current = Role::query()->where('guard_name', $guard)->whereIn('name', $before)->get()->keyBy('name')->all();
