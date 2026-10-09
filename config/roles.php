@@ -50,6 +50,7 @@ return [
         'prevent_escalation' => true,
         'confirm_high_risk' => true,
         'type_to_confirm_destructive' => true,
+        'disabled' => [], // rule classes to switch off (a security decision)
         'rules' => [
             SystemRoleRule::class,
             SelfChangeRule::class,

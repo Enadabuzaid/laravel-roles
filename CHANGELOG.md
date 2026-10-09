@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Guardrails: seven configurable rules enforced inside `AssignRoleToUser`, `RemoveRoleFromUser` and `SyncUserRoles` (last owner, self role change, escalation, high-risk confirmation, system role, destructive confirmation, self destructive), with stable `guardrail.*` codes.
+- Guardrail rules and doctor checks merge additively with the package defaults (host configs cannot silently drop built-ins); disable via `guardrails.disabled` / `doctor.disabled`. New `audit-ready` doctor check.
 - Audit: `roles.assigned|removed|synced|seeded` and `permissions.synced` entries written after commit through action-logger, with `Info`/`Warning`/`Critical` severity (`RoleChangeSeverity`).
 - `ActorContext` is honored by every Action; `roles:seed`, `roles:owner` and `roles:sync` run as the system actor.
 - Role-changing Actions lock the super-role row (`FOR UPDATE`) so concurrent owner removals serialize.

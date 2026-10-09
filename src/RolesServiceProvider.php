@@ -29,6 +29,14 @@ class RolesServiceProvider extends ServiceProvider
 
         config(['roles.doctor.checks' => array_values(array_diff($checks, $disabled))]);
 
+        $rules = array_values(array_unique([
+            ...(array) ($package['guardrails']['rules'] ?? []),
+            ...(array) config('roles.guardrails.rules', []),
+        ]));
+        $disabledRules = (array) config('roles.guardrails.disabled', []);
+
+        config(['roles.guardrails.rules' => array_values(array_diff($rules, $disabledRules))]);
+
         foreach (['role' => Models\Role::class, 'permission' => Models\Permission::class] as $key => $class) {
             $spatie = $key === 'role' ? Role::class : Permission::class;
             $current = config("permission.models.{$key}");
