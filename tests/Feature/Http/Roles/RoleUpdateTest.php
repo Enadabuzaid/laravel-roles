@@ -125,3 +125,14 @@ it('refuses creating a role named like the owner role as the default', function 
 
     expect(Role::where('name', 'owner')->exists())->toBeFalse()->and(ActionLog::count())->toBe(0);
 });
+
+it('answers system_role, not a name conflict, when a system role is renamed onto a trashed name', function (): void {
+    makeRole('spirit')->delete();
+    $system = makeRole('admin', [], ['is_system' => true]);
+    ActionLog::query()->delete();
+
+    $this->actingAs(roleWriter())->putJson("/api/access/roles/{$system->id}", ['name' => 'spirit'])
+        ->assertForbidden()->assertJson(['code' => 'guardrail.system_role']);
+
+    expect($system->fresh()->name)->toBe('admin')->and(ActionLog::count())->toBe(0);
+});

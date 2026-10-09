@@ -8,11 +8,13 @@ use Enadstack\LaravelRoles\Audit\AuditRecorder;
 use Enadstack\LaravelRoles\Guardrails\Guardrails;
 use Enadstack\LaravelRoles\Guardrails\Operation;
 use Enadstack\LaravelRoles\Guardrails\OperationType;
+use Enadstack\LaravelRoles\Guardrails\OwnerCounter;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Roles\Support\RoleRisk;
 use Enadstack\LaravelRoles\Support\Action;
 use Enadstack\LaravelRoles\Support\ActorContext;
 use Enadstack\LaravelRoles\Support\Exceptions\AccessException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Spatie\Permission\PermissionRegistrar;
 
 final class UpdateRole extends Action
@@ -25,7 +27,16 @@ final class UpdateRole extends Action
         app(ActorContext::class)->assertKnownActor();
 
         $changed = $this->transaction(function () use ($role, $data): bool {
-            $fresh = Role::query()->lockForUpdate()->whereKey($role->getKey())->firstOrFail();
+            // Lock order: the super role first (like the matrix), then the target and the roles that lose the default flag in ascending id order.
+            app(OwnerCounter::class)->lockSuperRole();
+
+            $ids = [(int) $role->getKey()];
+            if (filter_var($data['is_default'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                array_push($ids, ...array_map('intval', Role::query()->where('is_default', true)->pluck('id')->all()));
+            }
+
+            $fresh = Role::query()->whereIn('id', array_values(array_unique($ids)))->orderBy('id')->lockForUpdate()->get()->firstWhere('id', $role->getKey())
+                ?? throw (new ModelNotFoundException)->setModel(Role::class, [$role->getKey()]);
             $fresh->fill(array_intersect_key($data, array_flip(self::UPDATABLE)));
 
             if (! $fresh->isDirty()) {
@@ -39,6 +50,13 @@ final class UpdateRole extends Action
             }
 
             if ($fresh->isDirty('name')) {
+                app(Guardrails::class)->assert(new Operation(
+                    OperationType::RenameRole,
+                    actor: app(ActorContext::class)->actor(),
+                    role: $fresh->replicate()->setRawAttributes($fresh->getOriginal()),
+                    newName: (string) $fresh->name,
+                ));
+
                 // The unique (name, guard_name) index includes trashed rows, so a trashed holder must be reported, not hit as a QueryException.
                 if (Role::onlyTrashed()->where('name', $fresh->name)->where('guard_name', $fresh->guard_name)->exists()) {
                     throw new AccessException(
@@ -48,13 +66,6 @@ final class UpdateRole extends Action
                         ['name' => ['Restore the trashed role or choose a different name.']],
                     );
                 }
-
-                app(Guardrails::class)->assert(new Operation(
-                    OperationType::RenameRole,
-                    actor: app(ActorContext::class)->actor(),
-                    role: $fresh->replicate()->setRawAttributes($fresh->getOriginal()),
-                    newName: (string) $fresh->name,
-                ));
             }
 
             $dirty = array_keys($fresh->getDirty());
