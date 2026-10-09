@@ -68,6 +68,12 @@ final class PermissionRegistry
                         throw new PermissionRegistryException("Permission [{$name}] is an array without a [label] key; use 'label' => ... (or a plain string or a locale map).");
                     }
 
+                    foreach ($spec as $locale => $text) {
+                        if (! is_string($locale) || is_numeric($locale) || $locale === '' || ! is_string($text) || trim($text) === '') {
+                            throw new PermissionRegistryException("Permission [{$name}] has an invalid bare locale map; keys must be locale codes and values non-empty strings.");
+                        }
+                    }
+
                     $spec = ['label' => $spec]; // bare locale map shorthand
                 }
 

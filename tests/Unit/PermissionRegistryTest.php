@@ -39,6 +39,9 @@ it('fails loudly on a missing, malformed, duplicate or invalid file', function (
     'module not array' => fn () => registryFile('bad-module'),
     'array spec without label key' => fn () => registryFile('no-label-key'),
     'bare map with non-string value' => fn () => registryFile('bare-map-bad'),
+    'empty array spec' => fn () => registryFile('empty-spec'),
+    'list-shaped spec' => fn () => registryFile('list-spec'),
+    'empty string in bare map' => fn () => registryFile('empty-string'),
     'non-string label' => fn () => registryFile('bad-label'),
     'non-string risk' => fn () => registryFile('bad-risk-type'),
 ])->throws(PermissionRegistryException::class);
@@ -61,4 +64,13 @@ it('treats a bare locale map as the label', function () {
 
 it('ships a stub that the registry accepts', function () {
     expect((new PermissionRegistry(dirname(__DIR__, 2).'/stubs/permissions.php', []))->definitions())->toBe([]);
+});
+
+it('normalizes the bare locale map and the label-keyed form identically', function () {
+    [$one, $two] = (new PermissionRegistry(registryFile('equivalence'), []))->definitions();
+
+    expect($one->label)->toEqual($two->label)
+        ->and($one->description)->toEqual($two->description)
+        ->and($one->risk)->toEqual($two->risk)
+        ->and([$one->sortOrder, $two->sortOrder])->toBe([1, 2]);
 });
