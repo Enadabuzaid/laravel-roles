@@ -5,6 +5,8 @@ declare(strict_types=1);
 use Enadstack\LaravelRoles\Guardrails\Operation;
 use Enadstack\LaravelRoles\Guardrails\OperationType as T;
 use Enadstack\LaravelRoles\Models\Role;
+use Enadstack\LaravelRoles\Users\Enums\UserStatus;
+use Enadstack\LaravelRoles\Users\Models\UserAccessState;
 
 it('blocks removing the owner role from the sole owner', function () {
     $owner = makeOwner();
@@ -63,4 +65,45 @@ it('lets the sole owner receive or lose a non-owner role', function () {
 
     expect(guardrailCode(new Operation(T::AssignRole, target: $owner, added: [$viewer])))->toBeNull()
         ->and(guardrailCode(new Operation(T::RemoveRole, target: $owner, removed: [$viewer])))->toBeNull();
+});
+
+it('does not count an inactive second owner towards the minimum', function (UserStatus $status) {
+    $owner = makeOwner();
+    $second = makeOwner('second@example.test');
+    UserAccessState::create(['user_id' => $second->id, 'status' => $status]);
+    $role = Role::where('name', 'owner')->first();
+
+    expect(guardrailCode(new Operation(T::RemoveRole, target: $owner, removed: [$role])))->toBe('guardrail.last_owner')
+        ->and(guardrailCode(new Operation(T::SuspendUser, target: $owner)))->toBe('guardrail.last_owner')
+        ->and(guardrailCode(new Operation(T::DeactivateUser, target: $owner)))->toBe('guardrail.last_owner')
+        ->and(guardrailCode(new Operation(T::DeleteUser, target: $owner, confirmation: $owner->email)))->toBe('guardrail.last_owner');
+})->with([UserStatus::Suspended, UserStatus::Deactivated, UserStatus::Locked, UserStatus::Invited, UserStatus::PendingVerification]);
+
+it('lets an already inactive owner be suspended, deactivated, deleted or lose the role without changing the count', function (T $type) {
+    makeOwner();
+    $inactive = makeOwner('inactive@example.test');
+    UserAccessState::create(['user_id' => $inactive->id, 'status' => UserStatus::Suspended]);
+    $role = Role::where('name', 'owner')->first();
+
+    expect(guardrailCode(new Operation($type, target: $inactive, confirmation: $inactive->email)))->toBeNull()
+        ->and(guardrailCode(new Operation(T::RemoveRole, target: $inactive, removed: [$role])))->toBeNull();
+})->with([T::SuspendUser, T::DeactivateUser, T::DeleteUser]);
+
+it('allows suspending one of two active owners and blocks the last active one', function () {
+    $first = makeOwner();
+    $second = makeOwner('second@example.test');
+
+    expect(guardrailCode(new Operation(T::SuspendUser, target: $first)))->toBeNull();
+
+    UserAccessState::create(['user_id' => $first->id, 'status' => UserStatus::Suspended]);
+
+    expect(guardrailCode(new Operation(T::SuspendUser, target: $second)))->toBe('guardrail.last_owner');
+});
+
+it('treats an owner with an active state row like one without a row', function () {
+    $owner = makeOwner();
+    $second = makeOwner('second@example.test');
+    UserAccessState::create(['user_id' => $second->id, 'status' => UserStatus::Active]);
+
+    expect(guardrailCode(new Operation(T::SuspendUser, target: $owner)))->toBeNull();
 });

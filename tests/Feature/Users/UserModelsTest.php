@@ -8,6 +8,7 @@ use Enadstack\LaravelRoles\Users\Models\AccessInvitation;
 use Enadstack\LaravelRoles\Users\Models\SavedView;
 use Enadstack\LaravelRoles\Users\Models\UserAccessState;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\Support\TestUser;
 
@@ -98,7 +99,8 @@ it('casts saved view filters to an array and keeps names unique per owner and pa
     expect($view->fresh()->filters)->toEqual(['role' => 'admin', 'status' => ['active']]);
 
     SavedView::create(['user_id' => 2, 'page' => 'users', 'name' => 'Admins', 'filters' => []]);
-    expect(fn () => SavedView::create(['user_id' => 1, 'page' => 'users', 'name' => 'Admins', 'filters' => []]))
+    // A savepoint keeps the pgsql test transaction usable after the expected constraint violation.
+    expect(fn () => DB::transaction(fn () => SavedView::create(['user_id' => 1, 'page' => 'users', 'name' => 'Admins', 'filters' => []])))
         ->toThrow(QueryException::class);
 });
 

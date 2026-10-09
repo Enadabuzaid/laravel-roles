@@ -54,6 +54,8 @@ class InstallCommand extends Command
             $this->line("  {$step}");
         }
 
+        $this->line("  Add the 'access.active' middleware alias to your web group (bootstrap/app.php: \$middleware->appendToGroup('web', 'access.active')) so suspended users are signed out mid-session.");
+
         return self::SUCCESS;
     }
 }

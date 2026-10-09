@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Enadstack\LaravelRoles;
 
 use Enadstack\LaravelRoles\Support\Http\ApiExceptionRenderer;
+use Illuminate\Auth\Events\Validated;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Foundation\Exceptions\Handler;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -79,7 +81,12 @@ class RolesServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        $this->app->make(Router::class)->aliasMiddleware('access', Http\Middleware\RequireAccess::class);
+        $router = $this->app->make(Router::class);
+        $router->aliasMiddleware('access', Http\Middleware\RequireAccess::class);
+        $router->aliasMiddleware('access.active', Users\Http\Middleware\EnsureUserIsActive::class);
+
+        $this->loadTranslationsFrom(__DIR__.'/../resources/lang', 'access');
+        Event::listen(Validated::class, Users\Listeners\BlockInactiveUser::class);
 
         RateLimiter::for('access', static function (Request $request): Limit {
             $limit = Http\Support\RoutesRegistrar::rateLimit();
@@ -108,6 +115,7 @@ class RolesServiceProvider extends ServiceProvider
                 (new Support\MigrationPublisher(new Filesystem, database_path('migrations')))->targets(),
                 'roles-migrations',
             );
+            $this->publishes([__DIR__.'/../resources/lang' => $this->app->langPath('vendor/access')], 'roles-lang');
             $this->publishes([__DIR__.'/../stubs/permissions.php' => base_path('access/permissions.php')], 'roles-permissions');
         }
     }

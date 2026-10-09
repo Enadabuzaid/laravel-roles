@@ -21,7 +21,8 @@ final class LastOwnerRule implements Guardrail
             return;
         }
 
-        if (! $this->owners->isOwner($target)) {
+        // Only an ACTIVE owner leaving (or losing the role) lowers the count; an inactive owner never counted.
+        if (! $this->owners->isActiveOwner($target)) {
             return;
         }
 

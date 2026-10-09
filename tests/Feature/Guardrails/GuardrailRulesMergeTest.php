@@ -13,6 +13,7 @@ use Enadstack\LaravelRoles\Guardrails\Rules\OwnerRoleLockedRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\SelfChangeRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\SelfDestructiveRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\SystemRoleRule;
+use Enadstack\LaravelRoles\Guardrails\Rules\TargetAboveActorRule;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\RolesServiceProvider;
 use Enadstack\LaravelRoles\Support\Exceptions\AccessException;
@@ -29,7 +30,7 @@ function mergedRules(array $hostGuardrails): array
 
 function builtInRules(): array
 {
-    return [SystemRoleRule::class, OwnerRoleLockedRule::class, SelfChangeRule::class, SelfDestructiveRule::class, EscalationRule::class,
+    return [SystemRoleRule::class, OwnerRoleLockedRule::class, SelfChangeRule::class, SelfDestructiveRule::class, TargetAboveActorRule::class, EscalationRule::class,
         LastOwnerRule::class, HighRiskConfirmRule::class, DestructiveConfirmationRule::class];
 }
 
@@ -41,14 +42,14 @@ it('adds host custom rules to the built-ins without duplicates', function () {
     $rules = mergedRules(['rules' => [HostExtraRule::class]]);
 
     expect($rules)->toContain(HostExtraRule::class, ...builtInRules())
-        ->and(count($rules))->toBe(9);
+        ->and(count($rules))->toBe(10);
 });
 
 it('removes disabled rules only', function () {
     $rules = mergedRules(['disabled' => [HighRiskConfirmRule::class]]);
 
     expect($rules)->not->toContain(HighRiskConfirmRule::class)
-        ->and(count($rules))->toBe(7);
+        ->and(count($rules))->toBe(8);
 });
 
 it('stays fail-closed when the host config has no rules key', function () {

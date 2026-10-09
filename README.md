@@ -57,7 +57,7 @@ class User extends Authenticatable implements AccessUser
 | `routes.prefix` / `routes.middleware` | `api/access` / `['api','auth:sanctum']` | API routes; the middleware is your authentication (and session/CSRF) stack |
 | `http.rate_limit` | `60` | Requests per minute per user (per IP for guests) through the `access` named limiter; `null` or `0` disables it. The legacy `'attempts,minutes'` string still parses. See Rate limiting |
 | `permissions_file` | `access/permissions.php` | Permission registry |
-| `guardrails` | see file | Rule list, toggles (`min_owners`, `prevent_self_escalation`, `prevent_self_destructive`, `prevent_escalation`, `confirm_high_risk`, `type_to_confirm_destructive`) and `disabled` rule classes. Enforced; see Guardrails |
+| `guardrails` | see file | Rule list, toggles (`min_owners`, `prevent_self_escalation`, `prevent_self_destructive`, `prevent_target_above_actor`, `prevent_escalation`, `confirm_high_risk`, `type_to_confirm_destructive`) and `disabled` rule classes. Enforced; see Guardrails |
 | `security` | see file | Lockout, MFA roles, login history |
 | `pagination` | `default 15`, `max 100` | List defaults |
 | `default_roles` | owner, admin, manager, viewer | Seeded by `roles:seed` |
@@ -108,13 +108,14 @@ Never call Spatie's `assignRole`, `removeRole`, `syncRoles`, `givePermissionTo`,
 
 **Wired now:** `AssignRoleToUser`, `RemoveRoleFromUser` and `SyncUserRoles` enforce last owner, self role change, escalation and high-risk confirmation; `RestoreRole` enforces self change (you hold the trashed role, checked on the pivot), escalation (the role has a permission you lack, or is the Owner role) and high-risk confirmation (the Owner role or any role with a high-risk permission needs `confirm: true`); `CreateRole` with `permissions` and `UpdateRolePermissions` / `UpdateMatrix` (role-permission edits) enforce the owner lock, self change (editing a role you hold), escalation (adding a permission you lack) and high-risk confirmation. **Implemented and unit-tested, wired when the operation exists (Phase 3/4):** self destructive, system role (delete/rename), destructive confirmation, and last-owner for suspend/deactivate/delete user. Toggles: `prevent_self_escalation` controls the self role change rule and `prevent_self_destructive` controls the self destructive rule (independent).
 
-Every user role change goes through `Guardrails::assert()` inside the Action's transaction. A violation throws `AccessException` (HTTP 403, rendered in the API envelope), changes nothing and writes no audit entry. Rules are listed in `roles.guardrails.rules`; each can be toggled in `roles.guardrails`. Guardrail rules and doctor checks merge additively: the package defaults are always applied first, then any extras your published config lists, so a config that omits `rules` (or lists only custom rules) still enforces all eight built-ins. To switch a rule off, list its class in `roles.guardrails.disabled` (doctor checks use `roles.doctor.disabled`). Disabling a built-in guardrail is a security decision; do it deliberately.
+Every user role change goes through `Guardrails::assert()` inside the Action's transaction. A violation throws `AccessException` (HTTP 403, rendered in the API envelope), changes nothing and writes no audit entry. Rules are listed in `roles.guardrails.rules`; each can be toggled in `roles.guardrails`. Guardrail rules and doctor checks merge additively: the package defaults are always applied first, then any extras your published config lists, so a config that omits `rules` (or lists only custom rules) still enforces all nine built-ins. To switch a rule off, list its class in `roles.guardrails.disabled` (doctor checks use `roles.doctor.disabled`). Disabling a built-in guardrail is a security decision; do it deliberately.
 
 | Code | Meaning | Applies to system actor |
 | --- | --- | --- |
-| `guardrail.last_owner` | Fewer than `min_owners` owners would remain | yes |
+| `guardrail.last_owner` | Fewer than `min_owners` ACTIVE owners would remain (owners that are suspended, deactivated, locked or not yet activated do not count) | yes |
 | `guardrail.self_role_change` | You changed your own role, edited a role you hold, or restored a role you hold | no |
 | `guardrail.self_destructive` | You suspended, deactivated or deleted yourself | no |
+| `guardrail.target_above_actor` | A non-owner suspended, deactivated, deleted (later also unlocked or forced a password reset for) an owner or a user whose effective permissions exceed their own | no (system actors and owners skip it) |
 | `guardrail.escalation` | Granting or restoring a role with permissions you lack, or adding/removing/restoring the owner role as a non-owner | no |
 | `guardrail.actor_required` | A guarded write ran outside console with no authenticated actor and no explicit `runAs(null)` | n/a |
 | `guardrail.high_risk_confirm_required` | Adding or restoring a high-risk or owner role, or granting a high-risk permission, without `confirmed: true` | yes |
@@ -255,7 +256,9 @@ Errors are `{success: false, message, code, errors}`. `errors` is a field map fo
 | `conflict` | 409 | Another HTTP 409 raised outside the package codes |
 | `too_many_requests` | 429 | The `access` rate limit was exceeded |
 | `http_error` | other 4xx/5xx | Any other HTTP exception |
-| `guardrail.last_owner` | 403 | Fewer than `min_owners` owners would remain |
+| `guardrail.last_owner` | 403 | Fewer than `min_owners` active owners would remain |
+| `guardrail.target_above_actor` | 403 | "You can't manage a user with more access than you have." |
+| `account_inactive` | 403 | The signed-in user's access state no longer allows signing in; returned by the `access.active` middleware for JSON requests after it ended the session |
 | `guardrail.self_role_change` | 403 | Changing, or restoring, a role you hold; editing a role you hold |
 | `guardrail.self_destructive` | 403 | Suspending, deactivating or deleting yourself |
 | `guardrail.escalation` | 403 | Granting access above your own, or touching the Owner role as a non-owner (assign, remove, restore) |
@@ -274,6 +277,10 @@ Errors are `{success: false, message, code, errors}`. `errors` is a field map fo
 | `permission.registry_managed` | 409 | Editing or deleting a registry permission |
 | `permission.in_use` | 409 | Deleting a held permission, or lowering the risk of a held high-risk one |
 | `registry.invalid` | 422 | The registry file failed validation during `permissions/sync` |
+
+### Inactive users
+
+Users whose `user_access_states.status` is `suspended`, `deactivated`, `invited`, `pending_verification` or `locked` (until `locked_until` passes) cannot sign in: the package listens to `Illuminate\Auth\Events\Validated` and throws a `ValidationException` on the `fortify.username` field (default `email`) with the translatable message `access::auth.inactive` (English and Arabic; publish with `--tag=roles-lang`). Users without a state row, and models that are not `AccessUser`, pass. To also end sessions that are already open, add the `access.active` alias to your web group, for example `$middleware->appendToGroup('web', 'access.active')` in `bootstrap/app.php` (the package does not add it for you; `roles:install` prints the reminder). The middleware logs the user out, invalidates the session and regenerates the CSRF token, then redirects web requests to the `login` route (403 when none exists) and answers JSON requests with 403 `account_inactive`. It reads the state once per request.
 
 ### Rate limiting
 

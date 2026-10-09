@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `roles:backfill-users` (chunked, idempotent, `--dry-run`) and the `users-state` doctor check (WARN for users without a state row, FAIL when `modules.users` is on and the table is missing).
 - `roles.users` config section (`mfa_enabled_column`, `invitation_ttl_hours`, `default_status`, `accept_url`, `saved_view_pages`, reserved `lockout`).
 
+- Guardrails for the user lifecycle: `OwnerCounter` counts only ACTIVE owners (`isActiveOwner()` added), the last-owner rule uses it, and the new `TargetAboveActorRule` (`prevent_target_above_actor`, code `guardrail.target_above_actor`) sits right after the self-destructive rule.
+- Login enforcement: `BlockInactiveUser` listener (translatable `access::auth.inactive`) and the `access.active` middleware (ends the session, 403 `account_inactive` for JSON).
+
+### Fixed
+- `POST roles` with a non-empty `permissions` list also requires `access.roles.update`; `access:<arg>` rejects anything but `any`; `access:any` and `GET me` only consider non-deprecated permissions of the configured guard; the access check detects owners by the configured guard; the previous default role lookup is guard-scoped; README rate limiter wording.
+
 Upgrading: run `php artisan roles:install` (or republish migrations), `php artisan migrate`, then `php artisan roles:backfill-users`.
 
 ## 2.0.0-alpha.5 — 2026-10-09

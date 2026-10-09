@@ -23,6 +23,11 @@ final class Violation
         return self::make('guardrail.self_destructive', "You can't suspend, deactivate or delete yourself.");
     }
 
+    public static function targetAboveActor(): AccessException
+    {
+        return self::make('guardrail.target_above_actor', "You can't manage a user with more access than you have.");
+    }
+
     public static function escalation(): AccessException
     {
         return self::make('guardrail.escalation', "You can't grant access higher than your own.");

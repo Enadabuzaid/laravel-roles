@@ -20,6 +20,7 @@ use Enadstack\LaravelRoles\Guardrails\Rules\OwnerRoleLockedRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\SelfChangeRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\SelfDestructiveRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\SystemRoleRule;
+use Enadstack\LaravelRoles\Guardrails\Rules\TargetAboveActorRule;
 
 return [
     'user_model' => env('ROLES_USER_MODEL', 'App\\Models\\User'),
@@ -53,6 +54,7 @@ return [
         'min_owners' => 1,
         'prevent_self_escalation' => true,
         'prevent_self_destructive' => true,
+        'prevent_target_above_actor' => true,
         'prevent_escalation' => true,
         'confirm_high_risk' => true,
         'type_to_confirm_destructive' => true,
@@ -62,6 +64,7 @@ return [
             OwnerRoleLockedRule::class,
             SelfChangeRule::class,
             SelfDestructiveRule::class,
+            TargetAboveActorRule::class,
             EscalationRule::class,
             LastOwnerRule::class,
             HighRiskConfirmRule::class,
