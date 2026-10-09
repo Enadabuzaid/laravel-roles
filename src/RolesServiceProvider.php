@@ -31,6 +31,12 @@ class RolesServiceProvider extends ServiceProvider
             array_keys(array_filter((array) config('roles.modules'))),
         ));
 
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                Console\SyncCommand::class,
+            ]);
+        }
+
         $this->callAfterResolving(ExceptionHandler::class, function (ExceptionHandler $handler): void {
             if ($handler instanceof Handler) {
                 $handler->renderable(fn (\Throwable $e, Request $request) => ApiExceptionRenderer::render($e, $request));
