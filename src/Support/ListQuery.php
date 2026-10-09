@@ -7,6 +7,7 @@ namespace Enadstack\LaravelRoles\Support;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Query\Grammars\SQLiteGrammar;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 
@@ -50,7 +51,7 @@ final class ListQuery
         $search = is_string($search) && trim($search) !== '' ? trim($search) : null;
 
         $sort = $request->query('sort');
-        $sort = is_string($sort) && array_key_exists(ltrim($sort, '-'), self::sortable($definition)) ? $sort : $definition->defaultSort;
+        $sort = is_string($sort) && array_key_exists(self::sortKey($sort), self::sortable($definition)) ? $sort : $definition->defaultSort;
 
         $max = max(1, (int) config('roles.pagination.max', 100));
         $default = max(1, (int) config('roles.pagination.default', 15));
@@ -58,11 +59,11 @@ final class ListQuery
         $perPage = is_numeric($perPage) ? min(max((int) $perPage, 1), $max) : $default;
 
         $page = $request->query('page');
-        $page = is_numeric($page) ? max((int) $page, 1) : 1;
+        $page = is_numeric($page) ? (int) min(max((float) $page, 1.0), 1_000_000.0) : 1;
 
         $include = $request->query('include');
         $includes = is_string($include)
-            ? array_values(array_intersect(explode(',', $include), $definition->includes))
+            ? array_values(array_unique(array_intersect(array_map('trim', explode(',', $include)), $definition->includes)))
             : [];
 
         return new self($definition, $search, $filters, $sort, $page, $perPage, $includes);
@@ -86,15 +87,20 @@ final class ListQuery
 
         if ($this->search !== null && $this->definition->searchable !== []) {
             $term = '%'.addcslashes($this->search, '%_\\').'%';
-            $query->where(function (Builder $q) use ($term): void {
+            $escapeManually = $query->getQuery()->getGrammar() instanceof SQLiteGrammar;
+            $query->where(function (Builder $q) use ($term, $escapeManually): void {
                 foreach ($this->definition->searchable as $column) {
-                    $q->orWhereLike($column, $term);
+                    if ($escapeManually) {
+                        $q->orWhere(new EscapedLikeCondition($column))->addBinding($term, 'where');
+                    } else {
+                        $q->orWhereLike($column, $term);
+                    }
                 }
             });
         }
 
         $descending = str_starts_with($this->sort, '-');
-        $column = self::sortable($this->definition)[ltrim($this->sort, '-')];
+        $column = self::sortable($this->definition)[self::sortKey($this->sort)];
         $query->orderBy($column, $descending ? 'desc' : 'asc');
 
         if ($column !== $query->getModel()->getKeyName()) {
@@ -119,6 +125,11 @@ final class ListQuery
     public function meta(): array
     {
         return ['filters' => (object) $this->filters, 'sort' => $this->sort];
+    }
+
+    private static function sortKey(string $sort): string
+    {
+        return str_starts_with($sort, '-') ? substr($sort, 1) : $sort;
     }
 
     /** @return array<string, string> */

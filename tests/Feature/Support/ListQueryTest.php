@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Enadstack\LaravelRoles\Support\ListDefinition;
 use Enadstack\LaravelRoles\Support\ListQuery;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Tests\Support\TestUser;
 
 function userDefinition(): ListDefinition
@@ -73,4 +74,36 @@ it('treats LIKE wildcards in search literally', function () {
     seedUsers(3);
 
     expect(listFor(['search' => '%'])->apply(TestUser::query())->count())->toBe(0);
+});
+
+it('clamps an absurd page number and still paginates', function () {
+    seedUsers(3);
+
+    $lq = listFor(['page' => '99999999999999999999']);
+
+    expect($lq->page)->toBe(1_000_000)
+        ->and($lq->paginate($lq->apply(TestUser::query()))->items())->toBe([]);
+});
+
+it('matches LIKE wildcards literally and still searches normally', function () {
+    seedUsers(3);
+    DB::table('users')->insert([
+        ['name' => '100% Real', 'email' => 'pct@example.test', 'password' => 'x', 'created_at' => now(), 'updated_at' => now()],
+        ['name' => 'snake_case', 'email' => 'under@example.test', 'password' => 'x', 'created_at' => now(), 'updated_at' => now()],
+    ]);
+
+    $names = fn (string $term) => listFor(['search' => $term])->apply(TestUser::query())->pluck('name')->all();
+
+    expect($names('%'))->toBe(['100% Real'])
+        ->and($names('_'))->toBe(['snake_case'])
+        ->and($names('User'))->toHaveCount(3);
+});
+
+it('accepts a single leading dash for sort and trims and de-duplicates includes', function () {
+    expect(listFor(['sort' => '--name'])->sort)->toBe('-id')
+        ->and(listFor(['include' => 'roles, roles'])->includes)->toBe(['roles']);
+
+    $def = new ListDefinition(includes: ['roles', 'permissions']);
+    $lq = ListQuery::fromRequest(Request::create('/x', 'GET', ['include' => 'roles, permissions']), $def);
+    expect($lq->includes)->toBe(['roles', 'permissions']);
 });
