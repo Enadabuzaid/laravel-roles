@@ -36,20 +36,20 @@ class StoreRoleRequest extends FormRequest
             ->whereNull('deleted_at')
             ->ignore($ignoreId);
 
-        return [
+        $rules = [
             'name' => [$presence, 'string', 'min:2', 'max:64', 'regex:/^[a-z0-9][a-z0-9._-]*$/', $unique],
             ...TranslatedFieldRules::rules($partial),
             'color' => ['sometimes', 'nullable', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'is_default' => ['sometimes', 'boolean'],
             'sort_order' => ['sometimes', 'integer', 'min:0'],
-            'permissions' => ['sometimes', 'array', 'max:0'],
         ];
-    }
 
-    /** @return array<string, string> */
-    public function messages(): array
-    {
-        return ['permissions.max' => 'Set permissions through the role permissions endpoint after creating the role.'];
+        if (! $partial) {
+            $rules['permissions'] = PermissionReferenceRules::list();
+            $rules['confirm'] = ['sometimes', 'boolean'];
+        }
+
+        return $rules;
     }
 
     /** @return array<string, mixed> */
@@ -57,8 +57,19 @@ class StoreRoleRequest extends FormRequest
     {
         /** @var array<string, mixed> $validated */
         $validated = $this->validated();
-        unset($validated['permissions']);
+        unset($validated['permissions'], $validated['confirm']);
 
         return $validated;
+    }
+
+    /** @return list<int|string> */
+    public function permissionReferences(): array
+    {
+        return PermissionReferenceRules::normalize($this->validated('permissions', []));
+    }
+
+    public function confirmed(): bool
+    {
+        return $this->boolean('confirm');
     }
 }

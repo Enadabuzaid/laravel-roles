@@ -40,7 +40,7 @@ final class RoleController
         /** @var array{name: string, label: array<string, string>} $data */
         $data = $request->roleData();
 
-        return ApiResponse::created($this->represent($action->handle($data)));
+        return ApiResponse::created($this->represent($action->handle($data, $request->permissionReferences(), $request->confirmed())));
     }
 
     public function update(UpdateRoleRequest $request, Role $role, UpdateRole $action): JsonResponse
