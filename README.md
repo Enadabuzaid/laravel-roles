@@ -100,6 +100,8 @@ $user->syncAccessRoles(['manager', 'viewer']);
 $user->isOwner();
 ```
 
+The users module adds `$user->accessState()` (HasOne), `$user->accessStatus()` (a `UserStatus`; `Active` when the user has no row in `user_access_states`) and `$user->isAccessActive()`. These are additive: the `AccessUser` contract is unchanged. Existing installs run `php artisan roles:install`, `php artisan migrate` and `php artisan roles:backfill-users` once. Settings live under `roles.users` (`mfa_enabled_column`, `invitation_ttl_hours`, `default_status`, `accept_url`, `saved_view_pages`).
+
 Never call Spatie's `assignRole`, `removeRole`, `syncRoles`, `givePermissionTo`, `revokePermissionTo` or `syncPermissions` directly; an architecture test enforces this inside the package.
 
 ## Guardrails
@@ -316,6 +318,7 @@ Role write events (`roles.created`, `roles.updated`, `roles.trashed`, `roles.res
 | `roles:sync [--dry-run] [--prune]` | Registry file to database |
 | `roles:seed` | Create default roles (idempotent) |
 | `roles:owner {email}` | Make a user the owner |
+| `roles:backfill-users [--dry-run]` | Create `active` access state rows for users without one (chunked, idempotent) |
 | `roles:doctor` | Run health checks; exits non-zero on failure. A check that throws is reported as `FAIL`. |
 
 ## API envelope and list queries

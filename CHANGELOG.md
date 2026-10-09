@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+- Users module foundation: `user_access_states`, `access_invitations` and `access_saved_views` tables (published by `roles:install` / `vendor:publish --tag=roles-migrations` after the roles/permissions extension stubs, no foreign keys), the `UserStatus` enum and the `UserAccessState`, `AccessInvitation` and `SavedView` models.
+- `HasAccess::accessState()`, `accessStatus()` (Active when no row exists) and `isAccessActive()`; the `AccessUser` contract is unchanged.
+- `roles:backfill-users` (chunked, idempotent, `--dry-run`) and the `users-state` doctor check (WARN for users without a state row, FAIL when `modules.users` is on and the table is missing).
+- `roles.users` config section (`mfa_enabled_column`, `invitation_ttl_hours`, `default_status`, `accept_url`, `saved_view_pages`, reserved `lockout`).
+
+Upgrading: run `php artisan roles:install` (or republish migrations), `php artisan migrate`, then `php artisan roles:backfill-users`.
+
 ## 2.0.0-alpha.5 — 2026-10-09
 
 ### Added

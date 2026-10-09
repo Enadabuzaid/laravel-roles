@@ -1,0 +1,40 @@
+<?php
+
+declare(strict_types=1);
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        $model = config('roles.user_model');
+        $users = is_string($model) && is_subclass_of($model, Illuminate\Database\Eloquent\Model::class) ? (new $model)->getTable() : 'users';
+
+        if (! Schema::hasTable($users)) {
+            throw new RuntimeException("laravel-roles: the [{$users}] table is missing — run the application's user migrations first");
+        }
+
+        if (Schema::hasTable('access_saved_views')) {
+            return; // already created
+        }
+
+        Schema::create('access_saved_views', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('user_id')->index();
+            $table->string('page', 48);
+            $table->string('name', 80);
+            $table->jsonb('filters');
+            $table->timestamps();
+
+            $table->unique(['user_id', 'page', 'name'], 'access_saved_views_owner_page_name_unique');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('access_saved_views');
+    }
+};

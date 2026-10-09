@@ -17,6 +17,9 @@ class MigrationPublisher
     public const STUBS = [
         'extend_roles_table.php.stub' => 'extend_roles_table',
         'extend_permissions_table.php.stub' => 'extend_permissions_table',
+        'create_user_access_states_table.php.stub' => 'create_user_access_states_table',
+        'create_access_invitations_table.php.stub' => 'create_access_invitations_table',
+        'create_access_saved_views_table.php.stub' => 'create_access_saved_views_table',
     ];
 
     public function __construct(

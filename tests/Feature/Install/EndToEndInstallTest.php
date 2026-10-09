@@ -21,6 +21,9 @@ it('installs, migrates, syncs, seeds and bootstraps an owner into a healthy stat
 
     try {
         // Start from the bare Spatie schema: drop what the shim migrations added so the published stubs do the work.
+        Schema::dropIfExists('user_access_states');
+        Schema::dropIfExists('access_invitations');
+        Schema::dropIfExists('access_saved_views');
         Schema::dropIfExists('model_has_roles');
         Schema::dropIfExists('model_has_permissions');
         Schema::dropIfExists('role_has_permissions');
@@ -30,12 +33,15 @@ it('installs, migrates, syncs, seeds and bootstraps an owner into a healthy stat
             '0000_00_00_000000_create_spatie_permission_tables',
             '0000_00_00_000001_extend_roles_table',
             '0000_00_00_000002_extend_permissions_table',
+            '0001_01_02_000003_create_user_access_states_table',
+            '0001_01_02_000004_create_access_invitations_table',
+            '0001_01_02_000005_create_access_saved_views_table',
         ])->delete();
 
         $this->artisan('roles:install --no-interaction')->assertExitCode(0);
 
         $published = array_values(array_diff(glob($migrationsDir.'/*.php') ?: [], $existing));
-        expect($published)->toHaveCount(3);
+        expect($published)->toHaveCount(6);
 
         Artisan::call('migrate', ['--path' => $published, '--realpath' => true]);
 

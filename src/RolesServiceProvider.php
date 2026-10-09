@@ -66,6 +66,7 @@ class RolesServiceProvider extends ServiceProvider
                 Console\OwnerCommand::class,
                 Console\InstallCommand::class,
                 Console\DoctorCommand::class,
+                Console\BackfillUsersCommand::class,
             ]);
         }
 

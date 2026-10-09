@@ -11,6 +11,7 @@ use Enadstack\LaravelRoles\Core\Doctor\Checks\OwnerExistsCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\PermissionsSyncedCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\RoutesProtectedCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\UserModelCheck;
+use Enadstack\LaravelRoles\Core\Doctor\Checks\UsersStateCheck;
 use Enadstack\LaravelRoles\Guardrails\Rules\DestructiveConfirmationRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\EscalationRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\HighRiskConfirmRule;
@@ -75,6 +76,15 @@ return [
         'login_history_days' => 180,
     ],
 
+    'users' => [
+        'mfa_enabled_column' => 'two_factor_confirmed_at', // optional host column read for the MFA flag
+        'invitation_ttl_hours' => 72,
+        'default_status' => 'active', // status of users without a state row
+        'accept_url' => null, // null resolves lazily to url('/accept-invitation')
+        'saved_view_pages' => ['users', 'roles', 'permissions', 'audit', 'reports'],
+        'lockout' => [], // reserved for the security phase
+    ],
+
     'pagination' => ['default' => 15, 'max' => 100],
 
     'reports' => [],
@@ -114,6 +124,7 @@ return [
             CacheWorkingCheck::class,
             AuditReadyCheck::class,
             GuardrailConfigCheck::class,
+            UsersStateCheck::class,
         ],
         'disabled' => [],
     ],

@@ -37,7 +37,7 @@ abstract class TestCase extends Orchestra
     {
         $directory = \Orchestra\Testbench\default_skeleton_path('database/migrations');
 
-        foreach (['extend_roles_table', 'extend_permissions_table'] as $name) {
+        foreach (['extend_roles_table', 'extend_permissions_table', 'create_user_access_states_table', 'create_access_invitations_table', 'create_access_saved_views_table'] as $name) {
             foreach (glob($directory.'/*_'.$name.'.php') ?: [] as $file) {
                 @unlink($file);
             }

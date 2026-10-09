@@ -14,7 +14,7 @@ function publishedFiles(string $dir, string $name): array
 
 function cleanPublished(string $dir): void
 {
-    foreach (['extend_roles_table', 'extend_permissions_table', 'create_permission_tables'] as $name) {
+    foreach (['extend_roles_table', 'extend_permissions_table', 'create_user_access_states_table', 'create_access_invitations_table', 'create_access_saved_views_table', 'create_permission_tables'] as $name) {
         foreach (publishedFiles($dir, $name) as $file) {
             @unlink($file);
         }
@@ -91,9 +91,9 @@ it('reuses published files through the glob with fresh publisher instances', fun
         $second = $secondPublisher->publish();
         $third = (new MigrationPublisher(new Filesystem, $dir))->publish();
 
-        expect($first)->toHaveCount(2)->and($second)->toBe([])->and($third)->toBe([])
+        expect($first)->toHaveCount(5)->and($second)->toBe([])->and($third)->toBe([])
             ->and($targetsAgain)->toBe($first)
-            ->and(glob($dir.'/*.php'))->toHaveCount(2);
+            ->and(glob($dir.'/*.php'))->toHaveCount(5);
     } finally {
         cleanPublished($dir);
         @rmdir($dir);
@@ -142,10 +142,67 @@ it('ignores look-alike files when resolving published migrations', function (): 
         $targets = (new MigrationPublisher(new Filesystem, $dir))->targets();
 
         foreach ($targets as $destination) {
-            expect(basename($destination))->toMatch('/^\d{4}_\d{2}_\d{2}_\d{6}_extend_(roles|permissions)_table\.php$/');
+            expect(basename($destination))->toMatch('/^\d{4}_\d{2}_\d{2}_\d{6}_(extend_(roles|permissions)_table|create_(user_access_states|access_invitations|access_saved_views)_table)\.php$/');
         }
     } finally {
         array_map('unlink', glob($dir.'/*.php') ?: []);
         @rmdir($dir);
     }
+});
+
+it('publishes the users stubs after the extension stubs with install-time timestamps', function (): void {
+    $dir = tempMigrationDir();
+
+    try {
+        (new MigrationPublisher(new Filesystem, $dir))->publish();
+
+        $names = ['extend_roles_table', 'extend_permissions_table', 'create_user_access_states_table', 'create_access_invitations_table', 'create_access_saved_views_table'];
+        $files = array_map(fn (string $name): string => basename(publishedFiles($dir, $name)[0]), $names);
+
+        foreach ($files as $file) {
+            expect($file)->toMatch('/^\d{4}_\d{2}_\d{2}_\d{6}_/');
+        }
+
+        $sorted = $files;
+        sort($sorted);
+        expect($files)->toBe($sorted);
+    } finally {
+        cleanPublished($dir);
+        @rmdir($dir);
+    }
+});
+
+it('throws a clear exception when the base tables of the users stubs are missing', function (): void {
+    $original = config('permission.table_names');
+    $base = dirname(__DIR__, 3).'/database/migrations/';
+    config(['permission.table_names.roles' => 'missing_roles']);
+
+    try {
+        $invitations = include $base.'create_access_invitations_table.php.stub';
+        expect(fn () => $invitations->up())->toThrow(RuntimeException::class, 'Spatie permission tables are missing');
+
+        Schema::rename('users', 'users_moved');
+        $states = include $base.'create_user_access_states_table.php.stub';
+        $views = include $base.'create_access_saved_views_table.php.stub';
+
+        expect(fn () => $states->up())->toThrow(RuntimeException::class, 'the [users] table is missing')
+            ->and(fn () => $views->up())->toThrow(RuntimeException::class, 'the [users] table is missing');
+    } finally {
+        if (Schema::hasTable('users_moved')) {
+            Schema::rename('users_moved', 'users');
+        }
+        config(['permission.table_names' => $original]);
+    }
+});
+
+it('is idempotent when the users tables already exist', function (): void {
+    $base = dirname(__DIR__, 3).'/database/migrations/';
+
+    foreach (['create_user_access_states_table', 'create_access_invitations_table', 'create_access_saved_views_table'] as $stub) {
+        (include $base.$stub.'.php.stub')->up();
+    }
+
+    expect(Schema::hasTable('user_access_states'))->toBeTrue()
+        ->and(Schema::hasTable('access_invitations'))->toBeTrue()
+        ->and(Schema::hasTable('access_saved_views'))->toBeTrue();
 });
