@@ -117,3 +117,48 @@ it('removes pivot rows of every model type on force delete', function (): void {
     $this->actingAs(roleWriter())->deleteJson("/api/access/roles/{$role->id}/force", ['confirmation' => 'pivoted'])->assertNoContent();
     expect(DB::table($table)->where('role_id', $role->id)->count())->toBe(0);
 });
+
+it('refuses a non-owner restoring a role they hold and leaves it trashed', function (): void {
+    $role = makeRole('mine', ['reports.view']);
+    $actor = roleWriter();
+    $actor->assignRole($role);
+    $role->delete();
+    ActionLog::query()->delete();
+
+    $this->actingAs($actor)->postJson("/api/access/roles/{$role->id}/restore")->assertForbidden()->assertJson(['code' => 'guardrail.self_role_change']);
+    expect(Role::withTrashed()->find($role->id)->trashed())->toBeTrue()->and(ActionLog::count())->toBe(0);
+});
+
+it('refuses restoring a role with permissions the actor lacks', function (): void {
+    $role = makeRole('wide', ['secret.view']);
+    $role->delete();
+    ActionLog::query()->delete();
+
+    $this->actingAs(roleWriter())->postJson("/api/access/roles/{$role->id}/restore")->assertForbidden()->assertJson(['code' => 'guardrail.escalation']);
+    expect(Role::withTrashed()->find($role->id)->trashed())->toBeTrue()->and(ActionLog::count())->toBe(0);
+});
+
+it('requires confirm to restore a high-risk role, then restores it with one audit entry', function (): void {
+    makePermission('danger.run', 'high');
+    $actor = roleWriter();
+    $actor->givePermissionTo('danger.run');
+    $role = makeRole('risky', ['danger.run']);
+    $role->delete();
+    ActionLog::query()->delete();
+
+    $this->actingAs($actor)->postJson("/api/access/roles/{$role->id}/restore")->assertForbidden()->assertJson(['code' => 'guardrail.high_risk_confirm_required']);
+    expect(Role::withTrashed()->find($role->id)->trashed())->toBeTrue()->and(ActionLog::count())->toBe(0);
+
+    $this->actingAs($actor)->postJson("/api/access/roles/{$role->id}/restore", ['confirm' => true])->assertOk();
+    expect(ActionLog::sole()->event)->toBe('roles.restored')->and(Role::find($role->id))->not->toBeNull();
+});
+
+it('refuses a non-owner restoring the owner role', function (): void {
+    makeOwner('boss@example.test');
+    $role = Role::where('name', 'owner')->first();
+    $role->delete();
+    ActionLog::query()->delete();
+
+    $this->actingAs(roleWriter())->postJson("/api/access/roles/{$role->id}/restore", ['confirm' => true])->assertForbidden()->assertJson(['code' => 'guardrail.escalation']);
+    expect(Role::withTrashed()->find($role->id)->trashed())->toBeTrue()->and(ActionLog::count())->toBe(0);
+});

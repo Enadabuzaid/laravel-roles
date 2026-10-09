@@ -11,6 +11,7 @@ use Enadstack\LaravelRoles\Roles\Actions\RestoreRole;
 use Enadstack\LaravelRoles\Roles\Actions\TrashRole;
 use Enadstack\LaravelRoles\Roles\Actions\UpdateRole;
 use Enadstack\LaravelRoles\Roles\Http\Requests\DestroyRoleRequest;
+use Enadstack\LaravelRoles\Roles\Http\Requests\RestoreRoleRequest;
 use Enadstack\LaravelRoles\Roles\Http\Requests\StoreRoleRequest;
 use Enadstack\LaravelRoles\Roles\Http\Requests\UpdateRoleRequest;
 use Enadstack\LaravelRoles\Roles\Http\Resources\RoleResource;
@@ -52,9 +53,9 @@ final class RoleController
         return ApiResponse::success($this->represent($action->handle($role, $request->confirmation())));
     }
 
-    public function restore(DestroyRoleRequest $request, Role $role, RestoreRole $action): JsonResponse
+    public function restore(RestoreRoleRequest $request, Role $role, RestoreRole $action): JsonResponse
     {
-        return ApiResponse::success($this->represent($action->handle($role)));
+        return ApiResponse::success($this->represent($action->handle($role, $request->confirmed())));
     }
 
     public function force(DestroyRoleRequest $request, Role $role, ForceDeleteRole $action): JsonResponse

@@ -29,6 +29,12 @@ final class EscalationRule implements Guardrail
             return;
         }
 
+        if ($operation->type === OperationType::RestoreRole) {
+            $this->checkRestore($actor, $operation);
+
+            return;
+        }
+
         if (($operation->added === [] && $operation->removed === []) || $this->owners->isOwner($actor)) {
             return;
         }
@@ -56,6 +62,35 @@ final class EscalationRule implements Guardrail
             if (RoleRisk::isOwnerRole($role) || $missing) {
                 throw Violation::escalation();
             }
+        }
+    }
+
+    /**
+     * Restoring re-activates every member's access, so a non-owner may only restore a role whose
+     * permissions they hold themselves; the owner role is above everyone but owners.
+     */
+    private function checkRestore(Model $actor, Operation $operation): void
+    {
+        $role = $operation->role;
+        if ($role === null || $this->owners->isOwner($actor)) {
+            return;
+        }
+
+        if (RoleRisk::isOwnerRole($role)) {
+            throw Violation::escalation();
+        }
+
+        /** @var array<string, true> $held */
+        $held = array_fill_keys(
+            $actor->getAllPermissions()->pluck('name')->all(), // @phpstan-ignore method.notFound
+            true,
+        );
+
+        $role->unsetRelation('permissions');
+        $role->loadMissing('permissions');
+
+        if ($role->permissions->pluck('name')->contains(fn (string $name): bool => ! isset($held[$name]))) {
+            throw Violation::escalation();
         }
     }
 
