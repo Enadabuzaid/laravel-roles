@@ -5,6 +5,7 @@ use Enadstack\LaravelRoles\Core\Doctor\Checks\AuditReadyCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\CacheWorkingCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\ConfigConsistencyCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\DeprecatedStillHeldCheck;
+use Enadstack\LaravelRoles\Core\Doctor\Checks\GuardrailConfigCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\NoEmptyRolesCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\OwnerExistsCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\PermissionsSyncedCheck;
@@ -47,6 +48,7 @@ return [
     'guardrails' => [
         'min_owners' => 1,
         'prevent_self_escalation' => true,
+        'prevent_self_destructive' => true,
         'prevent_escalation' => true,
         'confirm_high_risk' => true,
         'type_to_confirm_destructive' => true,
@@ -107,6 +109,7 @@ return [
             DeprecatedStillHeldCheck::class,
             CacheWorkingCheck::class,
             AuditReadyCheck::class,
+            GuardrailConfigCheck::class,
         ],
         'disabled' => [],
     ],

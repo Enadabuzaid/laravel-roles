@@ -12,7 +12,7 @@ final class SelfDestructiveRule implements Guardrail
 {
     public function check(Operation $operation): void
     {
-        if (! config('roles.guardrails.prevent_self_escalation', true)) {
+        if (! config('roles.guardrails.prevent_self_destructive', true)) {
             return;
         }
 

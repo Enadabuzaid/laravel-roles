@@ -30,6 +30,15 @@ it('requires the target email to delete a user', function () {
         ->and(guardrailCode(new Operation(T::DeleteUser, target: $user, confirmation: 'gone@example.test')))->toBeNull();
 });
 
+it('compares the confirmation case-insensitively and ignoring surrounding whitespace', function () {
+    $user = makeUser('Gone@Example.test');
+    $role = makeRole('Plain');
+
+    expect(guardrailCode(new Operation(T::DeleteUser, target: $user, confirmation: '  gone@example.TEST ')))->toBeNull()
+        ->and(guardrailCode(new Operation(T::ForceDeleteRole, role: $role, confirmation: ' PLAIN ')))->toBeNull()
+        ->and(guardrailCode(new Operation(T::ForceDeleteRole, role: $role, confirmation: 'plain2')))->toBe('guardrail.confirmation_mismatch');
+});
+
 it('is skipped when the toggle is off', function () {
     config(['roles.guardrails.type_to_confirm_destructive' => false]);
 

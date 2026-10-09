@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Enadstack\LaravelRoles\Support\Exceptions\AccessException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -58,9 +59,30 @@ it('also covers the bare prefix url', function () {
     $this->getJson('api/access')->assertStatus(404)->assertJson(['success' => false, 'code' => 'not_found']);
 });
 
-it('leaves routes outside the prefix untouched', function () {
-    $response = $this->getJson('other/boom');
+it('renders access exceptions outside the prefix as the envelope for json requests', function () {
+    $this->getJson('other/boom')->assertStatus(403)->assertExactJson([
+        'success' => false, 'message' => 'x', 'code' => 'guardrail.last_owner', 'errors' => [],
+    ]);
+});
 
-    expect($response->json())->not->toHaveKeys(['success', 'code']);
-    $response->assertJsonMissing(['code' => 'guardrail.last_owner']);
+it('renders access exceptions outside the prefix as a plain response with the status for html requests', function () {
+    $this->get('other/boom')->assertStatus(403);
+});
+
+it('does not report access exceptions', function () {
+    expect((new AccessException('x', 'guardrail.last_owner'))->report())->toBeTrue();
+
+    $reported = [];
+    $this->app->make(ExceptionHandler::class)->reportable(function (Throwable $e) use (&$reported) {
+        $reported[] = $e;
+    });
+    $this->getJson('other/boom');
+
+    expect($reported)->toBe([]);
+});
+
+it('still reports other exceptions outside the prefix untouched', function () {
+    Route::get('other/plain', fn () => throw new RuntimeException('plain'));
+
+    $this->getJson('other/plain')->assertStatus(500)->assertJsonMissing(['code' => 'guardrail.last_owner']);
 });

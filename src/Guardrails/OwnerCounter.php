@@ -28,7 +28,7 @@ final class OwnerCounter
      */
     public function lockSuperRole(): void
     {
-        Role::query()
+        Role::withTrashed()
             ->where('name', (string) config('roles.super_role'))
             ->where('guard_name', (string) config('roles.guard'))
             ->lockForUpdate()

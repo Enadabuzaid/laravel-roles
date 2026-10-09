@@ -30,3 +30,9 @@ it('allows ordinary roles', function () {
     expect(guardrailCode(new Operation(T::DeleteRole, role: $role)))->toBeNull()
         ->and(guardrailCode(new Operation(T::RenameRole, role: $role, newName: 'renamed')))->toBeNull();
 });
+
+it('blocks renaming the super role even when is_system is false', function () {
+    $role = makeRole('owner', [], ['is_system' => false]);
+
+    expect(guardrailCode(new Operation(T::RenameRole, role: $role, newName: 'chief')))->toBe('guardrail.system_role');
+});

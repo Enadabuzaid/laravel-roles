@@ -18,6 +18,16 @@ it('allows others, system actor, and toggle off', function (T $type) {
     expect(guardrailCode(new Operation($type, actor: $a, target: $b, confirmation: $b->email)))->toBeNull()
         ->and(guardrailCode(new Operation($type, actor: null, target: $a, confirmation: $a->email)))->toBeNull();
 
-    config(['roles.guardrails.prevent_self_escalation' => false]);
+    config(['roles.guardrails.prevent_self_destructive' => false]);
     expect(guardrailCode(new Operation($type, actor: $a, target: $a, confirmation: $a->email)))->toBeNull();
 })->with([T::SuspendUser, T::DeactivateUser, T::DeleteUser]);
+
+it('has toggles that are independent of self role change', function () {
+    $a = makeUser();
+
+    config(['roles.guardrails.prevent_self_escalation' => false]);
+    expect(guardrailCode(new Operation(T::DeleteUser, actor: $a, target: $a, confirmation: $a->email)))->toBe('guardrail.self_destructive');
+
+    config(['roles.guardrails.prevent_self_escalation' => true, 'roles.guardrails.prevent_self_destructive' => false]);
+    expect(guardrailCode(new Operation(T::AssignRole, actor: $a, target: $a)))->toBe('guardrail.self_role_change');
+});

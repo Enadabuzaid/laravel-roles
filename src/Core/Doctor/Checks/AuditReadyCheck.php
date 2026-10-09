@@ -27,10 +27,8 @@ final class AuditReadyCheck implements Check
             return CheckResult::fail('The action_logs table is missing — run php artisan migrate.');
         }
 
-        $missing = array_values(array_filter(
-            self::REQUIRED_COLUMNS,
-            static fn (string $column): bool => ! Schema::hasColumn('action_logs', $column),
-        ));
+        $present = Schema::getColumnListing('action_logs');
+        $missing = array_values(array_diff(self::REQUIRED_COLUMNS, $present));
 
         if ($missing !== []) {
             return CheckResult::fail('action_logs is missing columns: '.implode(', ', $missing).' — run php artisan migrate.');

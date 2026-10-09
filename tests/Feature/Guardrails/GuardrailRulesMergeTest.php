@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use Enadstack\LaravelRoles\Guardrails\Guardrails;
+use Enadstack\LaravelRoles\Guardrails\Operation;
+use Enadstack\LaravelRoles\Guardrails\OperationType;
 use Enadstack\LaravelRoles\Guardrails\Rules\DestructiveConfirmationRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\EscalationRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\HighRiskConfirmRule;
@@ -10,6 +12,7 @@ use Enadstack\LaravelRoles\Guardrails\Rules\LastOwnerRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\SelfChangeRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\SelfDestructiveRule;
 use Enadstack\LaravelRoles\Guardrails\Rules\SystemRoleRule;
+use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\RolesServiceProvider;
 use Enadstack\LaravelRoles\Support\Exceptions\AccessException;
 use Tests\Support\HostExtraRule;
@@ -58,4 +61,23 @@ it('stays fail-closed when the host config has no rules key', function () {
     } catch (AccessException $e) {
         expect($e->errorCode)->toBe('guardrail.last_owner');
     }
+});
+
+it('pins the default rule order', function () {
+    expect(config('roles.guardrails.rules'))->toBe(builtInRules());
+});
+
+it('evaluates escalation before high-risk confirmation for a non-owner actor', function () {
+    $actor = makeUser('actor@example.test');
+    makeRole('support', ['tickets.view'])->users()->attach($actor);
+    makePermission('orders.refund', 'high');
+    makeRole('refunds', ['orders.refund']);
+    $target = makeUser('target@example.test');
+
+    expect(guardrailCode(new Operation(
+        OperationType::AssignRole,
+        actor: $actor->fresh(),
+        target: $target,
+        added: [Role::findByName('refunds', 'web')],
+    )))->toBe('guardrail.escalation');
 });
