@@ -7,6 +7,7 @@ use Enadstack\LaravelRoles\Core\Doctor\Checks\NoEmptyRolesCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\OwnerExistsCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\PermissionsSyncedCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\RoutesProtectedCheck;
+use Enadstack\LaravelRoles\Core\Doctor\Checks\UserModelCheck;
 
 return [
     'user_model' => env('ROLES_USER_MODEL', 'App\\Models\\User'),
@@ -75,6 +76,7 @@ return [
 
     'doctor' => [
         'checks' => [
+            UserModelCheck::class,
             OwnerExistsCheck::class,
             PermissionsSyncedCheck::class,
             RoutesProtectedCheck::class,

@@ -36,6 +36,10 @@ class RolesServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 Console\SyncCommand::class,
+                Console\SeedCommand::class,
+                Console\OwnerCommand::class,
+                Console\InstallCommand::class,
+                Console\DoctorCommand::class,
             ]);
         }
 
