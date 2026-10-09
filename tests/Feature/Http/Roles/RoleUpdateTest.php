@@ -91,3 +91,37 @@ it('records which role lost the default flag', function (): void {
     $this->actingAs(roleWriter())->putJson("/api/access/roles/{$b->id}", ['is_default' => true])->assertOk();
     expect(ActionLog::sole()->meta['default_cleared_from'])->toBe([['id' => $a->id, 'name' => 'first']]);
 });
+
+it('refuses making the owner or a system role the default role', function (string $name, array $attributes): void {
+    $role = makeRole($name, [], $attributes);
+    $other = makeRole('keeper', [], ['is_default' => true]);
+    ActionLog::query()->delete();
+
+    $this->actingAs(roleWriter())->putJson("/api/access/roles/{$role->id}", ['is_default' => true])
+        ->assertStatus(422)->assertJson(['code' => 'role.default_not_allowed']);
+
+    expect($role->fresh()->is_default)->toBeFalse()->and($other->fresh()->is_default)->toBeTrue()->and(ActionLog::count())->toBe(0);
+})->with([
+    'owner role' => ['owner', ['is_system' => true]],
+    'owner role without the flag' => ['owner', []],
+    'other system role' => ['admin', ['is_system' => true]],
+]);
+
+it('allows clearing is_default on a system role and defaulting an ordinary one', function (): void {
+    $system = makeRole('admin', [], ['is_system' => true, 'is_default' => true]);
+    $plain = makeRole('plain');
+
+    $this->actingAs(roleWriter())->putJson("/api/access/roles/{$system->id}", ['is_default' => false])->assertOk();
+    $this->actingAs(roleWriter())->putJson("/api/access/roles/{$plain->id}", ['is_default' => true])->assertOk();
+
+    expect($system->fresh()->is_default)->toBeFalse()->and($plain->fresh()->is_default)->toBeTrue();
+});
+
+it('refuses creating a role named like the owner role as the default', function (): void {
+    ActionLog::query()->delete();
+
+    $this->actingAs(roleWriter())->postJson('/api/access/roles', ['name' => 'owner', 'label' => ['en' => 'Owner'], 'is_default' => true])
+        ->assertStatus(422)->assertJson(['code' => 'role.default_not_allowed']);
+
+    expect(Role::where('name', 'owner')->exists())->toBeFalse()->and(ActionLog::count())->toBe(0);
+});

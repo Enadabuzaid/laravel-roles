@@ -9,6 +9,7 @@ use Enadstack\LaravelRoles\Guardrails\Guardrails;
 use Enadstack\LaravelRoles\Guardrails\Operation;
 use Enadstack\LaravelRoles\Guardrails\OperationType;
 use Enadstack\LaravelRoles\Models\Role;
+use Enadstack\LaravelRoles\Roles\Support\RoleRisk;
 use Enadstack\LaravelRoles\Support\Action;
 use Enadstack\LaravelRoles\Support\ActorContext;
 use Enadstack\LaravelRoles\Support\Exceptions\AccessException;
@@ -31,6 +32,10 @@ final class UpdateRole extends Action
                 $this->adopt($role, $fresh);
 
                 return false;
+            }
+
+            if ($fresh->is_default && $fresh->isDirty('is_default') && ($fresh->is_system || RoleRisk::isOwnerRole($fresh))) {
+                throw new AccessException("System roles can't be the default role.", 'role.default_not_allowed', 422, ['is_default' => ["System roles can't be the default role."]]);
             }
 
             if ($fresh->isDirty('name')) {

@@ -31,6 +31,10 @@ final class CreateRole extends Action
                 );
             }
 
+            if (($data['is_default'] ?? false) && $data['name'] === (string) config('roles.super_role')) {
+                throw new AccessException("System roles can't be the default role.", 'role.default_not_allowed', 422, ['is_default' => ["System roles can't be the default role."]]);
+            }
+
             $role = new Role;
             $role->forceFill([
                 'name' => $data['name'],
