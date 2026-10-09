@@ -36,6 +36,10 @@ it('fails loudly on a missing, malformed, duplicate or invalid file', function (
     'not array' => fn () => registryFile('not-array'),
     'duplicate' => fn () => registryFile('duplicate'),
     'bad risk' => fn () => registryFile('bad-risk'),
+    'module not array' => fn () => registryFile('bad-module'),
+    'array spec without label key' => fn () => registryFile('no-label-key'),
+    'non-string label' => fn () => registryFile('bad-label'),
+    'non-string risk' => fn () => registryFile('bad-risk-type'),
 ])->throws(PermissionRegistryException::class);
 
 it('ships arabic labels for package permissions', function () {

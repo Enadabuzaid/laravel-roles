@@ -126,7 +126,7 @@ final class SyncPermissions extends Action
             }
 
             if ($prunedIds !== []) {
-                Permission::query()->whereIn('id', $prunedIds)->delete();
+                Permission::query()->whereIn((new Permission)->getKeyName(), $prunedIds)->delete();
             }
         });
 
@@ -137,7 +137,7 @@ final class SyncPermissions extends Action
 
     private function differs(Permission $row, PermissionDefinition $definition): bool
     {
-        // Loose array comparison: Postgres jsonb does not preserve object key order.
+        // Order-insensitive comparison (ksort): Postgres jsonb does not preserve object key order.
         return ! $this->sameTranslations($row->label, $definition->label)
             || ! $this->sameTranslations($row->description, $definition->description)
             || $row->risk !== $definition->risk
@@ -156,7 +156,10 @@ final class SyncPermissions extends Action
             return $stored === $wanted;
         }
 
-        return $stored == $wanted;
+        ksort($stored);
+        ksort($wanted);
+
+        return $stored === $wanted;
     }
 
     /**

@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 use Enadstack\LaravelRoles\Core\Actions\SyncPermissions;
 use Enadstack\LaravelRoles\Core\Registry\PermissionRegistry;
+use Enadstack\LaravelRoles\Core\Registry\PermissionRegistryException;
 use Enadstack\LaravelRoles\Models\Permission;
 use Enadstack\LaravelRoles\Models\Role;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\Support\TestUser;
 
 function syncWith(string $file, bool $dry = false, bool $prune = false)
 {
@@ -91,10 +93,56 @@ it('clears the spatie permission cache after writing', function () {
     expect($registrar->getPermissions()->pluck('name')->all())->toContain('orders.view');
 });
 
+// Discrimination happens only on pgsql: jsonb reorders ['en','ar'] to ['ar','en'], which a strict
+// array comparison would flag as a change. On sqlite the JSON text is stored verbatim.
 it('does not report a spurious update when the database reorders json keys', function () {
     syncWith('reordered');
 
     $result = syncWith('reordered');
 
     expect($result->updated)->toBe([])->and($result->hasChanges())->toBeFalse();
+});
+
+it('leaves the database untouched when the registry file is unusable', function (string $file) {
+    syncWith('valid');
+    $snapshot = Permission::query()->orderBy('id')->get()->toArray();
+
+    try {
+        syncWith($file, prune: true);
+        $thrown = null;
+    } catch (PermissionRegistryException $e) {
+        $thrown = $e;
+    }
+
+    expect($thrown)->toBeInstanceOf(PermissionRegistryException::class)
+        ->and(Permission::query()->orderBy('id')->get()->toArray())->toBe($snapshot);
+})->with(['missing' => 'does-not-exist', 'not array' => 'not-array', 'bad risk' => 'bad-risk']);
+
+it('never prunes a manual permission even when deprecated', function () {
+    syncWith('valid');
+    Permission::create(['name' => 'manual.old', 'guard_name' => 'web', 'source' => 'manual', 'deprecated_at' => now()]);
+
+    $result = syncWith('valid', prune: true);
+
+    expect($result->pruned)->toBe([])->and(Permission::where('name', 'manual.old')->exists())->toBeTrue();
+});
+
+it('never prunes a deprecated permission held directly by a user', function () {
+    syncWith('valid');
+    $held = Permission::create(['name' => 'direct.old', 'guard_name' => 'web', 'source' => 'registry', 'deprecated_at' => now()]);
+    $user = TestUser::create(['name' => 'U', 'email' => 'u@example.test', 'password' => 'x']);
+    $user->givePermissionTo($held);
+
+    $result = syncWith('valid', prune: true);
+
+    expect($result->pruned)->toBe([])->and(Permission::where('name', 'direct.old')->exists())->toBeTrue();
+});
+
+it('adopts a manual permission whose name appears in the registry', function () {
+    Permission::create(['name' => 'orders.view', 'guard_name' => 'web', 'source' => 'manual']);
+
+    $result = syncWith('valid');
+
+    expect($result->updated)->toBe(['orders.view'])->and($result->added)->toBe(['orders.update', 'orders.refund'])
+        ->and(Permission::where('name', 'orders.view')->value('source'))->toBe('registry');
 });

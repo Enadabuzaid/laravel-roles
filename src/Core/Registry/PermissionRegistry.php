@@ -50,20 +50,35 @@ final class PermissionRegistry
         $definitions = [];
 
         foreach ($data as $module => $group) {
+            if (! is_array($group)) {
+                throw new PermissionRegistryException("Module [{$module}] must be an array.");
+            }
+
+            $permissions = $group['permissions'] ?? [];
+            if (! is_array($permissions)) {
+                throw new PermissionRegistryException("Module [{$module}] permissions must be an array.");
+            }
+
             $order = 0;
-            foreach (($group['permissions'] ?? []) as $name => $spec) {
-                $spec = is_array($spec) && array_key_exists('label', $spec) ? $spec : ['label' => $spec];
+            foreach ($permissions as $name => $spec) {
+                $name = (string) $name;
+
+                if (is_array($spec) && ! array_key_exists('label', $spec)) {
+                    throw new PermissionRegistryException("Permission [{$name}] is an array without a [label] key; use 'label' => ... (or a plain string).");
+                }
+
+                $spec = is_array($spec) ? $spec : ['label' => $spec];
                 $risk = $spec['risk'] ?? 'low';
 
-                if (! in_array($risk, self::RISKS, true)) {
-                    throw new PermissionRegistryException("Permission [{$name}] has invalid risk [{$risk}].");
+                if (! is_string($risk) || ! in_array($risk, self::RISKS, true)) {
+                    throw new PermissionRegistryException("Permission [{$name}] has invalid risk.");
                 }
 
                 $definitions[] = new PermissionDefinition(
-                    name: (string) $name,
+                    name: $name,
                     module: (string) $module,
-                    label: $this->translations($spec['label'], (string) $name),
-                    description: isset($spec['description']) ? $this->translations($spec['description'], (string) $name) : null,
+                    label: $this->translations($spec['label'], $name),
+                    description: isset($spec['description']) ? $this->translations($spec['description'], $name) : null,
                     risk: $risk,
                     sortOrder: ++$order,
                 );
@@ -74,11 +89,14 @@ final class PermissionRegistry
     }
 
     /**
-     * @param  string|array<string, string>  $value
      * @return array<string, string>
      */
-    private function translations(string|array $value, string $name): array
+    private function translations(mixed $value, string $name): array
     {
+        if (! is_string($value) && ! is_array($value)) {
+            throw new PermissionRegistryException("Permission [{$name}] label/description must be a string or a locale => string array.");
+        }
+
         if (is_string($value)) {
             return [(string) config('roles.default_locale', 'en') => $value];
         }
@@ -87,6 +105,14 @@ final class PermissionRegistry
             throw new PermissionRegistryException("Permission [{$name}] has an empty label.");
         }
 
-        return $value;
+        $normalized = [];
+        foreach ($value as $locale => $text) {
+            if (! is_string($text)) {
+                throw new PermissionRegistryException("Permission [{$name}] translations must be strings.");
+            }
+            $normalized[(string) $locale] = $text;
+        }
+
+        return $normalized;
     }
 }
