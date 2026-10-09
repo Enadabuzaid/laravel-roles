@@ -8,6 +8,9 @@ final class PermissionRegistry
 {
     private const RISKS = ['low', 'medium', 'high'];
 
+    /** @var list<PermissionDefinition>|null */
+    private ?array $resolved = null;
+
     /** @param  list<string>  $enabledModules */
     public function __construct(
         private readonly ?string $file,
@@ -16,6 +19,12 @@ final class PermissionRegistry
 
     /** @return list<PermissionDefinition> */
     public function definitions(): array
+    {
+        return $this->resolved ??= $this->resolve();
+    }
+
+    /** @return list<PermissionDefinition> */
+    private function resolve(): array
     {
         $definitions = PackagePermissions::definitions($this->enabledModules);
 

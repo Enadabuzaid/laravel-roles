@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Enadstack\LaravelRoles\Models\Permission;
+use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Support\ListDefinition;
 use Enadstack\LaravelRoles\Support\ListQuery;
 use Illuminate\Http\Request;
@@ -107,3 +109,33 @@ it('accepts a single leading dash for sort and trims and de-duplicates includes'
     $lq = ListQuery::fromRequest(Request::create('/x', 'GET', ['include' => 'roles, permissions']), $def);
     expect($lq->includes)->toBe(['roles', 'permissions']);
 });
+
+it('searches jsonb label columns in both locales on every driver', function (string $modelClass, string $table) {
+    $rows = [
+        ['name' => 'alpha', 'label' => ['en' => 'Order Manager', 'ar' => 'مدير الطلبات']],
+        ['name' => 'beta', 'label' => ['en' => 'Viewer', 'ar' => 'مشاهد']],
+    ];
+    foreach ($rows as $row) {
+        DB::table($table)->insert([
+            'name' => $row['name'],
+            'guard_name' => 'web',
+            'label' => json_encode($row['label'], JSON_UNESCAPED_UNICODE),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    $definition = new ListDefinition(searchable: ['name', 'label']);
+    $search = fn (string $term): array => ($lq = ListQuery::fromRequest(Request::create('/x', 'GET', ['search' => $term]), $definition))
+        ->apply($modelClass::query())->orderBy('name')->pluck('name')->all();
+
+    expect($search('order manager'))->toBe(['alpha'])
+        ->and($search('مدير'))->toBe(['alpha'])
+        ->and($search('مشاهد'))->toBe(['beta'])
+        ->and($search('viewer'))->toBe(['beta'])
+        ->and($search('nothing-here'))->toBe([])
+        ->and($search('%'))->toBe([]);
+})->with([
+    'roles' => [Role::class, 'roles'],
+    'permissions' => [Permission::class, 'permissions'],
+]);

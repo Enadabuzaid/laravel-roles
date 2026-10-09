@@ -21,6 +21,10 @@ function countQueries(Closure $callback): int
     return $count;
 }
 
+afterEach(function () {
+    Model::preventLazyLoading(false);
+});
+
 it('lists roles with a fixed query count regardless of data size', function () {
     Model::preventLazyLoading();
 

@@ -74,3 +74,12 @@ it('normalizes the bare locale map and the label-keyed form identically', functi
         ->and($one->risk)->toEqual($two->risk)
         ->and([$one->sortOrder, $two->sortOrder])->toBe([1, 2]);
 });
+
+it('memoizes definitions so a registry file declaring a function can be read twice', function () {
+    $registry = new PermissionRegistry(registryFile('declares-function'), []);
+
+    $first = $registry->definitions();
+    $second = $registry->definitions();
+
+    expect($first)->toBe($second)->and($first[0]->label)->toBe(['en' => 'once']);
+});

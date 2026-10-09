@@ -36,7 +36,7 @@ class MigrationPublisher
         $offset = 0;
 
         foreach (self::STUBS as $stub => $name) {
-            $existing = $this->files->glob($this->targetDirectory.'/*_'.$name.'.php');
+            $existing = $this->publishedFiles($name);
 
             $targets[__DIR__.'/../../database/migrations/'.$stub] = $existing !== []
                 ? $existing[0]
@@ -67,11 +67,26 @@ class MigrationPublisher
         return $written;
     }
 
+    /**
+     * Files in the target directory named exactly `<timestamp>_<name>.php`.
+     *
+     * @return list<string>
+     */
+    private function publishedFiles(string $name): array
+    {
+        $pattern = '/^\d{4}_\d{2}_\d{2}_\d{6}_'.preg_quote($name, '/').'\.php$/';
+
+        return array_values(array_filter(
+            $this->files->glob($this->targetDirectory.'/*_'.$name.'.php'),
+            fn (string $file): bool => preg_match($pattern, basename($file)) === 1,
+        ));
+    }
+
     private function latestSpatieTimestamp(): int
     {
         $latest = 0;
 
-        foreach ($this->files->glob($this->targetDirectory.'/*_create_permission_tables.php') as $file) {
+        foreach ($this->publishedFiles('create_permission_tables') as $file) {
             $date = DateTimeImmutable::createFromFormat('Y_m_d_His', substr(basename($file), 0, 17));
 
             if ($date !== false) {

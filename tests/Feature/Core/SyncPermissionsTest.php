@@ -37,6 +37,41 @@ it('is idempotent and uses a fixed number of queries on a no-op run', function (
     expect($result->hasChanges())->toBeFalse()->and($queries)->toBeLessThanOrEqual(4);
 });
 
+function syncWithGeneratedRegistry(int $count): int
+{
+    $file = tempnam(sys_get_temp_dir(), 'roles-registry-');
+    $permissions = [];
+    for ($i = 1; $i <= $count; $i++) {
+        $permissions["gen.perm{$i}"] = ['label' => ['en' => "Perm {$i}", 'ar' => "صلاحية {$i}"], 'risk' => 'low'];
+    }
+    file_put_contents($file, '<?php return '.var_export(['gen' => ['permissions' => $permissions]], true).';');
+
+    try {
+        $registry = new PermissionRegistry($file, []);
+        (new SyncPermissions($registry))->handle(false, false);
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $result = (new SyncPermissions($registry))->handle(false, false);
+        $queries = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        expect($result->hasChanges())->toBeFalse();
+
+        return $queries;
+    } finally {
+        @unlink($file);
+    }
+}
+
+it('uses the same number of queries for a small and a large registry', function () {
+    $small = syncWithGeneratedRegistry(5);
+    Permission::query()->delete();
+    $large = syncWithGeneratedRegistry(120);
+
+    expect($small)->toBeGreaterThan(0)->and($large)->toBe($small);
+});
+
 it('dry run reports but writes nothing', function () {
     $result = syncWith('valid', dry: true);
 

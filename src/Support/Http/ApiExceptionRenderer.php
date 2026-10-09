@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
@@ -22,7 +23,7 @@ final class ApiExceptionRenderer
     {
         $prefix = trim((string) config('roles.routes.prefix'), '/');
 
-        if ($prefix === '' || ! $request->is($prefix.'/*')) {
+        if ($prefix === '' || ! ($request->is($prefix) || $request->is($prefix.'/*'))) {
             return null;
         }
 
@@ -32,6 +33,16 @@ final class ApiExceptionRenderer
             $e instanceof AuthenticationException => ApiResponse::error($e->getMessage(), 'unauthenticated', 401),
             $e instanceof AuthorizationException, $e instanceof AccessDeniedHttpException => ApiResponse::error($e->getMessage() ?: 'This action is unauthorized.', 'forbidden', 403),
             $e instanceof ModelNotFoundException, $e instanceof NotFoundHttpException => ApiResponse::error('Resource not found.', 'not_found', 404),
+            $e instanceof HttpExceptionInterface => ApiResponse::error(
+                $e->getMessage() !== '' ? $e->getMessage() : 'HTTP error.',
+                match ($e->getStatusCode()) {
+                    405 => 'method_not_allowed',
+                    409 => 'conflict',
+                    429 => 'too_many_requests',
+                    default => 'http_error',
+                },
+                $e->getStatusCode(),
+            ),
             default => null,
         };
     }

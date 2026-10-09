@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Enadstack\LaravelRoles\Console;
 
 use Enadstack\LaravelRoles\Concerns\HasAccess;
+use Enadstack\LaravelRoles\Contracts\AccessUser;
 use Enadstack\LaravelRoles\Roles\Actions\SeedDefaultRoles;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Model;
@@ -31,9 +32,15 @@ class OwnerCommand extends Command
             return self::FAILURE;
         }
 
+        if (! is_subclass_of($model, AccessUser::class)) {
+            $this->components->error("{$model} must implement ".AccessUser::class.'.');
+
+            return self::FAILURE;
+        }
+
         $user = $model::query()->where('email', (string) (is_string($email = $this->argument('email')) ? $email : ''))->first();
 
-        if ($user === null || ! method_exists($user, 'assignAccessRole')) {
+        if (! $user instanceof AccessUser || ! method_exists($user, 'assignAccessRole')) {
             $this->components->error('No user found with that email.');
 
             return self::FAILURE;

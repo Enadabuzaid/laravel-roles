@@ -6,7 +6,10 @@ use Enadstack\LaravelRoles\Models\Permission;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Roles\OwnerGate;
 use Illuminate\Contracts\Auth\Access\Gate as GateContract;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Spatie\Permission\Events\RoleDetachedEvent;
 use Spatie\Permission\Exceptions\RoleDoesNotExist;
 use Tests\Support\TestUser;
 
@@ -58,7 +61,22 @@ it('lets non-owners fall through to normal permission checks', function () {
         ->and(Gate::forUser($user)->allows('orders.refund'))->toBeFalse();
 });
 
-it('does not grant a role to a user whose assign fails inside the transaction', function () {
+it('rolls back every role change when a later step of the sync fails', function () {
+    config(['permission.events_enabled' => true]);
+    $user = makeUser();
+    Role::create(['name' => 'viewer', 'guard_name' => 'web']);
+    Role::create(['name' => 'admin', 'guard_name' => 'web']);
+    $user->assignAccessRole('viewer');
+
+    // The detach of the old role is a real write; failing right after it must undo it.
+    Event::listen(RoleDetachedEvent::class, fn () => throw new RuntimeException('boom after first write'));
+
+    expect(fn () => $user->syncAccessRoles(['admin']))->toThrow(RuntimeException::class, 'boom after first write');
+    expect(DB::table('model_has_roles')->where('model_id', $user->getKey())->count())->toBe(1)
+        ->and($user->fresh()->getRoleNames()->all())->toBe(['viewer']);
+});
+
+it('does not grant a role when assigning an unknown role', function () {
     $user = makeUser();
 
     expect(fn () => $user->assignAccessRole('does-not-exist'))->toThrow(RoleDoesNotExist::class);
