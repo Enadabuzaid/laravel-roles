@@ -51,6 +51,22 @@ final class ApiResponse
         ]], $meta));
     }
 
+    /**
+     * @param  LengthAwarePaginator<int, mixed>  $paginator
+     * @param  class-string<JsonResource>|null  $resource
+     * @param  array<string, mixed>  $meta
+     */
+    public static function list(ListQuery $query, LengthAwarePaginator $paginator, ?string $resource = null, array $meta = [], ?string $message = null): JsonResponse
+    {
+        $listMeta = $query->meta();
+
+        if ($query->search !== null) {
+            $listMeta['search'] = $query->search;
+        }
+
+        return self::paginated($paginator, $resource, array_merge($listMeta, $meta), $message);
+    }
+
     /** @param array<string, mixed> $errors */
     public static function error(string $message, string $code, int $status = 400, array $errors = []): JsonResponse
     {

@@ -59,11 +59,13 @@ abstract class TestCase extends Orchestra
         } else {
             $app['config']->set("database.connections.{$driver}.database", env('DB_DATABASE', 'roles_testing'));
         }
+        $app['config']->set('app.key', 'base64:'.base64_encode(str_repeat('k', 32)));
         $app['config']->set('cache.default', 'array');
         $app['config']->set('roles.permissions_file', null);
         $app['config']->set('action-logger.immutable', true);
         $app['config']->set('roles.user_model', TestUser::class);
         $app['config']->set('auth.providers.users.model', TestUser::class);
+        $app['config']->set('roles.routes.middleware', ['web', 'auth']);
     }
 
     protected function defineDatabaseMigrations(): void

@@ -43,6 +43,8 @@ return [
         'middleware' => ['api', 'auth:sanctum'],
     ],
 
+    'http' => ['rate_limit' => '60,1'], // throttle:<attempts>,<minutes> on every package route
+
     'permissions_file' => base_path('access/permissions.php'),
 
     'guardrails' => [

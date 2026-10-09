@@ -77,6 +77,14 @@ class RolesServiceProvider extends ServiceProvider
     {
         Gate::before(new Roles\OwnerGate);
 
+        Gate::policy((string) config('permission.models.role'), Roles\Policies\RolePolicy::class);
+        Gate::policy((string) config('permission.models.permission'), Core\Policies\PermissionPolicy::class);
+
+        if (! $this->app->routesAreCached()) {
+            Http\Support\RoutesRegistrar::register('roles', __DIR__.'/Roles/routes.php');
+            Http\Support\RoutesRegistrar::register('permissions', __DIR__.'/Core/routes.php');
+        }
+
         if ($this->app->runningInConsole()) {
             $this->publishes([__DIR__.'/../config/roles.php' => config_path('roles.php')], 'roles-config');
             $this->publishes(
