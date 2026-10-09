@@ -35,4 +35,15 @@ trait HasTranslations
 
         return null;
     }
+
+    /**
+     * Keep translated text readable (and LIKE-searchable) in JSON columns on every driver.
+     *
+     * @param  mixed  $value
+     * @param  int  $flags
+     */
+    protected function asJson($value, $flags = 0): string|false
+    {
+        return parent::asJson($value, $flags | JSON_UNESCAPED_UNICODE);
+    }
 }

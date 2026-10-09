@@ -9,6 +9,7 @@ use Enadstack\LaravelRoles\Core\Doctor\Checks\RoutesProtectedCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\UserModelCheck;
 use Enadstack\LaravelRoles\Core\Doctor\CheckStatus;
 use Enadstack\LaravelRoles\Core\Registry\PermissionRegistry;
+use Illuminate\Routing\RouteCollection;
 use Illuminate\Support\Facades\Route;
 use Tests\Support\TestUser;
 
@@ -71,6 +72,7 @@ it('does not match every route when the prefix is empty', function () {
 });
 
 it('matches the route prefix on a path segment boundary', function () {
+    Route::setRoutes(new RouteCollection);
     Route::get('api/accessory/list', fn () => 'x');
 
     expect(app(RoutesProtectedCheck::class)->run()->message)->toContain('No package routes');
