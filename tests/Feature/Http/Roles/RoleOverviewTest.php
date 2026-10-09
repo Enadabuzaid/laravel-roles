@@ -63,3 +63,13 @@ it('executes a constant number of queries', function (): void {
 
     expect($run())->toBe($small);
 });
+
+it('counts members through the configured user model, excluding orphan holders', function (): void {
+    $role = makeRole('cust');
+    makeUser('a@example.test')->assignRole($role);
+    DB::table('model_has_roles')->insert(['role_id' => $role->id, 'model_type' => (new TestUser)->getMorphClass(), 'model_id' => 99999]);
+
+    $this->actingAs(overviewActor())->getJson('/api/access/roles/overview')->assertOk()
+        ->assertJsonPath('data.members_with_role', 2)
+        ->assertJsonPath('data.members_without_role', 0);
+});

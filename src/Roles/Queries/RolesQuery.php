@@ -45,8 +45,9 @@ final class RolesQuery
                 'sort_order' => 'sort_order',
             ],
             includes: ['permissions'],
-            searchable: ['name', 'label', 'description'],
+            searchable: ['name'],
             defaultSort: 'sort_order',
+            translatedSearchable: ['label', 'description'],
         );
     }
 

@@ -35,7 +35,7 @@ final class RolesOverviewQuery
         )->first();
 
         $holders = DB::table($modelHasRoles)->where('model_type', $morphClass);
-        $withRole = (int) (clone $holders)->distinct()->count($morphKey);
+        $withRole = $userModel::query()->whereIn($user->getQualifiedKeyName(), (clone $holders)->select($morphKey))->count();
 
         $withoutRole = $userModel::query()
             ->whereNotIn($user->getQualifiedKeyName(), (clone $holders)->select($morphKey))

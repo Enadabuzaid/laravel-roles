@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use Enadstack\LaravelRoles\Models\Role;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
 use Tests\Support\TestUser;
 
 function viewer(string ...$extra): TestUser
@@ -120,4 +122,48 @@ it('executes the same number of queries for 5 and 120 roles', function (): void 
     $large = $run();
 
     expect($large)->toBe($small);
+});
+
+it('searches only translated values, never json keys or punctuation', function (): void {
+    makeRole('alpha', [], ['label' => ['en' => 'Order Manager', 'ar' => 'مدير الطلبات'], 'description' => ['en' => 'Handles refunds', 'ar' => 'يدير الاسترداد']]);
+    makeRole('beta', [], ['label' => ['en' => '50%_off', 'ar' => 'مشاهد']]);
+    $user = viewer();
+
+    $search = fn (string $term): array => collect($this->actingAs($user)->getJson('/api/access/roles?search='.urlencode($term))->assertOk()->json('data'))->pluck('name')->sort()->values()->all();
+
+    expect($search('en'))->toBe([])
+        ->and($search('ar'))->toBe([])
+        ->and($search('label'))->toBe([])
+        ->and($search('{'))->toBe([])
+        ->and($search('"'))->toBe([])
+        ->and($search('الطلبات'))->toBe(['alpha'])
+        ->and($search('REFUNDS'))->toBe(['alpha'])
+        ->and($search('الاسترداد'))->toBe(['alpha'])
+        ->and($search('%'))->toBe(['beta'])
+        ->and($search('0%_'))->toBe(['beta'])
+        ->and($search('_'))->toBe(['beta'])
+        ->and($search('5_'))->toBe([]);
+});
+
+it('filters by custom type, ignores a garbage default flag and lists all statuses', function (): void {
+    makeRole('sys', [], ['is_system' => true]);
+    makeRole('cust');
+    makeRole('gone')->delete();
+    $user = viewer();
+
+    $names = fn (string $qs): array => collect($this->actingAs($user)->getJson('/api/access/roles?'.$qs)->assertOk()->json('data'))->pluck('name')->sort()->values()->all();
+
+    expect($names('filter[type]=custom'))->toContain('cust')->not->toContain('sys', 'gone')
+        ->and($names('filter[default]=garbage'))->toContain('sys', 'cust')
+        ->and($names('filter[status]=all'))->toContain('sys', 'cust', 'gone');
+});
+
+it('does not change default binding for host routes using {role}', function (): void {
+    Route::middleware('web')->get('host/{role}', fn (Role $role) => ['name' => $role->name]);
+    $live = makeRole('live');
+    $gone = makeRole('gone');
+    $gone->delete();
+
+    $this->getJson("/host/{$live->id}")->assertOk()->assertJson(['name' => 'live']);
+    $this->getJson("/host/{$gone->id}")->assertNotFound();
 });

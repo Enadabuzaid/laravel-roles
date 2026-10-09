@@ -85,7 +85,7 @@ final class ListQuery
             }
         }
 
-        if ($this->search !== null && $this->definition->searchable !== []) {
+        if ($this->search !== null && ($this->definition->searchable !== [] || $this->definition->translatedSearchable !== [])) {
             $term = '%'.addcslashes($this->search, '%_\\').'%';
             $escapeManually = $query->getQuery()->getGrammar() instanceof SQLiteGrammar;
             $query->where(function (Builder $q) use ($term, $escapeManually): void {
@@ -95,6 +95,9 @@ final class ListQuery
                     } else {
                         $q->orWhereLike($column, $term);
                     }
+                }
+                if ($this->definition->translatedSearchable !== []) {
+                    TranslatedSearch::apply($q, $this->search, $this->definition->translatedSearchable, array_values(array_map('strval', (array) config('roles.locales', ['en']))));
                 }
             });
         }

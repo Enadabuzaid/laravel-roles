@@ -173,6 +173,8 @@ Severity: `critical` when the owner role is added or removed, `warning` when a h
 
 List endpoints (`Support\ListQuery`) accept `search`, `filter[key]=value` (whitelisted keys), `sort=name` / `sort=-name` (whitelisted), `page`, `per_page` (clamped to `pagination.max`) and `include=a,b` (whitelisted). Anything not whitelisted is ignored.
 
+Roles overview (`GET roles/overview`): `total_roles` includes trashed roles (`active_roles` + `trashed_roles` = `total_roles`); `system_roles` + `custom_roles` = `active_roles`. `members_with_role` / `members_without_role` count users of the configured user model. Role search matches the per-locale values of `label` and `description` (locales from `roles.locales`), never the JSON keys.
+
 ## Testing
 
 ```bash
