@@ -11,7 +11,7 @@ use Spatie\Permission\PermissionServiceProvider;
 
 class InstallCommand extends Command
 {
-    protected $signature = 'roles:install {--teams= : Enable teams (1|0)} {--id-type= : int, uuid or ulid} {--force : Overwrite existing files}';
+    protected $signature = 'roles:install {--teams= : Not supported yet in 2.0-alpha (must be 0)} {--id-type= : Not supported yet in 2.0-alpha (must be int)} {--force : Overwrite existing files}';
 
     protected $description = 'Publish the config, permissions stub and Spatie assets.';
 
@@ -21,20 +21,17 @@ class InstallCommand extends Command
         $teamsOption = $this->option('teams');
         $idOption = $this->option('id-type');
 
-        $teams = $teamsOption !== null
-            ? filter_var($teamsOption, FILTER_VALIDATE_BOOLEAN)
-            : ($this->input->isInteractive() ? $this->confirm('Enable teams (multi-tenant roles)?', false) : false);
-        $idType = $idOption !== null
-            ? (is_string($idOption) ? $idOption : '')
-            : ($this->input->isInteractive() ? $this->askIdType() : 'int');
-
-        if (! in_array($idType, ['int', 'uuid', 'ulid'], true)) {
-            $this->components->error('--id-type must be int, uuid or ulid.');
+        if ($teamsOption !== null && filter_var($teamsOption, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) !== false) {
+            $this->components->error('Teams are not supported in 2.0-alpha (planned for a later phase). Run roles:install without --teams.');
 
             return self::FAILURE;
         }
 
-        $configExisted = file_exists(config_path('roles.php'));
+        if ($idOption !== null && $idOption !== 'int') {
+            $this->components->error('--id-type other than [int] is not supported in 2.0-alpha (uuid and ulid are planned for a later phase).');
+
+            return self::FAILURE;
+        }
 
         $this->callSilently('vendor:publish', ['--tag' => 'roles-config', '--force' => $force]);
         $this->callSilently('vendor:publish', ['--tag' => 'roles-permissions', '--force' => $force]);
@@ -52,42 +49,11 @@ class InstallCommand extends Command
 
         (new MigrationPublisher($files, $migrations))->publish();
 
-        if (! $configExisted || $force) {
-            $this->applyOptions($teams, $idType);
-        } elseif ($teamsOption !== null || $idOption !== null) {
-            $this->components->warn('config/roles.php already exists: --teams / --id-type were not applied. Re-run with --force or edit the file.');
-        }
-
         $this->components->info('Installed. Next steps:');
         foreach (['php artisan migrate', 'php artisan roles:sync', 'php artisan roles:seed', 'php artisan roles:owner you@example.com'] as $step) {
             $this->line("  {$step}");
         }
 
         return self::SUCCESS;
-    }
-
-    private function askIdType(): string
-    {
-        $choice = $this->choice('User key type?', ['int', 'uuid', 'ulid'], 0);
-
-        return is_string($choice) ? $choice : 'int';
-    }
-
-    private function applyOptions(bool $teams, string $idType): void
-    {
-        $path = config_path('roles.php');
-        $contents = file_get_contents($path);
-
-        if ($contents === false) {
-            return;
-        }
-
-        $contents = str_replace(
-            ["'teams' => false,", "'id_type' => 'int',"],
-            ["'teams' => ".($teams ? 'true' : 'false').',', "'id_type' => '{$idType}',"],
-            $contents,
-        );
-
-        file_put_contents($path, $contents);
     }
 }

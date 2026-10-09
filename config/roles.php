@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 use Enadstack\LaravelRoles\Core\Doctor\Checks\CacheWorkingCheck;
+use Enadstack\LaravelRoles\Core\Doctor\Checks\ConfigConsistencyCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\DeprecatedStillHeldCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\NoEmptyRolesCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\OwnerExistsCheck;
@@ -12,8 +13,8 @@ use Enadstack\LaravelRoles\Core\Doctor\Checks\UserModelCheck;
 return [
     'user_model' => env('ROLES_USER_MODEL', 'App\\Models\\User'),
     'guard' => env('ROLES_GUARD', 'web'),
-    'teams' => false,
-    'id_type' => 'int', // int | uuid | ulid — read by migrations added in later phases
+    'teams' => false, // unsupported in 2.0-alpha: must stay false (doctor fails otherwise)
+    'id_type' => 'int', // unsupported in 2.0-alpha: must stay int (uuid | ulid planned)
     'super_role' => 'owner',
 
     'default_locale' => 'en',
@@ -76,6 +77,7 @@ return [
 
     'doctor' => [
         'checks' => [
+            ConfigConsistencyCheck::class,
             UserModelCheck::class,
             OwnerExistsCheck::class,
             PermissionsSyncedCheck::class,

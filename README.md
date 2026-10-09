@@ -19,7 +19,7 @@ php artisan roles:seed               # default roles (owner, admin, manager, vie
 php artisan roles:owner you@example.com
 ```
 
-`roles:install` accepts `--teams=1|0`, `--id-type=int|uuid|ulid` and `--force`. The options are only applied when `config/roles.php` is created (or with `--force`); otherwise a warning is printed.
+`roles:install` accepts `--force`. It also accepts `--teams=0` and `--id-type=int`, but any other value is rejected with a non-zero exit: teams, `uuid` and `ulid` keys are not supported in 2.0-alpha and arrive in a later phase. `roles:doctor` fails if `roles.teams` / `permission.teams` is enabled or `roles.id_type` is not `int`.
 
 ### Migrations are published, not auto-loaded
 
@@ -45,18 +45,18 @@ class User extends Authenticatable implements AccessUser
 |---|---|---|
 | `user_model` | `App\Models\User` (`ROLES_USER_MODEL`) | User model; needs `HasAccess` + `AccessUser` |
 | `guard` | `web` (`ROLES_GUARD`) | Guard for roles and permissions |
-| `teams` | `false` | Multi-tenant roles |
-| `id_type` | `int` | `int`, `uuid` or `ulid` |
+| `teams` | `false` | Multi-tenant roles (unsupported in 2.0-alpha; must stay `false`) |
+| `id_type` | `int` | Must stay `int` in 2.0-alpha (`uuid` / `ulid` planned for a later phase) |
 | `super_role` | `owner` | Role that bypasses permission checks |
 | `default_locale` / `fallback_locale` / `locales` | `en` / `en` / `['en','ar']` | Label translations |
 | `modules` | all `true` | Feature toggles for later phases |
 | `routes.prefix` / `routes.middleware` | `api/access` / `['api','auth:sanctum']` | API routes (later phases) |
 | `permissions_file` | `access/permissions.php` | Permission registry |
-| `guardrails` | see file | Min owners, self-escalation, high-risk confirmation |
+| `guardrails` | see file | Reserved: enforced from Phase 2, not yet active |
 | `security` | see file | Lockout, MFA roles, login history |
 | `pagination` | `default 15`, `max 100` | List defaults |
 | `default_roles` | owner, admin, manager, viewer | Seeded by `roles:seed` |
-| `doctor.checks` | 7 built-in checks | Classes implementing `Core\Doctor\Check` |
+| `doctor.checks` | 8 built-in checks | Classes implementing `Core\Doctor\Check` |
 
 ## Permission registry
 
@@ -86,7 +86,7 @@ return [
 
 ## HasAccess
 
-Use the package API for role changes so guardrails, cache resets and owner rules apply:
+Use the package API for role changes so cache resets and the owner gate apply. Guardrails (last-owner protection, self-escalation checks) and audit logging arrive in Phase 2; they are not enforced yet:
 
 ```php
 $user->assignAccessRole('admin');

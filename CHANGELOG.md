@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 2.0.0-alpha.3 — 2026-10-09
+
+### Fixed
+- `roles:install` rejects `--teams=1` and any `--id-type` other than `int`: teams, uuid and ulid keys are unsupported in 2.0-alpha (planned for a later phase). New `ConfigConsistencyCheck` in `roles:doctor` fails when they are configured.
+- `roles:owner` fails cleanly when the user model does not implement `AccessUser`.
+- Search over jsonb columns (`label`) works on PostgreSQL.
+- Extension stubs are idempotent when their columns already exist; republish matches only well-formed timestamped names.
+- `PermissionRegistry` memoizes definitions, so a registry file declaring a function no longer fatals on a second read.
+- API error envelope also covers the bare prefix URL and other HTTP exceptions (405, 409, 429).
+
+### Tests
+- End-to-end install test, a Gate::before null-for-non-owners pin, a real transaction rollback test and a registry-size-independent sync query-count test.
+
 ## 2.0.0-alpha.2 — 2026-10-09
 
 ### Changed
@@ -13,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The stubs throw a clear `RuntimeException` when the Spatie tables are missing.
 
 ### Upgrading from alpha.1
-- Run `php artisan vendor:publish --tag=roles-migrations` only on fresh databases; existing installs already have the columns.
+- Alpha.1 auto-loaded the extension migrations. The published stubs now skip themselves when their columns already exist (roles: `label`, permissions: `module`), so publishing and running them on an existing alpha.1 database is safe.
 
 ## 2.0.0-alpha.1 — 2026-10-09
 
@@ -26,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - File-based permission registry with AR/EN labels, descriptions and risk levels; `roles:sync` (`--dry-run`, `--prune`).
 - `Role` and `Permission` models with translatable labels, soft-deprecation and system roles.
-- `HasAccess` trait and `AccessUser` contract; owner (super role) gate; role actions that enforce guardrails.
+- `HasAccess` trait and `AccessUser` contract; owner (super role) gate; role actions (transaction and cache reset; guardrails and audit arrive in Phase 2).
 - Commands: `roles:install`, `roles:sync`, `roles:seed`, `roles:owner`, `roles:doctor` (7 checks, throwing checks reported as FAIL).
 - Support layer: `ApiResponse` envelope, `ListQuery`/`ListDefinition` with escaped search, base `Action`.
 - Architecture and query-count guard tests; sqlite and pgsql test runs.

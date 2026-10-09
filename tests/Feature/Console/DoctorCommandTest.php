@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Enadstack\LaravelRoles\Core\Doctor\Check;
 use Enadstack\LaravelRoles\Core\Doctor\CheckResult;
+use Enadstack\LaravelRoles\Core\Doctor\Checks\ConfigConsistencyCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\RoutesProtectedCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\UserModelCheck;
 use Enadstack\LaravelRoles\Core\Doctor\CheckStatus;
@@ -77,6 +78,29 @@ it('matches the route prefix on a path segment boundary', function () {
     Route::get('api/access', fn () => 'x');
 
     expect(app(RoutesProtectedCheck::class)->run()->status)->toBe(CheckStatus::Fail);
+});
+
+it('passes the config consistency check with the default config', function () {
+    expect(app(ConfigConsistencyCheck::class)->run()->status)->toBe(CheckStatus::Pass);
+});
+
+it('fails the config consistency check for teams and non-int id types', function (string $key, mixed $value) {
+    config([$key => $value]);
+
+    $result = app(ConfigConsistencyCheck::class)->run();
+
+    expect($result->status)->toBe(CheckStatus::Fail)->and($result->message)->toContain(explode('.', $key)[1]);
+})->with([
+    'roles.teams' => ['roles.teams', true],
+    'permission.teams' => ['permission.teams', true],
+    'uuid' => ['roles.id_type', 'uuid'],
+    'ulid' => ['roles.id_type', 'ulid'],
+]);
+
+it('runs the config consistency check in roles:doctor', function () {
+    config(['roles.teams' => true]);
+
+    $this->artisan('roles:doctor')->expectsOutputToContain('config-consistency')->assertExitCode(1);
 });
 
 it('reports a throwing check as FAIL instead of crashing', function () {
