@@ -117,15 +117,27 @@ it('evaluates every guardrail before any mutation', function () {
 it('blocks a non-owner holding a role from widening it as part of a matrix change', function () {
     $actor = makeUser('actor@example.test');
     $actor->givePermissionTo('a.view', 'b.view');
-    $actor->assignRole($this->one);
+    $actor->assignRole($this->two);
     $actor = $actor->fresh();
+    ActionLog::query()->delete();
+
+    // Roles are processed in id order, so the held role (two, the higher id) is the second one.
+    expect($this->one->id)->toBeLessThan($this->two->id);
 
     expect(fn () => updateMatrix([
-        $this->two->id => ['grant' => [$this->a->id], 'revoke' => []],
         $this->one->id => ['grant' => [$this->b->id], 'revoke' => []],
+        $this->two->id => ['grant' => [$this->a->id], 'revoke' => []],
     ], actor: $actor))->toThrow(function (AccessException $e) {
         expect($e->errorCode)->toBe('guardrail.self_role_change');
     });
 
-    expect($this->two->fresh()->permissions->pluck('name')->all())->toBe(['b.view']);
+    expect($this->one->fresh()->permissions->pluck('name')->all())->toBe(['a.view'])
+        ->and($this->two->fresh()->permissions->pluck('name')->all())->toBe(['b.view'])
+        ->and(ActionLog::count())->toBe(0);
+});
+
+it('ignores roles of another guard as unknown', function () {
+    $foreign = Role::create(['name' => 'api-role', 'guard_name' => 'api']);
+
+    expect(fn () => updateMatrix([$foreign->id => ['grant' => [$this->a->id]]]))->toThrow(ModelNotFoundException::class);
 });

@@ -148,7 +148,7 @@ Role-permission edits go through `Roles\Actions\UpdateRolePermissions` (one role
 | `PUT matrix` | `access.roles.update` | Body `{changes: {"<roleId>": {grant: [...], revoke: [...]}}, confirm?: bool}`; max 200 roles and 500 entries per list. Returns `{roles: {"<roleId>": {added, removed}}, summary: {granted, revoked, roles_changed, high_risk_granted}}` |
 | `PUT roles/{role}/permissions` | `access.roles.update` | Body `{grant?: [...], revoke?: [...], confirm?: bool}`; entries are permission ids (integers) or names (strings). Returns `{role, added, removed}`; a trashed role is 404 |
 
-The Owner role can't be edited by anyone (`guardrail.owner_role_locked`), a non-owner can't edit a role they hold (`guardrail.self_role_change`) or add a permission they lack (`guardrail.escalation`), and adding a high-risk permission needs `confirm: true` (`guardrail.high_risk_confirm_required`, also for the system actor). Roles are created without permissions; use `PUT roles/{role}/permissions` afterwards.
+The Owner role can't be edited by anyone (`guardrail.owner_role_locked`), a non-owner can't edit a role they hold (`guardrail.self_role_change`) or add a permission they lack (`guardrail.escalation`), and adding a high-risk permission needs `confirm: true` (`guardrail.high_risk_confirm_required`, also for the system actor). Permission references are ids when they are JSON integers and names when they are strings, so form-encoded posts (everything is a string) can only use names. A matrix update may reference at most 5000 permissions in total. Editing the Owner role is refused even when the change would be a no-op, so clients must not send the owner column. Roles are created without permissions; use `PUT roles/{role}/permissions` afterwards.
 
 ## Audit
 

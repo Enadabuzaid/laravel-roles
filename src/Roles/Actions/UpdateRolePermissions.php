@@ -27,7 +27,7 @@ final class UpdateRolePermissions extends Action
 
         $result = $this->transaction(function () use ($role, $grant, $revoke, $confirmed): array {
             app(OwnerCounter::class)->lockSuperRole();
-            $fresh = Role::query()->lockForUpdate()->whereKey($role->getKey())->firstOrFail();
+            $fresh = Role::query()->where('guard_name', (string) config('roles.guard'))->lockForUpdate()->whereKey($role->getKey())->firstOrFail();
 
             $planner = app(RolePermissionPlanner::class);
             $roleId = (int) $fresh->getKey();

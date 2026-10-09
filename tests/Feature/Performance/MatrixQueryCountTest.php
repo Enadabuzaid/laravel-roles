@@ -54,12 +54,15 @@ it('builds the matrix in exactly three queries however large it is', function ()
 
     seedMatrixData(5, 20, 's');
     Model::preventLazyLoading();
-    $small = queryCount(fn () => MatrixQuery::get($actor, true));
+    $small = queryCount(fn () => MatrixQuery::get(null, true));
+    $smallWithActor = queryCount(fn () => MatrixQuery::get($actor, true));
 
     seedMatrixData(60, 200, 'l');
-    $large = queryCount(fn () => MatrixQuery::get($actor, true));
+    $large = queryCount(fn () => MatrixQuery::get(null, true));
+    $largeWithActor = queryCount(fn () => MatrixQuery::get($actor, true));
 
-    expect($small)->toBe(3)->and($large)->toBe(3);
+    // Three data queries; owner detection adds a constant number when an actor is given.
+    expect($small)->toBe(3)->and($large)->toBe(3)->and($largeWithActor)->toBe($smallWithActor);
 });
 
 it('serves GET matrix with the same number of queries for small and large matrices', function () {

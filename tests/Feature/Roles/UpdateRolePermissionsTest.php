@@ -125,6 +125,7 @@ it('blocks a non-owner holding the role and an escalating grant', function () {
 
     $other = makeRole('other');
     expectAccessError(fn () => updatePermissions($other, ['b.view'], actor: $actor), 'guardrail.escalation', 403);
+    expect($other->fresh()->permissions)->toHaveCount(0)->and(ActionLog::count())->toBe(0);
     expect(updatePermissions($other, ['a.view'], actor: $actor)['added'])->toBe(['a.view']);
 });
 
@@ -154,4 +155,22 @@ it('does not touch a trashed role', function () {
     $this->role->delete();
 
     expect(fn () => updatePermissions($this->role, ['b.view']))->toThrow(ModelNotFoundException::class);
+});
+
+it('counts permissions an actor holds only through a role when checking escalation', function () {
+    $actor = makeUser('via-role@example.test');
+    $actor->assignRole(makeRole('holder', ['b.view']));
+    $actor = $actor->fresh();
+    expect($actor->getDirectPermissions())->toHaveCount(0);
+
+    $other = makeRole('other');
+
+    expect(updatePermissions($other, ['b.view'], actor: $actor)['added'])->toBe(['b.view']);
+    expectAccessError(fn () => updatePermissions($other, ['c.view'], actor: $actor), 'guardrail.escalation', 403);
+});
+
+it('treats a role of another guard as not found', function () {
+    $foreign = Role::create(['name' => 'api-role', 'guard_name' => 'api']);
+
+    expect(fn () => updatePermissions($foreign, ['a.view']))->toThrow(ModelNotFoundException::class);
 });

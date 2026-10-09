@@ -15,6 +15,8 @@ final class PermissionReferenceRules
 
     public const MAX_ROLES = 200;
 
+    public const MAX_TOTAL_REFERENCES = 5000;
+
     /** @return list<mixed> */
     public static function list(): array
     {

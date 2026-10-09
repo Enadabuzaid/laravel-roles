@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Enadstack\LaravelRoles\Roles\Queries;
 
+use Enadstack\LaravelRoles\Guardrails\OwnerCounter;
 use Enadstack\LaravelRoles\Models\Permission;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Roles\Support\RoleRisk;
@@ -48,7 +49,7 @@ final class MatrixQuery
         }
 
         $heldRoleIds = self::heldRoleIds($actor);
-        $actorIsOwner = $actor !== null && method_exists($actor, 'hasRole') && $actor->hasRole((string) config('roles.super_role'));
+        $actorIsOwner = $actor !== null && app(OwnerCounter::class)->isOwner($actor);
 
         $roleRows = array_values($roles->map(function (Role $role) use ($grants, $heldRoleIds, $actorIsOwner, $canUpdate): array {
             $isOwner = RoleRisk::isOwnerRole($role);

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use Enadstack\ActionLogger\Models\ActionLog;
 use Enadstack\LaravelRoles\Models\Role;
+use Illuminate\Support\Facades\DB;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\Support\TestUser;
 
 /**
@@ -245,4 +247,121 @@ it('omits trashed roles and keeps held deprecated permissions in the matrix', fu
     expect(collect($data['roles'])->pluck('name')->all())->not->toContain('two')
         ->and($names)->toContain('a.view')->not->toContain('b.view')
         ->and(collect($data['modules'])->flatMap(fn ($module) => $module['permissions'])->firstWhere('name', 'a.view')['deprecated'])->toBeTrue();
+});
+
+function pivotSnapshot(): array
+{
+    return DB::table('role_has_permissions')->orderBy('role_id')->orderBy('permission_id')->get()->map(fn ($row) => (array) $row)->all();
+}
+
+it('refuses every guardrail on both endpoints without changing anything', function (string $endpoint, string $guardrail) {
+    makeOwner();
+    $ownerRole = Role::where('name', 'owner')->first();
+    $target = $this->two;
+    $actor = matrixActor();
+    $actor->givePermissionTo('a.view');
+    $payload = ['grant' => ['a.view']];
+
+    switch ($guardrail) {
+        case 'owner_role_locked':
+            $actor = makeOwner('boss@example.test');
+            $target = $ownerRole;
+            break;
+        case 'self_role_change':
+            $actor->assignRole($target);
+            break;
+        case 'escalation':
+            $payload = ['grant' => ['b.view']];
+            break;
+        case 'high_risk_confirm_required':
+            $actor = makeOwner('boss@example.test');
+            $payload = ['grant' => ['orders.refund']];
+            break;
+    }
+
+    $actor = $actor->fresh();
+    $pivot = pivotSnapshot();
+    ActionLog::query()->delete();
+
+    $response = $endpoint === 'matrix'
+        ? $this->actingAs($actor)->putJson('/api/access/matrix', ['changes' => [$target->id => $payload]])
+        : $this->actingAs($actor)->putJson("/api/access/roles/{$target->id}/permissions", $payload);
+
+    $response->assertForbidden()->assertJsonPath('code', "guardrail.{$guardrail}");
+    expect(pivotSnapshot())->toBe($pivot)->and(ActionLog::count())->toBe(0);
+})->with(['matrix', 'role'])->with(['owner_role_locked', 'self_role_change', 'escalation', 'high_risk_confirm_required']);
+
+it('is atomic over HTTP when the violation is on the second processed role', function (string $guardrail) {
+    expect($this->one->id)->toBeLessThan($this->two->id);
+
+    $actor = matrixActor();
+    $actor->givePermissionTo('a.view', 'b.view');
+    $second = ['grant' => ['b.view']];
+
+    if ($guardrail === 'self_role_change') {
+        $actor->assignRole($this->two);
+    } else {
+        $actor = matrixActor(['access.permissions.view', 'access.roles.update']);
+        $actor->givePermissionTo('a.view');
+        $second = ['grant' => ['b.view']];
+    }
+
+    $actor = $actor->fresh();
+    $pivot = pivotSnapshot();
+    ActionLog::query()->delete();
+
+    $this->actingAs($actor)->putJson('/api/access/matrix', ['changes' => [
+        $this->two->id => $second,
+        $this->one->id => ['grant' => ['a.view'], 'revoke' => []],
+    ]])->assertForbidden()->assertJsonPath('code', "guardrail.{$guardrail}");
+
+    expect(pivotSnapshot())->toBe($pivot)->and(ActionLog::count())->toBe(0)
+        ->and($this->one->fresh()->permissions->pluck('name')->all())->toBe(['a.view']);
+})->with(['self_role_change', 'escalation']);
+
+it('treats a role of another guard as 404 on both endpoints', function () {
+    $foreign = Role::create(['name' => 'api-role', 'guard_name' => 'api']);
+    $actor = matrixActor();
+
+    $this->actingAs($actor)->putJson("/api/access/roles/{$foreign->id}/permissions", ['grant' => ['a.view']])->assertNotFound();
+    $this->actingAs($actor)->putJson('/api/access/matrix', ['changes' => [$foreign->id => ['grant' => ['a.view']]]])->assertNotFound();
+});
+
+it('caps the total references of a matrix payload', function () {
+    $actor = matrixActor();
+    $changes = [];
+    for ($i = 1; $i <= 11; $i++) {
+        $changes[$i] = ['grant' => range(1, 400), 'revoke' => range(401, 500)];
+    }
+
+    $this->actingAs($actor)->putJson('/api/access/matrix', ['changes' => $changes])->assertStatus(422)->assertJsonPath('code', 'validation_failed');
+});
+
+it('rejects conflicting grant and revoke with 422', function () {
+    $this->actingAs(matrixActor())->putJson('/api/access/matrix', ['changes' => [$this->one->id => ['grant' => ['b.view'], 'revoke' => [$this->b->id]]]])
+        ->assertStatus(422)->assertJsonPath('code', 'permission.conflicting_changes');
+    $this->actingAs(matrixActor())->putJson("/api/access/roles/{$this->one->id}/permissions", ['grant' => ['b.view'], 'revoke' => ['b.view']])
+        ->assertStatus(422)->assertJsonPath('code', 'permission.conflicting_changes');
+});
+
+it('treats granting an already held deprecated permission as a 200 no-op', function () {
+    $this->a->forceFill(['deprecated_at' => now()])->save();
+    ActionLog::query()->delete();
+
+    $this->actingAs(matrixActor())->putJson('/api/access/matrix', ['changes' => [$this->one->id => ['grant' => [$this->a->id]]]])
+        ->assertOk()->assertJsonPath('data.summary.roles_changed', 0);
+
+    expect(ActionLog::count())->toBe(0);
+});
+
+it('detects the owner through the configured guard when computing locks', function () {
+    $actor = matrixActor();
+    $actor->assignRole($this->one);
+    $foreignOwner = Role::create(['name' => 'owner', 'guard_name' => 'api']);
+    DB::table('model_has_roles')->insert(['role_id' => $foreignOwner->id, 'model_type' => $actor->getMorphClass(), 'model_id' => $actor->id]);
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    $byName = collect($this->actingAs($actor->fresh())->getJson('/api/access/matrix')->json('data.roles'))->pluck('locked', 'name');
+
+    expect($byName['one'])->toBeTrue();
 });

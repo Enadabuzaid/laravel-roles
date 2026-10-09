@@ -36,6 +36,17 @@ final class UpdateMatrixRequest extends FormRequest
                 return;
             }
 
+            $total = 0;
+            foreach ((array) $this->input('changes', []) as $change) {
+                $total += count((array) ($change['grant'] ?? [])) + count((array) ($change['revoke'] ?? []));
+            }
+
+            if ($total > PermissionReferenceRules::MAX_TOTAL_REFERENCES) {
+                $validator->errors()->add('changes', 'A matrix update may reference at most '.PermissionReferenceRules::MAX_TOTAL_REFERENCES.' permissions in total.');
+
+                return;
+            }
+
             foreach (array_keys((array) $this->input('changes', [])) as $key) {
                 if (preg_match('/^[1-9][0-9]{0,17}$/', (string) $key) !== 1) {
                     $validator->errors()->add('changes', 'Each key of changes must be a role id.');

@@ -44,12 +44,14 @@ final class RolePermissionPlanner
             return ['id' => [], 'name' => []];
         }
 
-        $found = Permission::query()
-            ->where('guard_name', (string) config('roles.guard'))
-            ->where(function ($query) use ($ids, $names): void {
-                $query->whereIn('id', array_keys($ids))->orWhereIn('name', array_map('strval', array_keys($names)));
-            })
-            ->get();
+        // Chunked so a huge reference list can never exceed a database's bind-parameter limit.
+        $found = collect();
+        foreach (array_chunk(array_keys($ids), 500) as $chunk) {
+            $found = $found->concat(Permission::query()->where('guard_name', (string) config('roles.guard'))->whereIn('id', $chunk)->get());
+        }
+        foreach (array_chunk(array_map('strval', array_keys($names)), 500) as $chunk) {
+            $found = $found->concat(Permission::query()->where('guard_name', (string) config('roles.guard'))->whereIn('name', $chunk)->get());
+        }
 
         $resolved = ['id' => [], 'name' => []];
         foreach ($found as $permission) {
@@ -86,8 +88,10 @@ final class RolePermissionPlanner
             return $held;
         }
 
-        foreach (DB::table((string) $tables['role_has_permissions'])->whereIn('role_id', $roleIds)->get(['role_id', 'permission_id']) as $row) {
-            $held[(int) $row->role_id][(int) $row->permission_id] = true;
+        foreach (array_chunk($roleIds, 500) as $chunk) {
+            foreach (DB::table((string) $tables['role_has_permissions'])->whereIn('role_id', $chunk)->get(['role_id', 'permission_id']) as $row) {
+                $held[(int) $row->role_id][(int) $row->permission_id] = true;
+            }
         }
 
         return $held;

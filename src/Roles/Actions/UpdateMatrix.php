@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Enadstack\LaravelRoles\Roles\Actions;
 
 use Enadstack\LaravelRoles\Guardrails\OwnerCounter;
+use Enadstack\LaravelRoles\Models\Permission;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Roles\Support\RolePermissionPlanner;
 use Enadstack\LaravelRoles\Support\Action;
@@ -32,7 +33,7 @@ final class UpdateMatrix extends Action
             sort($roleIds);
 
             // Fixed id order keeps concurrent matrix writes from deadlocking.
-            $roles = Role::query()->whereIn('id', $roleIds)->orderBy('id')->lockForUpdate()->get()->keyBy(fn (Role $role): int => (int) $role->getKey());
+            $roles = Role::query()->where('guard_name', (string) config('roles.guard'))->whereIn('id', $roleIds)->orderBy('id')->lockForUpdate()->get()->keyBy(fn (Role $role): int => (int) $role->getKey());
 
             if ($roles->count() !== count($roleIds)) {
                 throw (new ModelNotFoundException)->setModel(Role::class);
@@ -68,7 +69,7 @@ final class UpdateMatrix extends Action
                 $summary['granted'] += count($applied[$roleId]['added']);
                 $summary['revoked'] += count($applied[$roleId]['removed']);
                 $summary['roles_changed']++;
-                $summary['high_risk_granted'] += count(array_filter($plan->added, static fn ($permission): bool => $permission->risk === 'high'));
+                $summary['high_risk_granted'] += count(array_filter($plan->added, static fn (Permission $permission): bool => $permission->risk === Permission::RISK_HIGH));
             }
 
             return ['roles' => $applied, 'summary' => $summary];
