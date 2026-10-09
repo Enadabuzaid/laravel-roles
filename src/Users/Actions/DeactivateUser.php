@@ -12,6 +12,7 @@ use Enadstack\LaravelRoles\Guardrails\OperationType;
 use Enadstack\LaravelRoles\Guardrails\OwnerCounter;
 use Enadstack\LaravelRoles\Support\ActorContext;
 use Enadstack\LaravelRoles\Users\Enums\UserStatus;
+use Enadstack\LaravelRoles\Users\Support\InvitationSweeper;
 use Illuminate\Database\Eloquent\Model;
 
 /** Active, locked or suspended becomes deactivated; already deactivated is a no-op; anything else is an invalid transition. */
@@ -39,6 +40,7 @@ final class DeactivateUser extends UserLifecycleAction
 
             $this->writeState($target, $state, ['status' => UserStatus::Deactivated->value, 'status_reason' => $reason]);
             $this->revokeAccessAfterCommit($target);
+            $revokedInvitations = app(InvitationSweeper::class)->revokeAllPending($target);
 
             app(AuditRecorder::class)->record(
                 'users',
@@ -46,7 +48,7 @@ final class DeactivateUser extends UserLifecycleAction
                 $target,
                 ['status' => $current->value],
                 ['status' => UserStatus::Deactivated->value],
-                ['reason' => $reason],
+                ['reason' => $reason] + ($revokedInvitations > 0 ? ['revoked_invitations' => $revokedInvitations] : []),
                 app(OwnerCounter::class)->isOwner($target) ? Severity::Critical : Severity::Warning,
             );
 

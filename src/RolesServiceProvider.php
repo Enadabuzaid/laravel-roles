@@ -60,6 +60,7 @@ class RolesServiceProvider extends ServiceProvider
         $this->app->singleton(Users\Support\SignInGate::class);
         $this->app->scoped(Audit\AuditRecorder::class);
         $this->app->scoped(Users\Support\HostMfaColumn::class);
+        $this->app->scoped(Users\Support\HostUserColumns::class);
         $this->app->scoped(Guardrails\Guardrails::class, fn ($app) => new Guardrails\Guardrails(
             array_map(static fn (string $rule): Guardrails\Guardrail => $app->make($rule), array_values((array) config('roles.guardrails.rules', []))),
         ));
@@ -102,6 +103,10 @@ class RolesServiceProvider extends ServiceProvider
             $user = $request->user();
 
             return Limit::perMinutes($limit['minutes'], $limit['attempts'])->by($user !== null ? 'user:'.$user->getAuthIdentifier() : 'ip:'.$request->ip());
+        });
+
+        RateLimiter::for('access-invitation-accept', static function (Request $request): Limit {
+            return Limit::perMinute(max(1, (int) config('roles.users.accept_rate_limit', 6)))->by('invitation-accept|'.$request->ip());
         });
 
         Gate::before(new Roles\OwnerGate);

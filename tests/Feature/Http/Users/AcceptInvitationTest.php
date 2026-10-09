@@ -241,7 +241,7 @@ it('registers the accept route as the single public route with the marker and th
     $route = Route::getRoutes()->getByName('access.invitations.accept');
     $middleware = $route->gatherMiddleware();
 
-    expect($middleware)->toContain('access:public')->and($middleware)->toContain('throttle:6,1')
+    expect($middleware)->toContain('access:public')->and($middleware)->toContain('throttle:access-invitation-accept')
         ->and($middleware)->not->toContain('auth')->and($middleware)->not->toContain('auth:sanctum')
         ->and($middleware)->toContain('web');
 

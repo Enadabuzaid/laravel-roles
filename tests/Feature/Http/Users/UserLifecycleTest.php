@@ -8,6 +8,7 @@ use Enadstack\LaravelRoles\Users\Actions\SuspendUser;
 use Enadstack\LaravelRoles\Users\Models\AccessInvitation;
 use Enadstack\LaravelRoles\Users\Models\SavedView;
 use Enadstack\LaravelRoles\Users\Models\UserAccessState;
+use Illuminate\Auth\Passwords\PasswordBroker;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Password;
@@ -212,7 +213,7 @@ it('requires a reason of at most 500 characters to suspend or deactivate', funct
 
 function fakeBroker(string $status, string $name = 'users'): void
 {
-    $broker = Mockery::mock(Illuminate\Auth\Passwords\PasswordBroker::class);
+    $broker = Mockery::mock(PasswordBroker::class);
     $broker->shouldReceive('getUser')->with(['email' => 't@example.test'])->andReturnUsing(
         fn () => TestUser::where('email', 't@example.test')->first(),
     );
@@ -526,7 +527,7 @@ it('refuses to mail when no broker matches the guard provider, without falling b
 });
 
 it('does not mail when the broker resolves a different user than the revoked target', function (): void {
-    Password::shouldReceive('broker')->with('users')->andReturn(Mockery::mock(Illuminate\Auth\Passwords\PasswordBroker::class, function ($mock): void {
+    Password::shouldReceive('broker')->with('users')->andReturn(Mockery::mock(PasswordBroker::class, function ($mock): void {
         $mock->shouldReceive('getUser')->andReturn(new TestUser(['id' => 987654, 'email' => 't@example.test']));
         $mock->shouldReceive('sendResetLink')->never();
     }));
@@ -540,7 +541,7 @@ it('does not mail when the broker resolves a different user than the revoked tar
 });
 
 it('reports an unknown user when the broker finds nobody', function (): void {
-    Password::shouldReceive('broker')->with('users')->andReturn(Mockery::mock(Illuminate\Auth\Passwords\PasswordBroker::class, function ($mock): void {
+    Password::shouldReceive('broker')->with('users')->andReturn(Mockery::mock(PasswordBroker::class, function ($mock): void {
         $mock->shouldReceive('getUser')->andReturn(null);
         $mock->shouldReceive('sendResetLink')->never();
     }));

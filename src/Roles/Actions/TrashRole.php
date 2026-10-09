@@ -12,6 +12,7 @@ use Enadstack\LaravelRoles\Guardrails\OperationType;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Support\Action;
 use Enadstack\LaravelRoles\Support\ActorContext;
+use Enadstack\LaravelRoles\Users\Support\InvitationSweeper;
 use Spatie\Permission\PermissionRegistrar;
 
 final class TrashRole extends Action
@@ -31,7 +32,9 @@ final class TrashRole extends Action
             ));
 
             $members = $fresh->users()->count();
+            $memberKeys = $members > 0 ? app(InvitationSweeper::class)->memberKeys($fresh) : [];
             $fresh->delete();
+            app(InvitationSweeper::class)->revokeUnauthorizedForMembers($memberKeys);
 
             app(AuditRecorder::class)->record(
                 'roles',

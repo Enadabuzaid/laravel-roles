@@ -13,6 +13,7 @@ use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Support\Action;
 use Enadstack\LaravelRoles\Support\ActorContext;
 use Enadstack\LaravelRoles\Support\Exceptions\AccessException;
+use Enadstack\LaravelRoles\Users\Support\InvitationSweeper;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -39,11 +40,13 @@ final class ForceDeleteRole extends Action
             $old = $fresh->attributesToArray();
             $meta = ['id' => $fresh->getKey(), 'name' => $fresh->name];
 
+            $memberKeys = app(InvitationSweeper::class)->memberKeys($fresh);
             $fresh->permissions()->detach();
             DB::table((string) config('permission.table_names.model_has_roles'))
                 ->where((string) (config('permission.column_names.role_pivot_key') ?: 'role_id'), $fresh->getKey())
                 ->delete();
             $fresh->forceDelete();
+            app(InvitationSweeper::class)->revokeUnauthorizedForMembers($memberKeys);
 
             app(AuditRecorder::class)->record('roles', 'deleted', null, $old, null, $meta, Severity::Critical);
         });

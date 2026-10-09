@@ -14,6 +14,7 @@ use Enadstack\LaravelRoles\Support\ActorContext;
 use Enadstack\LaravelRoles\Users\Enums\UserStatus;
 use Enadstack\LaravelRoles\Users\Models\AccessInvitation;
 use Enadstack\LaravelRoles\Users\Models\UserAccessState;
+use Enadstack\LaravelRoles\Users\Support\HostUserColumns;
 use Enadstack\LaravelRoles\Users\Support\InvitationErrors;
 use Enadstack\LaravelRoles\Users\Support\InvitationToken;
 use Enadstack\LaravelRoles\Users\Support\UserLookup;
@@ -35,6 +36,10 @@ final class AcceptInvitation extends Action
     /** @param  array{name: string, password: string}  $profile */
     public function handle(#[SensitiveParameter] string $token, string $email, #[SensitiveParameter] array $profile): Model
     {
+        if (! UserLookup::model() instanceof AccessUser) {
+            throw new \LogicException('roles.user_model must implement '.AccessUser::class.' (use HasAccess) to accept invitations.');
+        }
+
         try {
             return $this->transaction(fn (): Model => $this->accept($token, $email, $profile));
         } catch (UniqueConstraintViolationException) {
@@ -52,17 +57,22 @@ final class AcceptInvitation extends Action
             throw InvitationErrors::invalid();
         }
 
+        if (! $this->inviterStillAuthorized($invitation)) {
+            throw InvitationErrors::invalid();
+        }
+
         if (UserLookup::emailTaken($email)) {
             throw InvitationErrors::userExists();
         }
 
         $user = UserLookup::model();
-        $user->forceFill([
-            'name' => $profile['name'],
-            'email' => $email,
-            'password' => Hash::make($profile['password']),
-            'email_verified_at' => now(),
-        ])->save();
+        $attributes = ['name' => $profile['name'], 'email' => $email, 'password' => Hash::make($profile['password'])];
+
+        if (app(HostUserColumns::class)->has($user, 'email_verified_at')) {
+            $attributes['email_verified_at'] = now();
+        }
+
+        $user->forceFill($attributes)->save();
 
         UserAccessState::query()->create([
             'user_id' => $user->getKey(),
@@ -75,7 +85,7 @@ final class AcceptInvitation extends Action
         $role = $invitation->role_id === null ? null : Role::query()->where('guard_name', (string) config('roles.guard'))->find($invitation->role_id);
         $actors = app(ActorContext::class);
 
-        if ($role !== null && $user instanceof AccessUser) {
+        if ($role !== null && $user instanceof AccessUser) { // always true: checked up front
             $actors->runAs(null, static fn () => app(AssignRoleToUser::class)->handle($user, $role, true));
         }
 
@@ -104,5 +114,28 @@ final class AcceptInvitation extends Action
         });
 
         return $user;
+    }
+
+    /**
+     * An invitation outlives neither its inviter nor the inviter's right to sign in. Invitations created by the
+     * system (no `invited_by`) are unaffected.
+     */
+    private function inviterStillAuthorized(AccessInvitation $invitation): bool
+    {
+        if ($invitation->invited_by === null) {
+            return true;
+        }
+
+        if (! UserLookup::model()->newQuery()->whereKey($invitation->invited_by)->exists()) {
+            return false;
+        }
+
+        $status = UserAccessState::query()->where('user_id', $invitation->invited_by)->value('status');
+
+        if ($status === null) {
+            return true;
+        }
+
+        return in_array($status instanceof UserStatus ? $status : UserStatus::tryFrom((string) $status), [UserStatus::Active, UserStatus::Locked], true);
     }
 }

@@ -25,7 +25,7 @@ final class AcceptInvitationRequest extends FormRequest
             'token' => ['required', 'string', 'max:512'],
             'email' => ['required', 'string', 'email:rfc', 'max:190'],
             'name' => ['required', 'string', 'max:255'],
-            'password' => ['required', 'string', 'confirmed', Password::defaults()],
+            'password' => ['required', 'string', 'max:255', 'confirmed', Password::defaults()],
         ];
     }
 

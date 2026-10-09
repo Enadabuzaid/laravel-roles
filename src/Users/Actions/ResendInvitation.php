@@ -55,6 +55,10 @@ final class ResendInvitation extends Action
                 throw InvitationErrors::userExists();
             }
 
+            if (AccessInvitation::query()->pending()->where('email', $locked->email)->whereKeyNot($locked->getKey())->lockForUpdate()->exists()) {
+                throw InvitationErrors::pendingExists();
+            }
+
             $locked->update([
                 'token_hash' => InvitationToken::hash($token),
                 'expires_at' => now()->addHours(InvitationMailer::ttlHours()),

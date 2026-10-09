@@ -14,6 +14,7 @@ use Enadstack\LaravelRoles\Guardrails\OwnerCounter;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Support\Action;
 use Enadstack\LaravelRoles\Support\ActorContext;
+use Enadstack\LaravelRoles\Users\Support\InvitationSweeper;
 use Illuminate\Database\Eloquent\Model;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -42,6 +43,10 @@ final class RemoveRoleFromUser extends Action
             $user->removeRole($roleModel);
             $user->unsetRelation('roles');
             $after = $user->getRoleNames()->all();
+
+            if ($removed !== []) {
+                app(InvitationSweeper::class)->revokeUnauthorized($user);
+            }
 
             if ($before !== $after) {
                 app(AuditRecorder::class)->record('roles', 'removed', $user, ['roles' => $before], ['roles' => $after], ['role' => $roleModel->name], RoleChangeSeverity::for([], $removed));

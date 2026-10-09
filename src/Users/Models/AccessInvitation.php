@@ -89,7 +89,7 @@ class AccessInvitation extends Model
         return match (true) {
             $this->accepted_at !== null => 'accepted',
             $this->revoked_at !== null => 'revoked',
-            $this->expires_at->isPast() => 'expired',
+            ! $this->expires_at->isFuture() => 'expired',
             default => 'pending',
         };
     }
