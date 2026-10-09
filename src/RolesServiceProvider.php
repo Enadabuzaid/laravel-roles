@@ -44,6 +44,9 @@ class RolesServiceProvider extends ServiceProvider
 
         $this->app->scoped(Support\ActorContext::class);
         $this->app->scoped(Audit\AuditRecorder::class);
+        $this->app->scoped(Guardrails\Guardrails::class, fn ($app) => new Guardrails\Guardrails(
+            array_map(static fn (string $rule): Guardrails\Guardrail => $app->make($rule), array_values((array) config('roles.guardrails.rules', []))),
+        ));
 
         if ($this->app->runningInConsole()) {
             $this->commands([

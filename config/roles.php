@@ -9,6 +9,13 @@ use Enadstack\LaravelRoles\Core\Doctor\Checks\OwnerExistsCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\PermissionsSyncedCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\RoutesProtectedCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\UserModelCheck;
+use Enadstack\LaravelRoles\Guardrails\Rules\DestructiveConfirmationRule;
+use Enadstack\LaravelRoles\Guardrails\Rules\EscalationRule;
+use Enadstack\LaravelRoles\Guardrails\Rules\HighRiskConfirmRule;
+use Enadstack\LaravelRoles\Guardrails\Rules\LastOwnerRule;
+use Enadstack\LaravelRoles\Guardrails\Rules\SelfChangeRule;
+use Enadstack\LaravelRoles\Guardrails\Rules\SelfDestructiveRule;
+use Enadstack\LaravelRoles\Guardrails\Rules\SystemRoleRule;
 
 return [
     'user_model' => env('ROLES_USER_MODEL', 'App\\Models\\User'),
@@ -39,8 +46,18 @@ return [
     'guardrails' => [
         'min_owners' => 1,
         'prevent_self_escalation' => true,
+        'prevent_escalation' => true,
         'confirm_high_risk' => true,
         'type_to_confirm_destructive' => true,
+        'rules' => [
+            SystemRoleRule::class,
+            SelfChangeRule::class,
+            SelfDestructiveRule::class,
+            EscalationRule::class,
+            LastOwnerRule::class,
+            HighRiskConfirmRule::class,
+            DestructiveConfirmationRule::class,
+        ],
     ],
 
     'security' => [

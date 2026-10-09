@@ -2,9 +2,12 @@
 
 declare(strict_types=1);
 
+use Enadstack\LaravelRoles\Guardrails\Guardrails;
+use Enadstack\LaravelRoles\Guardrails\Operation;
 use Enadstack\LaravelRoles\Models\Permission;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Support\ActorContext;
+use Enadstack\LaravelRoles\Support\Exceptions\AccessException;
 use Tests\Support\TestUser;
 
 function makeUser(string $email = 'a@example.test'): TestUser
@@ -41,4 +44,22 @@ function makeOwner(string $email = 'owner@example.test'): TestUser
     app(ActorContext::class)->runAs(null, fn () => $user->assignAccessRole('owner'));
 
     return $user;
+}
+
+function guardrailCode(Operation $operation): ?string
+{
+    try {
+        app(Guardrails::class)->assert($operation);
+
+        return null;
+    } catch (AccessException $e) {
+        expect($e->status)->toBe(403);
+
+        return $e->errorCode;
+    }
+}
+
+function makePermission(string $name, string $risk = 'low'): Permission
+{
+    return Permission::updateOrCreate(['name' => $name, 'guard_name' => 'web'], ['risk' => $risk]);
 }
