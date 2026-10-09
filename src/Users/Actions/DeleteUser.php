@@ -63,7 +63,7 @@ final class DeleteUser extends UserLifecycleAction
             });
         } catch (QueryException $e) {
             // A host foreign key still points at the user: nothing was deleted (the transaction rolled back).
-            if (str_starts_with((string) $e->getCode(), '23')) {
+            if ($this->isForeignKeyViolation($e)) {
                 throw new AccessException((string) trans('access::user.in_use'), 'user.in_use', 409);
             }
 
@@ -71,6 +71,16 @@ final class DeleteUser extends UserLifecycleAction
         }
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
+
+    /** Foreign key violations only: SQLSTATE 23503 (Postgres), MySQL 1451/1452, the SQLite message. Other integrity errors propagate. */
+    private function isForeignKeyViolation(QueryException $e): bool
+    {
+        $info = $e->errorInfo ?? [];
+
+        return ($info[0] ?? null) === '23503'
+            || in_array($info[1] ?? null, [1451, 1452], true)
+            || str_contains(strtoupper($e->getMessage()), 'FOREIGN KEY');
     }
 
     /** Only rows of this model type: another model sharing the numeric id keeps its roles. */

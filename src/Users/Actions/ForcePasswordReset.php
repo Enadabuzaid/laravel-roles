@@ -10,7 +10,8 @@ use Enadstack\LaravelRoles\Guardrails\Operation;
 use Enadstack\LaravelRoles\Guardrails\OperationType;
 use Enadstack\LaravelRoles\Support\ActorContext;
 use Enadstack\LaravelRoles\Users\Models\UserAccessState;
-use Illuminate\Contracts\Auth\PasswordBroker;
+use Illuminate\Auth\Passwords\PasswordBroker;
+use Illuminate\Contracts\Auth\PasswordBroker as PasswordBrokerContract;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Password;
 use Throwable;
@@ -24,6 +25,10 @@ use Throwable;
 final class ForcePasswordReset extends UserLifecycleAction
 {
     public const MAIL_FAILED = 'mail_failed';
+
+    public const NO_BROKER = 'passwords.no_broker';
+
+    public const USER_MISMATCH = 'passwords.user_mismatch';
 
     /** @return array{link_sent: bool, broker_status: string} */
     public function handle(Model $user): array
@@ -41,20 +46,45 @@ final class ForcePasswordReset extends UserLifecycleAction
             return $target;
         });
 
-        $status = $this->sendLink((string) $target->getAttribute('email'));
+        $status = $this->sendLink($target);
         app(AuditRecorder::class)->record('users', 'password_reset_forced', $target, null, null, ['broker_status' => $status]);
 
         return ['link_sent' => $status === Password::RESET_LINK_SENT, 'broker_status' => $status];
     }
 
-    private function sendLink(string $email): string
+    /**
+     * Mails only when the selected broker resolves exactly the revoked target through its own user provider.
+     */
+    private function sendLink(Model $target): string
     {
+        $email = (string) $target->getAttribute('email');
+
         if ($email === '') {
             return Password::INVALID_USER;
         }
 
         try {
-            return $this->broker()->sendResetLink(['email' => $email]);
+            $broker = $this->broker();
+
+            if ($broker === null) {
+                return self::NO_BROKER;
+            }
+
+            if (! $broker instanceof PasswordBroker) {
+                return self::USER_MISMATCH; // a custom broker can't be verified, so it is not trusted
+            }
+
+            $resolved = $broker->getUser(['email' => $email]);
+
+            if ($resolved === null) {
+                return Password::INVALID_USER;
+            }
+
+            if ((string) $resolved->getAuthIdentifier() !== (string) $target->getKey()) {
+                return self::USER_MISMATCH;
+            }
+
+            return $broker->sendResetLink(['email' => $email]);
         } catch (Throwable $e) {
             report($e);
 
@@ -62,19 +92,24 @@ final class ForcePasswordReset extends UserLifecycleAction
         }
     }
 
-    /** The password broker whose provider is the one the package guard authenticates against; the default broker otherwise. */
-    private function broker(): PasswordBroker
+    /**
+     * The broker whose provider is the one the package guard authenticates against. When the guard names a
+     * provider no broker uses there is none (never the default broker, which may reset another user table).
+     */
+    private function broker(): ?PasswordBrokerContract
     {
         $provider = config('auth.guards.'.config('roles.guard').'.provider');
 
-        if (is_string($provider)) {
-            foreach ((array) config('auth.passwords') as $name => $broker) {
-                if (is_array($broker) && ($broker['provider'] ?? null) === $provider) {
-                    return Password::broker((string) $name);
-                }
+        if (! is_string($provider)) {
+            return Password::broker();
+        }
+
+        foreach ((array) config('auth.passwords') as $name => $broker) {
+            if (is_array($broker) && ($broker['provider'] ?? null) === $provider) {
+                return Password::broker((string) $name);
             }
         }
 
-        return Password::broker();
+        return null;
     }
 }

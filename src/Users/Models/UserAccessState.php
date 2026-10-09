@@ -67,12 +67,12 @@ class UserAccessState extends Model
         return static::query()->where('user_id', $userId)->lockForUpdate()->firstOrFail();
     }
 
-    /** Active signs in; Locked only once `locked_until` is in the past; everything else never. */
+    /** Active signs in; Locked only once `locked_until` has been reached (at exactly `locked_until` the lock is over); everything else never. */
     public function canSignInNow(): bool
     {
         return match ($this->status) {
             UserStatus::Active => true,
-            UserStatus::Locked => $this->locked_until !== null && $this->locked_until->isPast(),
+            UserStatus::Locked => $this->locked_until !== null && ! $this->locked_until->isFuture(),
             default => false,
         };
     }

@@ -8,7 +8,6 @@ use Enadstack\LaravelRoles\Users\Actions\SuspendUser;
 use Enadstack\LaravelRoles\Users\Models\AccessInvitation;
 use Enadstack\LaravelRoles\Users\Models\SavedView;
 use Enadstack\LaravelRoles\Users\Models\UserAccessState;
-use Illuminate\Contracts\Auth\PasswordBroker;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Password;
@@ -171,7 +170,7 @@ it('answers 409 user.in_use when a host foreign key blocks the delete and change
     SavedView::create(['user_id' => $target->id, 'page' => 'users', 'name' => 'v', 'filters' => []]);
     $target->assignRole(makeRole('viewer'));
     TestUser::deleting(static function (): never {
-        $integrity = new class('FK') extends PDOException
+        $integrity = new class('FOREIGN KEY constraint failed') extends PDOException
         {
             protected $code = '23000';
         };
@@ -213,8 +212,11 @@ it('requires a reason of at most 500 characters to suspend or deactivate', funct
 
 function fakeBroker(string $status, string $name = 'users'): void
 {
-    $broker = Mockery::mock(PasswordBroker::class);
-    $broker->shouldReceive('sendResetLink')->with(['email' => 't@example.test'])->andReturn($status);
+    $broker = Mockery::mock(Illuminate\Auth\Passwords\PasswordBroker::class);
+    $broker->shouldReceive('getUser')->with(['email' => 't@example.test'])->andReturnUsing(
+        fn () => TestUser::where('email', 't@example.test')->first(),
+    );
+    $broker->shouldReceive('sendResetLink')->with(['email' => 't@example.test'])->andReturn($status)->byDefault();
     $expectation = Password::shouldReceive('broker');
     $name === null ? $expectation->withNoArgs()->andReturn($broker) : $expectation->with($name)->andReturn($broker);
 }
@@ -286,6 +288,43 @@ it('resolves the broker of the package guards provider', function (): void {
 
     $this->actingAs(lifecycleActor())->postJson("/api/access/users/{$target->id}/force-password-reset")->assertOk()->assertJsonPath('meta.link_sent', true);
 });
+
+it('does not map a unique violation to user.in_use', function (): void {
+    $actor = lifecycleActor();
+    $target = makeUser('t@example.test');
+    TestUser::deleting(static function (): never {
+        $integrity = new class('UNIQUE constraint failed: x.y') extends PDOException
+        {
+            protected $code = '23000';
+        };
+        $integrity->errorInfo = ['23505', 7, 'duplicate key value violates unique constraint'];
+
+        throw new QueryException('sqlite', 'delete from users', [], $integrity);
+    });
+
+    $this->withoutExceptionHandling();
+    expect(fn () => $this->actingAs($actor)->deleteJson("/api/access/users/{$target->id}", ['confirmation' => 't@example.test']))->toThrow(QueryException::class);
+    TestUser::flushEventListeners();
+    expect(TestUser::find($target->id))->not->toBeNull();
+});
+
+it('maps postgres and mysql foreign key violations to user.in_use', function (array $info): void {
+    $actor = lifecycleActor();
+    $target = makeUser('t@example.test');
+    TestUser::deleting(static function () use ($info): never {
+        $integrity = new PDOException('constraint');
+        $integrity->errorInfo = $info;
+
+        throw new QueryException('mysql', 'delete from users', [], $integrity);
+    });
+
+    $this->actingAs($actor)->deleteJson("/api/access/users/{$target->id}", ['confirmation' => 't@example.test'])->assertStatus(409)->assertJsonPath('code', 'user.in_use');
+    TestUser::flushEventListeners();
+})->with([
+    'postgres' => [['23503', 7, 'violates foreign key constraint']],
+    'mysql parent row' => [['23000', 1451, 'Cannot delete or update a parent row']],
+    'mysql child row' => [['23000', 1452, 'Cannot add or update a child row']],
+]);
 
 it('deletes a user, cleaning access rows and keeping invitations', function (): void {
     $owner = makeOwner();
@@ -469,4 +508,44 @@ it('works for the console system actor', function (): void {
     expect(statusOfUser($target))->toBe('suspended');
     $log = ActionLog::sole();
     expect($log->actor_id)->toBeNull();
+});
+
+it('refuses to mail when no broker matches the guard provider, without falling back to the default broker', function (): void {
+    config([
+        'auth.providers.staff' => ['driver' => 'eloquent', 'model' => TestUser::class],
+        'auth.guards.web.provider' => 'staff',
+    ]);
+    Password::shouldReceive('broker')->never();
+    $target = makeUser('t@example.test');
+    ActionLog::query()->delete();
+
+    $this->actingAs(lifecycleActor())->postJson("/api/access/users/{$target->id}/force-password-reset")->assertOk()
+        ->assertJsonPath('meta.link_sent', false)->assertJsonPath('meta.broker_status', 'passwords.no_broker');
+
+    expect(ActionLog::sole()->meta)->toEqual(['broker_status' => 'passwords.no_broker']);
+});
+
+it('does not mail when the broker resolves a different user than the revoked target', function (): void {
+    Password::shouldReceive('broker')->with('users')->andReturn(Mockery::mock(Illuminate\Auth\Passwords\PasswordBroker::class, function ($mock): void {
+        $mock->shouldReceive('getUser')->andReturn(new TestUser(['id' => 987654, 'email' => 't@example.test']));
+        $mock->shouldReceive('sendResetLink')->never();
+    }));
+    $target = makeUser('t@example.test');
+    ActionLog::query()->delete();
+
+    $this->actingAs(lifecycleActor())->postJson("/api/access/users/{$target->id}/force-password-reset")->assertOk()
+        ->assertJsonPath('meta.link_sent', false)->assertJsonPath('meta.broker_status', 'passwords.user_mismatch');
+
+    expect(ActionLog::sole()->meta)->toEqual(['broker_status' => 'passwords.user_mismatch']);
+});
+
+it('reports an unknown user when the broker finds nobody', function (): void {
+    Password::shouldReceive('broker')->with('users')->andReturn(Mockery::mock(Illuminate\Auth\Passwords\PasswordBroker::class, function ($mock): void {
+        $mock->shouldReceive('getUser')->andReturn(null);
+        $mock->shouldReceive('sendResetLink')->never();
+    }));
+    $target = makeUser('t@example.test');
+
+    $this->actingAs(lifecycleActor())->postJson("/api/access/users/{$target->id}/force-password-reset")->assertOk()
+        ->assertJsonPath('meta.link_sent', false)->assertJsonPath('meta.broker_status', 'passwords.user');
 });
