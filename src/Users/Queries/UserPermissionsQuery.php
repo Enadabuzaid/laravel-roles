@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Enadstack\LaravelRoles\Users\Queries;
 
-use Enadstack\LaravelRoles\Guardrails\OwnerCounter;
 use Enadstack\LaravelRoles\Models\Permission;
+use Enadstack\LaravelRoles\Users\Support\TargetStanding;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +25,7 @@ final class UserPermissionsQuery
         $userModel = (string) config('roles.user_model');
         $user = $userModel::query()->findOrFail($id);
 
-        return ['entries' => self::entries($user), 'is_owner' => app(OwnerCounter::class)->isOwner($user)];
+        return ['entries' => self::entries($user), 'is_owner' => app(TargetStanding::class)->ownerKeys($user, [$user->getKey()]) !== []];
     }
 
     /**

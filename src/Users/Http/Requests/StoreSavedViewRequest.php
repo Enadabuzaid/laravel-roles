@@ -37,10 +37,15 @@ final class StoreSavedViewRequest extends FormRequest
         return [
             'page' => ['required', 'string', Rule::in(SavedViewPages::all())],
             'name' => [
-                'required', 'string', 'min:1', 'max:80',
+                'bail', 'required', 'string', 'min:1', 'max:80',
+                static function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (is_string($value) && ! mb_check_encoding($value, 'UTF-8')) {
+                        $fail('The name must be valid UTF-8 text.');
+                    }
+                },
                 Rule::unique((new SavedView)->getTable(), 'name')->where('user_id', $this->user()?->getAuthIdentifier())->where('page', is_string($page) ? $page : ''),
             ],
-            'filters' => ['nullable', 'array', function (string $attribute, mixed $value, \Closure $fail): void {
+            'filters' => ['bail', 'nullable', 'array', function (string $attribute, mixed $value, \Closure $fail): void {
                 if (! is_array($value)) {
                     return;
                 }
@@ -79,6 +84,10 @@ final class StoreSavedViewRequest extends FormRequest
             return 'The filters may contain at most '.self::MAX_KEYS.' entries.';
         }
 
+        if (! $this->isValidUtf8($filters)) {
+            return 'The filters must be valid UTF-8 text.';
+        }
+
         foreach ($filters as $key => $value) {
             if (! is_string($key) || $key === '' || strlen($key) > 64) {
                 return 'The filters must be an object keyed by filter name.';
@@ -93,10 +102,38 @@ final class StoreSavedViewRequest extends FormRequest
             }
         }
 
-        if (strlen((string) json_encode($filters)) > self::MAX_JSON_BYTES) {
-            return 'The filters are too large (2 KB at most).';
+        try {
+            if (strlen(json_encode($filters, JSON_THROW_ON_ERROR)) > self::MAX_JSON_BYTES) {
+                return 'The filters are too large (2 KB at most).';
+            }
+        } catch (\JsonException) {
+            return 'The filters must be valid UTF-8 text.';
         }
 
         return null;
+    }
+
+    /**
+     * Every key and string value, recursively, must be valid UTF-8.
+     *
+     * @param  array<mixed>  $values
+     */
+    private function isValidUtf8(array $values): bool
+    {
+        foreach ($values as $key => $value) {
+            if (is_string($key) && ! mb_check_encoding($key, 'UTF-8')) {
+                return false;
+            }
+
+            if (is_string($value) && ! mb_check_encoding($value, 'UTF-8')) {
+                return false;
+            }
+
+            if (is_array($value) && ! $this->isValidUtf8($value)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

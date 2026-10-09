@@ -81,7 +81,7 @@ return [
     ],
 
     'users' => [
-        'mfa_enabled_column' => 'two_factor_confirmed_at', // optional host column read for the MFA flag
+        'mfa_enabled_column' => 'two_factor_confirmed_at', // optional host column read for the MFA flag; must be a nullable timestamp (a boolean column would always read as on)
         'invitation_ttl_hours' => 72,
         'default_status' => 'active', // status of state rows created by roles:backfill-users (users without a row are always active)
         'accept_url' => null, // null resolves lazily to url('/accept-invitation')

@@ -7,6 +7,7 @@ namespace Enadstack\LaravelRoles\Guardrails;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Users\Enums\UserStatus;
 use Enadstack\LaravelRoles\Users\Models\UserAccessState;
+use Enadstack\LaravelRoles\Users\Support\TargetStanding;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -29,9 +30,7 @@ final class OwnerCounter
     /** Role-based: whether the user holds the super role, whatever their access state. */
     public function isOwner(Model $user): bool
     {
-        $role = $this->superRole();
-
-        return $role !== null && $role->users()->whereKey($user->getKey())->exists();
+        return isset(app(TargetStanding::class)->ownerKeys($user, [$user->getKey()])[$user->getKey()]);
     }
 
     /** An owner whose access state is active or missing. */

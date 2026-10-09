@@ -143,3 +143,23 @@ it('requires authentication and the users view permission', function (): void {
     $this->actingAs($plain)->deleteJson("/api/access/saved-views/{$view->id}")->assertForbidden();
     expect(SavedView::count())->toBe(1);
 });
+
+it('rejects invalid UTF-8 with 422 and never 500', function (array $payload, string $field): void {
+    $actor = usersActor();
+
+    $this->actingAs($actor)->post('/api/access/saved-views', $payload, ['Accept' => 'application/json'])->assertStatus(422)
+        ->assertJsonPath('code', 'validation_failed')->assertJsonStructure(['errors' => [$field]]);
+    expect(SavedView::count())->toBe(0);
+})->with([
+    'name' => [['page' => 'users', 'name' => "bad\xFFname"], 'name'],
+    'filter value' => [['page' => 'users', 'name' => 'x', 'filters' => ['a' => "bad\xFF"]], 'filters'],
+    'nested filter value' => [['page' => 'users', 'name' => 'x', 'filters' => ['a' => ['ok', "bad\xC3\x28"]]], 'filters'],
+    'filter key' => [['page' => 'users', 'name' => 'x', 'filters' => ["k\xFF" => 'v']], 'filters'],
+]);
+
+it('accepts Arabic text in names and filters', function (): void {
+    $actor = usersActor();
+
+    $this->actingAs($actor)->postJson('/api/access/saved-views', ['page' => 'users', 'name' => 'المشرفون الموقوفون', 'filters' => ['search' => 'عبدالله', 'role' => ['مدير']]])
+        ->assertCreated()->assertJsonPath('data.name', 'المشرفون الموقوفون')->assertJsonPath('data.filters.search', 'عبدالله');
+});

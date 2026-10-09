@@ -92,7 +92,7 @@ final class TargetStanding
      * @param  list<int|string>  $keys
      * @return array<int|string, true>
      */
-    private function ownerKeys(Model $sample, array $keys): array
+    public function ownerKeys(Model $sample, array $keys): array
     {
         $tables = (array) config('permission.table_names');
         $roles = (string) ($tables['roles'] ?? 'roles');

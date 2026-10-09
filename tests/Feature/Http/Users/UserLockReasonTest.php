@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 use Enadstack\LaravelRoles\Guardrails\Operation;
 use Enadstack\LaravelRoles\Guardrails\OperationType;
+use Enadstack\LaravelRoles\Guardrails\OwnerCounter;
 use Enadstack\LaravelRoles\Guardrails\Rules\TargetAboveActorRule;
+use Enadstack\LaravelRoles\Models\Permission;
+use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Support\Exceptions\AccessException;
 use Enadstack\LaravelRoles\Users\Support\TargetStanding;
 use Tests\Support\TestUser;
@@ -53,7 +56,7 @@ it('lets an owner act on other owners and marks only itself as locked', function
         ->and($rows['plain@example.test']['lock_reason'])->toBeNull();
 });
 
-it('ignores trashed roles and other guards when judging a target', function (): void {
+it('ignores permissions of trashed roles when judging a target', function (): void {
     makeOwner();
     $actor = usersActor(['access.users.view', 'reports.view']);
     $target = makeUser('target@example.test');
@@ -65,28 +68,42 @@ it('ignores trashed roles and other guards when judging a target', function (): 
     expect(rowsByEmail($this, $actor)['target@example.test']['lock_reason'])->toBeNull();
 });
 
-it('agrees with the target-above-actor guardrail for every actor and target', function (string $actorName): void {
+it('agrees with an independent oracle and the guardrail for every actor and target', function (string $actorName): void {
     makeOwner();
+    $apiRole = Role::create(['name' => 'api-role', 'guard_name' => 'api']);
+    $apiRole->givePermissionTo(Permission::findOrCreate('secret.api', 'api'));
+    $trashed = makeRole('old', ['billing.view']);
+
     $users = [
         'owner' => makeOwner('owner2@example.test'),
         'low' => tap(makeUser('low@example.test'), fn ($u) => $u->assignRole(makeRole('low', ['reports.view']))),
         'high' => tap(makeUser('high@example.test'), fn ($u) => $u->assignRole(makeRole('high', ['reports.view', 'billing.view']))),
         'direct' => tap(makeUser('direct@example.test'), fn ($u) => $u->givePermissionTo(makePermission('reports.view'))),
+        'direct-above' => tap(makeUser('directabove@example.test'), fn ($u) => $u->givePermissionTo(makePermission('billing.view'))),
+        'other-guard' => tap(makeUser('api@example.test'), fn ($u) => $u->roles()->attach($apiRole)),
+        'trashed' => tap(makeUser('trashed@example.test'), function ($u) use ($trashed) {
+            $u->assignRole($trashed);
+            $trashed->delete();
+        }),
         'none' => makeUser('none@example.test'),
         'first-owner' => TestUserFirstOwner(),
     ];
+    $users = array_map(fn ($u) => $u->fresh(), $users);
     $actor = $users[$actorName];
     $reasons = app(TargetStanding::class)->evaluate($actor, $users);
     $rule = app(TargetAboveActorRule::class);
 
-    foreach ($users as $targetName => $target) {
-        $reason = $reasons[$target->getKey()]['reason'];
+    $names = fn ($u): array => $u->getAllPermissions()->where('guard_name', 'web')->pluck('name')->all();
 
-        if ($reason === 'self') {
-            expect($actor->is($target))->toBeTrue();
+    foreach ($users as $targetName => $target) {
+        if ($actor->is($target)) {
+            expect($reasons[$target->getKey()]['reason'])->toBe('self');
 
             continue;
         }
+
+        // Independent oracle: the Spatie relation based subset comparison.
+        $expected = ! $actor->hasRole('owner') && ($target->hasRole('owner') || array_diff($names($target), $names($actor)) !== []);
 
         $refused = false;
         try {
@@ -95,9 +112,13 @@ it('agrees with the target-above-actor guardrail for every actor and target', fu
             $refused = true;
         }
 
-        expect($refused)->toBe(in_array($reason, ['owner', 'above'], true), "{$actorName} -> {$targetName} ({$reason})");
+        $reason = $reasons[$target->getKey()]['reason'];
+
+        expect($refused)->toBe($expected, "rule {$actorName} -> {$targetName}")
+            ->and(in_array($reason, ['owner', 'above'], true))->toBe($expected, "standing {$actorName} -> {$targetName} ({$reason})")
+            ->and(app(OwnerCounter::class)->isOwner($target))->toBe($target->hasRole('owner'));
     }
-})->with(['owner', 'low', 'high', 'direct', 'none', 'first-owner']);
+})->with(['owner', 'low', 'high', 'direct', 'direct-above', 'other-guard', 'trashed', 'none', 'first-owner']);
 
 function TestUserFirstOwner(): TestUser
 {

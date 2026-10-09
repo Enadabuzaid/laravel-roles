@@ -215,3 +215,17 @@ it('ignores a configured host mfa column that does not exist', function (): void
 
     $this->actingAs($actor)->getJson('/api/access/users?filter[mfa]=off')->assertOk()->assertJsonPath('meta.pagination.total', 1);
 });
+
+it('sorts users who never logged in last in both directions', function (): void {
+    $actor = usersActor();
+    DB::table('users')->update(['created_at' => '2019-01-01 00:00:00']);
+    makeState(userNamed('Old'), 'active', ['last_login_at' => '2026-05-01 00:00:00']);
+    makeState(userNamed('New'), 'active', ['last_login_at' => '2026-05-03 00:00:00']);
+    makeState(userNamed('Never'), 'active');
+    userNamed('Stateless');
+
+    $order = fn (string $sort): array => array_values(array_diff(listedNames($this->actingAs($actor)->getJson("/api/access/users?sort={$sort}")->assertOk()), ['A']));
+
+    expect($order('-last_login'))->toBe(['New', 'Old', 'Never', 'Stateless'])
+        ->and($order('last_login'))->toBe(['Old', 'New', 'Never', 'Stateless']);
+});

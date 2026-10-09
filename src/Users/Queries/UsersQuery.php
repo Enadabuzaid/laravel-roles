@@ -89,6 +89,10 @@ final class UsersQuery
             }]);
         }
 
+        if ($query->sort === 'last_login' || $query->sort === '-last_login') {
+            self::nullsLast($builder);
+        }
+
         $page = $query->paginate($builder);
 
         if ($actor !== null) {
@@ -96,6 +100,21 @@ final class UsersQuery
         }
 
         return $page;
+    }
+
+    /**
+     * Users who never logged in sort after everyone else in both directions on every driver
+     * (the drivers disagree on where NULLs go by default).
+     *
+     * @param  Builder<Model>  $builder
+     */
+    private static function nullsLast(Builder $builder): void
+    {
+        $query = $builder->getQuery();
+        $orders = $query->orders ?? [];
+        $query->orders = null;
+        $query->orderByRaw('CASE WHEN user_access_states.last_login_at IS NULL THEN 1 ELSE 0 END');
+        $query->orders = array_merge($query->orders ?? [], $orders);
     }
 
     /**
