@@ -21,6 +21,8 @@ final class AssignRoleToUser extends Action
 {
     public function handle(AccessUser&Model $user, string|Role $role, bool $confirmed = false): void
     {
+        app(ActorContext::class)->assertKnownActor();
+
         $this->transaction(function () use ($user, $role, $confirmed): void {
             /** @var Role $roleModel */
             $roleModel = $role instanceof Role ? $role : Role::findByName($role, (string) config('roles.guard'));

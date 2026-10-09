@@ -70,11 +70,24 @@ it('never lets a failing audit write break the caller', function () {
 
     app(AuditRecorder::class)->record('roles', 'assigned', makeUser());
 
-    expect($reported)->not->toBeEmpty();
+    expect($reported)->not->toBeEmpty()
+        ->and($reported[0]->getMessage())->toBe('audit store unavailable')
+        ->and(ActionLog::count())->toBe(0);
 });
 
 it('keeps entries immutable under the test configuration', function () {
     app(AuditRecorder::class)->record('roles', 'assigned', makeUser());
 
     expect(fn () => ActionLog::sole()->update(['event' => 'x']))->toThrow(ImmutableLogException::class);
+});
+
+it('captures the actor at record() time, not at commit time', function () {
+    $actor = makeUser('actor@example.test');
+    $subject = makeUser('subject@example.test');
+
+    DB::transaction(function () use ($actor, $subject) {
+        app(ActorContext::class)->runAs($actor, fn () => app(AuditRecorder::class)->record('roles', 'assigned', $subject));
+    });
+
+    expect(ActionLog::sole()->actor_id)->toBe($actor->id);
 });

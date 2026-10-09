@@ -21,6 +21,8 @@ final class RemoveRoleFromUser extends Action
 {
     public function handle(AccessUser&Model $user, string|Role $role): void
     {
+        app(ActorContext::class)->assertKnownActor();
+
         $this->transaction(function () use ($user, $role): void {
             /** @var Role $roleModel */
             $roleModel = $role instanceof Role ? $role : Role::findByName($role, (string) config('roles.guard'));
