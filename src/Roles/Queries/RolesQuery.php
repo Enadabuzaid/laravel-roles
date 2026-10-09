@@ -55,7 +55,7 @@ final class RolesQuery
     public static function paginate(ListQuery $query): LengthAwarePaginator
     {
         /** @var Builder<Model> $builder */
-        $builder = Role::query()->withCount(['users as members_count', 'permissions as permissions_count']);
+        $builder = Role::query()->where('guard_name', (string) config('roles.guard'))->withCount(['users as members_count', 'permissions as permissions_count']);
         $query->apply($builder);
 
         if ($query->sort === 'sort_order') {

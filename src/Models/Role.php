@@ -35,4 +35,17 @@ class Role extends SpatieRole
     {
         return Attribute::get(fn (): string => $this->translated('label') ?? (string) $this->name);
     }
+
+    /**
+     * Route binding only ever resolves rows of the configured guard, trashed ones included when the route allows it.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<static>|\Illuminate\Database\Eloquent\Relations\Relation<*, *, *>  $query
+     * @param  mixed  $value
+     * @param  string|null  $field
+     * @return \Illuminate\Database\Eloquent\Builder<static>|\Illuminate\Database\Eloquent\Relations\Relation<*, *, *>
+     */
+    public function resolveRouteBindingQuery($query, $value, $field = null)
+    {
+        return parent::resolveRouteBindingQuery($query, $value, $field)->where($this->qualifyColumn('guard_name'), (string) config('roles.guard'));
+    }
 }

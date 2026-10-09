@@ -38,8 +38,8 @@ final class PermissionsQuery
                 'status' => static function (): void {},
                 'held' => static function (Builder $query, mixed $value): void {
                     match ($value) {
-                        'yes' => $query->whereHas('roles'),
-                        'no' => $query->whereDoesntHave('roles'),
+                        'yes' => $query->whereHas('roles', static fn (Builder $roles) => $roles->where('guard_name', (string) config('roles.guard'))),
+                        'no' => $query->whereDoesntHave('roles', static fn (Builder $roles) => $roles->where('guard_name', (string) config('roles.guard'))),
                         default => null,
                     };
                 },
@@ -62,7 +62,7 @@ final class PermissionsQuery
     public static function paginate(ListQuery $query): LengthAwarePaginator
     {
         /** @var Builder<Model> $builder */
-        $builder = Permission::query()->where('guard_name', (string) config('roles.guard'))->withCount('roles as roles_count');
+        $builder = Permission::query()->where('guard_name', (string) config('roles.guard'))->withCount(['roles as roles_count' => static fn (Builder $roles) => $roles->where('guard_name', (string) config('roles.guard'))]);
 
         $status = $query->filters['status'] ?? 'active';
         match ($status) {
@@ -82,7 +82,7 @@ final class PermissionsQuery
 
     public static function detail(Permission $permission): Permission
     {
-        return $permission->loadCount('roles as roles_count');
+        return $permission->loadCount(['roles as roles_count' => static fn (Builder $roles) => $roles->where('guard_name', (string) config('roles.guard'))]);
     }
 
     /** @return Collection<int, array{key: string, label: string, permissions_count: int}> */

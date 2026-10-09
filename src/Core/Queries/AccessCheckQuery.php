@@ -27,6 +27,7 @@ final class AccessCheckQuery
             throw new \LogicException('roles.user_model must implement AccessUser.');
         }
 
+        $guard = (string) config('roles.guard');
         $allowed = Gate::forUser($user)->allows($permission);
         $super = config('roles.super_role');
 
@@ -36,7 +37,7 @@ final class AccessCheckQuery
 
         /** @var list<string> $roles */
         /** @phpstan-ignore method.notFound */
-        $roles = $user->roles()->whereHas('permissions', static fn ($query) => $query->where('name', $permission))
+        $roles = $user->roles()->where('guard_name', $guard)->whereHas('permissions', static fn ($query) => $query->where('name', $permission)->where('guard_name', $guard))
             ->orderBy('name')->pluck('name')->all();
 
         if ($roles !== []) {
@@ -44,7 +45,7 @@ final class AccessCheckQuery
         }
 
         /** @phpstan-ignore method.notFound */
-        $direct = $user->permissions()->where('name', $permission)->exists();
+        $direct = $user->permissions()->where('guard_name', $guard)->where('name', $permission)->exists();
 
         return ['allowed' => $allowed, 'via' => $direct ? 'direct' : null, 'roles' => []];
     }

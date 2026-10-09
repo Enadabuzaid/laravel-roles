@@ -27,14 +27,17 @@ final class RolesOverviewQuery
         $user = new $userModel;
         $morphClass = $user->getMorphClass();
 
-        $counts = DB::table($roles)->selectRaw(
+        $guard = (string) config('roles.guard');
+        $guardRoleIds = DB::table($roles)->where('guard_name', $guard)->select('id');
+
+        $counts = DB::table($roles)->where('guard_name', $guard)->selectRaw(
             'count(*) as total, '
             .'sum(case when deleted_at is null then 1 else 0 end) as active, '
             .'sum(case when deleted_at is null and is_system then 1 else 0 end) as system_roles, '
             .'sum(case when deleted_at is null and not is_system then 1 else 0 end) as custom_roles'
         )->first();
 
-        $holders = DB::table($modelHasRoles)->where('model_type', $morphClass);
+        $holders = DB::table($modelHasRoles)->where('model_type', $morphClass)->whereIn('role_id', $guardRoleIds);
         $withRole = $userModel::query()->whereIn($user->getQualifiedKeyName(), (clone $holders)->select($morphKey))->count();
 
         $withoutRole = $userModel::query()
@@ -44,6 +47,7 @@ final class RolesOverviewQuery
         $active = (int) ($counts->active ?? 0);
         $assigned = DB::table($roleHasPermissions)
             ->join($roles, $roles.'.id', '=', $roleHasPermissions.'.role_id')
+            ->where($roles.'.guard_name', $guard)
             ->whereNull($roles.'.deleted_at')
             ->count();
 

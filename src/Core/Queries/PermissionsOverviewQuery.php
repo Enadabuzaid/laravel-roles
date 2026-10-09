@@ -23,7 +23,8 @@ final class PermissionsOverviewQuery
         $pivot = (string) ($tables['role_has_permissions'] ?? 'role_has_permissions');
         $guard = (string) config('roles.guard');
 
-        $heldByLiveRole = "exists (select 1 from {$pivot} p join {$roles} r on r.id = p.role_id where p.permission_id = {$permissions}.id and r.deleted_at is null)";
+        $quotedGuard = DB::connection()->getPdo()->quote($guard);
+        $heldByLiveRole = "exists (select 1 from {$pivot} p join {$roles} r on r.id = p.role_id where p.permission_id = {$permissions}.id and r.deleted_at is null and r.guard_name = {$quotedGuard})";
 
         $columns = 'count(*) as total, '
             .'sum(case when deprecated_at is null then 1 else 0 end) as active, '
@@ -38,6 +39,7 @@ final class PermissionsOverviewQuery
 
         $grants = (int) DB::table($pivot)
             ->join($roles, $roles.'.id', '=', $pivot.'.role_id')
+            ->where($roles.'.guard_name', $guard)
             ->whereNull($roles.'.deleted_at')
             ->count();
         $liveRoles = (int) DB::table($roles)->where('guard_name', $guard)->whereNull('deleted_at')->count();
@@ -52,6 +54,7 @@ final class PermissionsOverviewQuery
         $super = config('roles.super_role');
         $heldByOthers = DB::table($pivot)
             ->join($roles, $roles.'.id', '=', $pivot.'.role_id')
+            ->where($roles.'.guard_name', $guard)
             ->whereNull($roles.'.deleted_at')
             ->when(is_string($super) && $super !== '', static fn ($query) => $query->where($roles.'.name', '!=', $super))
             ->whereColumn($pivot.'.permission_id', $permissions.'.id')
