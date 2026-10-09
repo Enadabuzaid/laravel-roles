@@ -29,11 +29,15 @@ const GOOD_PASSWORD = 'Str0ng-Passw0rd!x';
 function pendingInvitation(string $email = 'new@example.test', ?Role $role = null, array $attributes = []): array
 {
     $token = InvitationToken::make();
+    $inviter = makeUser('inviter-'.uniqid().'@example.test');
+    if ($role !== null) {
+        $inviter->assignRole($role); // the inviter holds the authority the role grants
+    }
     $invitation = AccessInvitation::create([
         'email' => strtolower($email),
         'role_id' => $role?->id,
         'token_hash' => InvitationToken::hash($token),
-        'invited_by' => makeUser('inviter-'.uniqid().'@example.test')->id,
+        'invited_by' => $inviter->id,
         'expires_at' => now()->addDay(),
         ...$attributes,
     ]);

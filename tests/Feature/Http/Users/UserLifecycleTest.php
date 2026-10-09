@@ -12,6 +12,7 @@ use Illuminate\Auth\Passwords\PasswordBroker;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Password;
+use Tests\Support\HashedCastUser;
 use Tests\Support\TestUser;
 
 function lifecycleActor(array $extra = []): TestUser
@@ -549,4 +550,15 @@ it('reports an unknown user when the broker finds nobody', function (): void {
 
     $this->actingAs(lifecycleActor())->postJson("/api/access/users/{$target->id}/force-password-reset")->assertOk()
         ->assertJsonPath('meta.link_sent', false)->assertJsonPath('meta.broker_status', 'passwords.user');
+});
+
+it('does not mail when the broker resolves a user of another model class with the same id', function (): void {
+    Password::shouldReceive('broker')->with('users')->andReturn(Mockery::mock(PasswordBroker::class, function ($mock): void {
+        $mock->shouldReceive('getUser')->andReturnUsing(fn () => (new HashedCastUser)->forceFill(TestUser::where('email', 't@example.test')->first()->getAttributes()));
+        $mock->shouldReceive('sendResetLink')->never();
+    }));
+    $target = makeUser('t@example.test');
+
+    $this->actingAs(lifecycleActor())->postJson("/api/access/users/{$target->id}/force-password-reset")->assertOk()
+        ->assertJsonPath('meta.broker_status', 'passwords.user_mismatch');
 });

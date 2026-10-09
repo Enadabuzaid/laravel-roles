@@ -80,7 +80,7 @@ final class ForcePasswordReset extends UserLifecycleAction
                 return Password::INVALID_USER;
             }
 
-            if ((string) $resolved->getAuthIdentifier() !== (string) $target->getKey()) {
+            if ($resolved::class !== $target::class || (string) $resolved->getAuthIdentifier() !== (string) $target->getKey()) {
                 return self::USER_MISMATCH;
             }
 

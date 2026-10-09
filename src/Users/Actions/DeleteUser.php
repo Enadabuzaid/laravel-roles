@@ -51,7 +51,7 @@ final class DeleteUser extends UserLifecycleAction
                 ];
                 $isOwner = app(OwnerCounter::class)->isOwner($target);
 
-                $revokedInvitations = app(InvitationSweeper::class)->revokeAllPending($target);
+                $swept = app(InvitationSweeper::class)->revokeAllPending($target);
                 $this->detachPivots($target);
                 UserAccessState::query()->where('user_id', $target->getKey())->delete();
                 SavedView::query()->where('user_id', $target->getKey())->delete();
@@ -61,7 +61,7 @@ final class DeleteUser extends UserLifecycleAction
                 $target->delete();
                 $this->revokeAccessAfterCommit($target);
 
-                app(AuditRecorder::class)->record('users', 'deleted', null, $old, null, ['was_owner' => $isOwner] + ($revokedInvitations > 0 ? ['revoked_invitations' => $revokedInvitations] : []), Severity::Critical);
+                app(AuditRecorder::class)->record('users', 'deleted', null, $old, null, ['was_owner' => $isOwner] + InvitationSweeper::auditMeta($swept), Severity::Critical);
             });
         } catch (QueryException $e) {
             // A host foreign key still points at the user: nothing was deleted (the transaction rolled back).

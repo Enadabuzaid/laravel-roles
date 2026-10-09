@@ -20,10 +20,69 @@ use Illuminate\Support\Facades\DB;
  */
 final class InvitationSweeper
 {
-    /** Revokes every PENDING invitation created by `$inviter`; returns how many. */
-    public function revokeAllPending(Model $inviter): int
+    public const MAX_AUDITED_IDS = 100;
+
+    /**
+     * Revokes every PENDING invitation created by `$inviter`.
+     *
+     * @return array{count: int, ids: list<int|string>} ids capped at MAX_AUDITED_IDS for the audit meta
+     */
+    public function revokeAllPending(Model $inviter): array
     {
-        return AccessInvitation::query()->pending()->where('invited_by', $inviter->getKey())->update(['revoked_at' => now()]);
+        /** @var list<int|string> $ids */
+        $ids = AccessInvitation::query()->pending()->where('invited_by', $inviter->getKey())->pluck('id')->all();
+
+        if ($ids === []) {
+            return ['count' => 0, 'ids' => []];
+        }
+
+        $count = AccessInvitation::query()->whereIn('id', $ids)->whereNull('accepted_at')->whereNull('revoked_at')->update(['revoked_at' => now()]);
+
+        return ['count' => $count, 'ids' => array_slice($ids, 0, self::MAX_AUDITED_IDS)];
+    }
+
+    /**
+     * The audit meta entries for a revoke-all sweep (empty when nothing was revoked).
+     *
+     * @param  array{count: int, ids: list<int|string>}  $swept
+     * @return array<string, mixed>
+     */
+    public static function auditMeta(array $swept): array
+    {
+        return $swept['count'] > 0 ? ['revoked_invitations' => $swept['count'], 'invitation_ids' => $swept['ids']] : [];
+    }
+
+    /**
+     * Whether `$inviter` may still hand out `$role`: owners always; the Owner role only to owners; any other role
+     * only when the inviter holds every one of its permissions (the escalation rule's logic).
+     *
+     * @param  array<string, true>|null  $held  the inviter's permission names when already known
+     */
+    public function mayAssign(Model $inviter, Role $role, ?array $held = null, ?bool $isOwner = null): bool
+    {
+        if ($isOwner ?? app(OwnerCounter::class)->isOwner($inviter)) {
+            return true;
+        }
+
+        if (RoleRisk::isOwnerRole($role)) {
+            return false;
+        }
+
+        $held ??= $this->heldPermissions($inviter);
+        $role->loadMissing('permissions:id,name');
+
+        return ! $role->permissions->contains(fn (Model $permission): bool => ! isset($held[(string) $permission->getAttribute('name')]));
+    }
+
+    /** @return array<string, true> */
+    public function heldPermissions(Model $inviter): array
+    {
+        /** @var array<string, true> $held */
+        $held = method_exists($inviter, 'getAllPermissions')
+            ? array_fill_keys($inviter->getAllPermissions()->pluck('name')->all(), true)
+            : [];
+
+        return $held;
     }
 
     /**
@@ -40,22 +99,14 @@ final class InvitationSweeper
             return 0;
         }
 
-        /** @var array<int|string, true> $held */
-        $held = method_exists($inviter, 'getAllPermissions')
-            ? array_fill_keys($inviter->getAllPermissions()->pluck('name')->all(), true)
-            : [];
-
+        $held = $this->heldPermissions($inviter);
         $roles = Role::query()->with('permissions:id,name')->whereIn('id', $pending->pluck('role_id')->unique()->all())->get()->keyBy('id');
         $revoke = [];
 
         foreach ($pending as $invitation) {
             $role = $roles->get($invitation->role_id);
 
-            if (! $role instanceof Role) {
-                continue; // a deleted role grants nothing at acceptance
-            }
-
-            if (RoleRisk::isOwnerRole($role) || $role->permissions->contains(fn (Model $permission): bool => ! isset($held[(string) $permission->getAttribute('name')]))) {
+            if ($role instanceof Role && ! $this->mayAssign($inviter, $role, $held, false)) {
                 $revoke[] = $invitation->getKey();
             }
         }
@@ -73,55 +124,50 @@ final class InvitationSweeper
             null,
             null,
             ['revoked_invitations' => $count, 'invitation_ids' => $revoke],
-            Severity::Info,
+            Severity::Warning,
         );
 
         return $count;
     }
 
     /**
-     * After a role was trashed or deleted: sweeps every member who has pending invitations.
+     * Keys of the members of `$role` who have pending invitations (a subquery on the role pivot, so the role's
+     * size does not matter). Read it BEFORE the pivot rows go away.
      *
-     * @param  list<int|string>  $memberKeys
+     * @return list<int|string>
      */
-    public function revokeUnauthorizedForMembers(array $memberKeys): int
+    public function invitersHolding(Role $role): array
     {
-        if ($memberKeys === []) {
-            return 0;
-        }
+        $morphKey = (string) config('permission.column_names.model_morph_key', 'model_id');
+        $model = UserLookup::model();
+        $members = DB::table((string) config('permission.table_names.model_has_roles'))
+            ->select($morphKey)
+            ->where((string) (config('permission.column_names.role_pivot_key') ?: 'role_id'), $role->getKey())
+            ->whereIn('model_type', array_values(array_unique([$model->getMorphClass(), $model::class])));
 
-        $inviters = AccessInvitation::query()->pending()->whereIn('invited_by', $memberKeys)->distinct()->pluck('invited_by')->all();
+        /** @var list<int|string> $keys */
+        $keys = AccessInvitation::query()->pending()->whereIn('invited_by', $members)->distinct()->pluck('invited_by')->all();
 
-        if ($inviters === []) {
+        return $keys;
+    }
+
+    /**
+     * Sweeps each of these inviters (see invitersHolding()).
+     *
+     * @param  list<int|string>  $inviterKeys
+     */
+    public function revokeUnauthorizedFor(array $inviterKeys): int
+    {
+        if ($inviterKeys === []) {
             return 0;
         }
 
         $total = 0;
 
-        foreach (UserLookup::model()->newQuery()->whereKey($inviters)->get() as $inviter) {
+        foreach (UserLookup::model()->newQuery()->whereKey($inviterKeys)->get() as $inviter) {
             $total += $this->revokeUnauthorized($inviter);
         }
 
         return $total;
-    }
-
-    /**
-     * Member keys (users of the configured model) of a role, read from the pivot so trashed roles work.
-     *
-     * @return list<int|string>
-     */
-    public function memberKeys(Role $role): array
-    {
-        $morphKey = (string) config('permission.column_names.model_morph_key', 'model_id');
-        $model = UserLookup::model();
-
-        /** @var list<int|string> $keys */
-        $keys = DB::table((string) config('permission.table_names.model_has_roles'))
-            ->where((string) (config('permission.column_names.role_pivot_key') ?: 'role_id'), $role->getKey())
-            ->whereIn('model_type', array_values(array_unique([$model->getMorphClass(), $model::class])))
-            ->pluck($morphKey)
-            ->all();
-
-        return $keys;
     }
 }

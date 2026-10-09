@@ -9,6 +9,7 @@ use Enadstack\LaravelRoles\Roles\Actions\ForceDeleteRole;
 use Enadstack\LaravelRoles\Roles\Actions\RemoveRoleFromUser;
 use Enadstack\LaravelRoles\Roles\Actions\SyncUserRoles;
 use Enadstack\LaravelRoles\Roles\Actions\TrashRole;
+use Enadstack\LaravelRoles\Roles\Actions\UpdateRolePermissions;
 use Enadstack\LaravelRoles\Support\ActorContext;
 use Enadstack\LaravelRoles\Users\Enums\UserStatus;
 use Enadstack\LaravelRoles\Users\Models\AccessInvitation;
@@ -21,6 +22,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\Support\HashedCastUser;
 use Tests\Support\NonAccessUser;
 use Tests\Support\TestUser;
@@ -176,7 +178,8 @@ it('revokes invitations the inviter can no longer assign when they lose a role',
     });
 
     expect($wide->fresh()->revoked_at)->not->toBeNull()->and($narrow->fresh()->revoked_at)->toBeNull()->and($none->fresh()->revoked_at)->toBeNull();
-    expect(ActionLog::where('event', 'invitations.revoked_unauthorized')->sole()->meta['revoked_invitations'])->toBe(1);
+    $sweep = ActionLog::where('event', 'invitations.revoked_unauthorized')->sole();
+    expect($sweep->meta['revoked_invitations'])->toBe(1)->and($sweep->severity)->toBe('warning');
 })->with(['remove', 'sync', 'trash', 'force']);
 
 it('keeps owners invitations and revokes owner-role invitations when ownership is lost', function (): void {
@@ -272,3 +275,128 @@ it('keeps the user state active after acceptance for both statuses of the helper
 
     expect(TestUser::where('email', 'act@example.test')->sole()->accessStatus())->toBe(UserStatus::Active);
 });
+
+/** @return array{0: TestUser, 1: Role, 2: string} an inviter holding role-a (reports.view) and a pending invitation to `target` (reports.view) */
+function authorityScenario(): array
+{
+    $inviter = makeUser('auth-inviter@example.test');
+    $inviter->assignRole(makeRole('role-a', ['reports.view']));
+    $target = makeRole('target-role', ['reports.view']);
+    [, $token] = hardInvitation('authority@example.test', $target, $inviter);
+
+    return [$inviter, $target, $token];
+}
+
+it('re-checks the inviter authority at accept for every way it can be lost', function (string $how): void {
+    config(['roles.users.accept_rate_limit' => 100]);
+    $generic = $this->postJson(HARD_URL, hardBody('unknown-token', 'x@example.test'));
+    [$inviter, $target, $token] = authorityScenario();
+
+    // control: still authorised
+    expect($this->postJson(HARD_URL, hardBody('nope', 'authority@example.test'))->getStatusCode())->toBe(410);
+
+    match ($how) {
+        'role permission edit' => app(ActorContext::class)->runAs(null, fn () => makePermission('billing.view') && app(UpdateRolePermissions::class)->handle($target, ['billing.view'], [], true)),
+        'matrix role edit' => $target->givePermissionTo(makePermission('billing.view')),
+        'host removeRole' => $inviter->removeRole('role-a'),
+        'host syncRoles' => $inviter->syncRoles([]),
+        'direct permission revoke' => (function () use ($inviter): void {
+            $inviter->removeRole('role-a');
+            $inviter->givePermissionTo(makePermission('reports.view'));
+            $inviter->revokePermissionTo('reports.view');
+        })(),
+    };
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    $response = $this->postJson(HARD_URL, hardBody($token, 'authority@example.test'));
+
+    expect($response->getStatusCode())->toBe(410)->and($response->getContent())->toBe($generic->getContent())
+        ->and(TestUser::where('email', 'authority@example.test')->exists())->toBeFalse();
+})->with(['role permission edit', 'matrix role edit', 'host removeRole', 'host syncRoles', 'direct permission revoke']);
+
+it('still accepts when the inviter keeps the authority, and always for owners', function (): void {
+    config(['roles.users.accept_rate_limit' => 100]);
+    [, , $token] = authorityScenario();
+    $this->postJson(HARD_URL, hardBody($token, 'authority@example.test'))->assertOk();
+
+    $owner = makeOwner('boss@example.test');
+    $ownerRole = Role::findByName('owner', 'web');
+    $wide = makeRole('wide-role', ['reports.view', 'billing.view']);
+    [, $ownerToken] = hardInvitation('o1@example.test', $ownerRole, $owner);
+    [, $wideToken] = hardInvitation('o2@example.test', $wide, $owner);
+    $this->postJson(HARD_URL, hardBody($ownerToken, 'o1@example.test'))->assertOk();
+    $this->postJson(HARD_URL, hardBody($wideToken, 'o2@example.test'))->assertOk();
+});
+
+it('refuses the owner role invitation once the inviter is no longer an owner (host-side removal)', function (): void {
+    $first = makeOwner('first@example.test');
+    $second = makeOwner('second@example.test');
+    [, $token] = hardInvitation('o@example.test', Role::findByName('owner', 'web'), $second);
+    $second->removeRole('owner');
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    $this->postJson(HARD_URL, hardBody($token, 'o@example.test'))->assertStatus(410);
+    expect($first->fresh())->not->toBeNull();
+});
+
+it('lists the revoked invitation ids in the audit meta, capped at 100', function (): void {
+    $actor = usersActor(['access.users.view', 'access.users.suspend'], 'admin@example.test');
+    $inviter = makeUser('inviter@example.test');
+    $rows = [];
+    for ($i = 0; $i < 105; $i++) {
+        $rows[] = ['email' => "bulk{$i}@x.test", 'token_hash' => hash('sha256', "b{$i}"), 'invited_by' => $inviter->id, 'expires_at' => now()->addDay(), 'created_at' => now(), 'updated_at' => now()];
+    }
+    AccessInvitation::insert($rows);
+    ActionLog::query()->delete();
+
+    $this->actingAs($actor)->postJson("/api/access/users/{$inviter->id}/suspend", ['reason' => 'x'])->assertOk();
+
+    $meta = ActionLog::sole()->meta;
+    expect($meta['revoked_invitations'])->toBe(105)->and($meta['invitation_ids'])->toHaveCount(100)
+        ->and(AccessInvitation::whereNull('revoked_at')->count())->toBe(0);
+});
+
+it('finds the inviters of a role with one query however many members it has', function (): void {
+    $count = function (int $members): int {
+        $role = makeRole('r'.uniqid());
+        for ($i = 0; $i < $members; $i++) {
+            $user = makeUser(uniqid().'@example.test');
+            $user->assignRole($role);
+            hardInvitation(uniqid().'@x.test', null, $user);
+        }
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $inviters = app(InvitationSweeper::class)->invitersHolding($role);
+        $queries = count(DB::getQueryLog());
+        DB::disableQueryLog();
+        expect($inviters)->toHaveCount($members);
+
+        return $queries;
+    };
+
+    expect($count(3))->toBe(1)->and($count(60))->toBe(1);
+});
+
+it('takes the super role lock before the invitation lock when accepting and resending', function (): void {
+    makeRole('owner', [], ['is_system' => true]);
+    [, $token] = hardInvitation('lock@example.test');
+    $locks = static fn (array $log): array => array_values(array_filter($log, static fn (array $q): bool => str_contains(strtolower($q['query']), 'for update')));
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    $this->postJson(HARD_URL, hardBody($token, 'lock@example.test'))->assertOk();
+    $accept = $locks(DB::getQueryLog());
+    DB::disableQueryLog();
+
+    expect($accept[0]['bindings'])->toContain('owner')->and($accept[1]['query'])->toContain('access_invitations');
+
+    [$invitation] = hardInvitation('lock2@example.test');
+    $actor = usersActor(['access.invitations.create'], 'creator@example.test');
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    $this->actingAs($actor)->postJson("/api/access/invitations/{$invitation->id}/resend")->assertOk();
+    $resend = $locks(DB::getQueryLog());
+    DB::disableQueryLog();
+
+    expect($resend[0]['bindings'])->toContain('owner')->and($resend[1]['query'])->toContain('access_invitations');
+})->skip(fn (): bool => DB::connection()->getDriverName() === 'sqlite', 'sqlite has no row locks');

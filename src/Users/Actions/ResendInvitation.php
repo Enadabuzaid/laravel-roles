@@ -22,7 +22,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 /**
  * Rotates the token (the old one dies) and restarts the expiry of an invitation that is not accepted or
- * revoked. Lock order: the invitation row, then the super role (the same as acceptance).
+ * revoked. Lock order: the super role, then the invitation row (the same as acceptance).
  */
 final class ResendInvitation extends Action
 {
@@ -32,6 +32,8 @@ final class ResendInvitation extends Action
         $token = InvitationToken::make();
 
         return $this->transaction(function () use ($invitation, $confirmed, $token): AccessInvitation {
+            app(OwnerCounter::class)->lockSuperRole(); // global lock order: the super role first
+
             $locked = AccessInvitation::query()->whereKey($invitation->getKey())->lockForUpdate()->first()
                 ?? throw (new ModelNotFoundException)->setModel(AccessInvitation::class, [$invitation->getKey()]);
 
@@ -39,7 +41,6 @@ final class ResendInvitation extends Action
                 throw InvitationErrors::notPending();
             }
 
-            app(OwnerCounter::class)->lockSuperRole();
             $role = $locked->role_id === null ? null : Role::query()->where('guard_name', (string) config('roles.guard'))->find($locked->role_id);
 
             if ($role !== null) {

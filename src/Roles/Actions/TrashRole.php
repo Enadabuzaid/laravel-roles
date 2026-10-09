@@ -32,9 +32,9 @@ final class TrashRole extends Action
             ));
 
             $members = $fresh->users()->count();
-            $memberKeys = $members > 0 ? app(InvitationSweeper::class)->memberKeys($fresh) : [];
+            $inviters = $members > 0 ? app(InvitationSweeper::class)->invitersHolding($fresh) : [];
             $fresh->delete();
-            app(InvitationSweeper::class)->revokeUnauthorizedForMembers($memberKeys);
+            app(InvitationSweeper::class)->revokeUnauthorizedFor($inviters);
 
             app(AuditRecorder::class)->record(
                 'roles',
