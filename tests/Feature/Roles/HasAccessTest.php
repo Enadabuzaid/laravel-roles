@@ -32,14 +32,14 @@ it('knows the owner', function () {
     Role::create(['name' => 'owner', 'guard_name' => 'web']);
 
     expect($user->isOwner())->toBeFalse();
-    $user->assignAccessRole('owner');
+    $user->assignAccessRole('owner', confirmed: true);
     expect($user->fresh()->isOwner())->toBeTrue();
 });
 
 it('lets the owner pass every gate check', function () {
     $owner = makeUser('o@example.test');
     Role::create(['name' => 'owner', 'guard_name' => 'web']);
-    $owner->assignAccessRole('owner');
+    $owner->assignAccessRole('owner', confirmed: true);
 
     expect(Gate::forUser($owner->fresh())->allows('anything.at.all'))->toBeTrue();
 });
@@ -90,7 +90,7 @@ it('returns exactly null for non-owners and true for owners from the owner gate'
     $plain = makeUser('plain@example.test');
     $owner = makeUser('own@example.test');
     Role::create(['name' => 'owner', 'guard_name' => 'web']);
-    $owner->assignAccessRole('owner');
+    $owner->assignAccessRole('owner', confirmed: true);
 
     expect($gate($plain))->toBeNull()
         ->and($gate($owner->fresh()))->toBeTrue()

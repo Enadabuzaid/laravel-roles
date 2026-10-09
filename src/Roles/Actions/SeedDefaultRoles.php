@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Enadstack\LaravelRoles\Roles\Actions;
 
+use Enadstack\LaravelRoles\Audit\AuditRecorder;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Support\Action;
 use Illuminate\Support\Collection;
@@ -23,6 +24,8 @@ final class SeedDefaultRoles extends Action
         return $this->transaction(function () use ($templates, $only, $guard): Collection {
             /** @var Collection<string, Role> $roles */
             $roles = collect();
+            $created = [];
+            $restored = [];
 
             foreach ($templates as $name => $template) {
                 if ($only !== [] && ! in_array($name, $only, true)) {
@@ -33,11 +36,17 @@ final class SeedDefaultRoles extends Action
 
                 if ($role === null) {
                     $role = Role::query()->create(['name' => $name, 'guard_name' => $guard, ...$template]);
+                    $created[] = $name;
                 } elseif ($role->trashed()) {
                     $role->restore();
+                    $restored[] = $name;
                 }
 
                 $roles->put($name, $role);
+            }
+
+            if ($created !== [] || $restored !== []) {
+                app(AuditRecorder::class)->record('roles', 'seeded', null, null, ['created' => $created, 'restored' => $restored]);
             }
 
             return $roles;

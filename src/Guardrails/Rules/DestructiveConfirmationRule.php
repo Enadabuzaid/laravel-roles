@@ -19,7 +19,8 @@ final class DestructiveConfirmationRule implements Guardrail
 
         $expected = $this->expectedConfirmation($operation);
 
-        if ($expected !== null && $operation->confirmation !== $expected) {
+        // An empty expectation (e.g. a user without an email) can never be satisfied: always a mismatch.
+        if ($expected !== null && ($expected === '' || $operation->confirmation !== $expected)) {
             throw Violation::confirmationMismatch();
         }
     }

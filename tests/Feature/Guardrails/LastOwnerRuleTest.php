@@ -56,3 +56,11 @@ it('applies to the system actor too', function () {
 
     expect(guardrailCode(new Operation(T::SuspendUser, actor: null, target: $owner)))->toBe('guardrail.last_owner');
 });
+
+it('lets the sole owner receive or lose a non-owner role', function () {
+    $owner = makeOwner();
+    $viewer = makeRole('viewer');
+
+    expect(guardrailCode(new Operation(T::AssignRole, target: $owner, added: [$viewer])))->toBeNull()
+        ->and(guardrailCode(new Operation(T::RemoveRole, target: $owner, removed: [$viewer])))->toBeNull();
+});

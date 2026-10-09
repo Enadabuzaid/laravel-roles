@@ -41,7 +41,7 @@ function makeOwner(string $email = 'owner@example.test'): TestUser
     }
 
     $user = makeUser($email);
-    app(ActorContext::class)->runAs(null, fn () => $user->assignAccessRole('owner'));
+    app(ActorContext::class)->runAs(null, fn () => $user->assignAccessRole('owner', confirmed: true));
 
     return $user;
 }

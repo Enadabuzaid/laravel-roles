@@ -31,3 +31,30 @@ it('keeps controllers free of queries once they exist', function () {
 
     expect($offenders)->toBe([]);
 });
+
+it('references the audit recorder in every mutating action', function () {
+    $mutating = '/(->assignRole\(|->removeRole\(|->syncRoles\(|Role::create|Role::query\(\)->create|Permission::insert|->update\(|->delete\()/';
+    $offenders = [];
+
+    foreach ((new Finder)->files()->name('*.php')->in([dirname(__DIR__, 2).'/src/Roles/Actions', dirname(__DIR__, 2).'/src/Core/Actions']) as $file) {
+        $code = $file->getContents();
+        if (preg_match($mutating, $code) && ! str_contains($code, 'AuditRecorder')) {
+            $offenders[] = $file->getRelativePathname();
+        }
+    }
+
+    expect($offenders)->toBe([]);
+});
+
+it('references the guardrails in every action that mutates user roles', function () {
+    $offenders = [];
+
+    foreach ((new Finder)->files()->name('*.php')->in(dirname(__DIR__, 2).'/src/Roles/Actions') as $file) {
+        $code = $file->getContents();
+        if (preg_match('/->(assignRole|removeRole|syncRoles)\(/', $code) && ! str_contains($code, 'Guardrails')) {
+            $offenders[] = $file->getRelativePathname();
+        }
+    }
+
+    expect($offenders)->toBe([]);
+});

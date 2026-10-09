@@ -35,3 +35,10 @@ it('is skipped when the toggle is off', function () {
 
     expect(guardrailCode(new Operation(T::ForceDeleteRole, role: makeRole('plain'))))->toBeNull();
 });
+
+it('treats an empty expected email as a mismatch, even with an empty confirmation', function () {
+    $user = makeUser('');
+
+    expect(guardrailCode(new Operation(T::DeleteUser, target: $user)))->toBe('guardrail.confirmation_mismatch')
+        ->and(guardrailCode(new Operation(T::DeleteUser, target: $user, confirmation: '')))->toBe('guardrail.confirmation_mismatch');
+});

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Enadstack\LaravelRoles\Core\Actions;
 
+use Enadstack\LaravelRoles\Audit\AuditRecorder;
+use Enadstack\LaravelRoles\Audit\Severity;
 use Enadstack\LaravelRoles\Core\Registry\PermissionDefinition;
 use Enadstack\LaravelRoles\Core\Registry\PermissionRegistry;
 use Enadstack\LaravelRoles\Models\Permission;
@@ -83,7 +85,7 @@ final class SyncPermissions extends Action
             return $result;
         }
 
-        $this->transaction(function () use ($definitions, $added, $toUpdate, $deprecated, $prunedIds, $guard): void {
+        $this->transaction(function () use ($definitions, $added, $toUpdate, $deprecated, $prunedIds, $guard, $result): void {
             $now = now();
 
             $rows = [];
@@ -128,11 +130,32 @@ final class SyncPermissions extends Action
             if ($prunedIds !== []) {
                 Permission::query()->whereIn((new Permission)->getKeyName(), $prunedIds)->delete();
             }
+
+            $this->audit($result);
         });
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         return $result;
+    }
+
+    private function audit(SyncResult $result): void
+    {
+        $lists = ['added' => $result->added, 'updated' => $result->updated, 'restored' => $result->restored, 'deprecated' => $result->deprecated, 'pruned' => $result->pruned];
+        $values = ['counts' => array_map('count', $lists)];
+        foreach ($lists as $change => $names) {
+            $values[$change] = array_slice($names, 0, 200);
+        }
+
+        app(AuditRecorder::class)->record(
+            'permissions',
+            'synced',
+            null,
+            null,
+            $values,
+            [],
+            $result->deprecated !== [] || $result->pruned !== [] ? Severity::Warning : Severity::Info,
+        );
     }
 
     private function differs(Permission $row, PermissionDefinition $definition): bool

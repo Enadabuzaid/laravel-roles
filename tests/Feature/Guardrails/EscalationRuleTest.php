@@ -48,3 +48,9 @@ it('is skipped when prevent_escalation is off', function () {
 
     expect(guardrailCode(new Operation(T::AssignRole, actor: $this->actor, target: $this->target, added: [$role])))->toBeNull();
 });
+
+it('lets a non-owner actor remove a non-owner role', function () {
+    $role = makeRole('narrow', ['a.view']);
+
+    expect(guardrailCode(new Operation(T::RemoveRole, actor: $this->actor, target: $this->target, removed: [$role])))->toBeNull();
+});

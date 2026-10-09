@@ -6,6 +6,7 @@ namespace Enadstack\LaravelRoles\Console;
 
 use Enadstack\LaravelRoles\Core\Actions\SyncPermissions;
 use Enadstack\LaravelRoles\Core\Registry\PermissionRegistryException;
+use Enadstack\LaravelRoles\Support\ActorContext;
 use Illuminate\Console\Command;
 
 class SyncCommand extends Command
@@ -17,7 +18,7 @@ class SyncCommand extends Command
     public function handle(SyncPermissions $sync): int
     {
         try {
-            $result = $sync->handle((bool) $this->option('dry-run'), (bool) $this->option('prune'));
+            $result = app(ActorContext::class)->runAs(null, fn () => $sync->handle((bool) $this->option('dry-run'), (bool) $this->option('prune')));
         } catch (PermissionRegistryException $e) {
             $this->components->error($e->getMessage());
 

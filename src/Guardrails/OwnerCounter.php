@@ -23,6 +23,18 @@ final class OwnerCounter
         return $role !== null && $role->users()->whereKey($user->getKey())->exists();
     }
 
+    /**
+     * Locks the super-role row so concurrent owner-affecting operations serialize (call inside a transaction).
+     */
+    public function lockSuperRole(): void
+    {
+        Role::query()
+            ->where('name', (string) config('roles.super_role'))
+            ->where('guard_name', (string) config('roles.guard'))
+            ->lockForUpdate()
+            ->first();
+    }
+
     private function superRole(): ?Role
     {
         return Role::query()

@@ -6,7 +6,11 @@ Access control for Laravel: a file-based permission registry, bilingual (AR/EN) 
 
 ## Requirements
 
-PHP ^8.3, Laravel ^13, spatie/laravel-permission ^8.
+PHP ^8.3, Laravel ^13, spatie/laravel-permission ^8, and the audit store:
+
+```bash
+composer require enadstack/laravel-action-logger   # ^1.1
+```
 
 ## Install
 
@@ -86,7 +90,7 @@ return [
 
 ## HasAccess
 
-Use the package API for role changes so cache resets and the owner gate apply. Guardrails (last-owner protection, self-escalation checks) and audit logging arrive in Phase 2; they are not enforced yet:
+Use the package API for role changes so cache resets, guardrails, audit logging and the owner gate apply. `assignAccessRole` and `syncAccessRoles` take a trailing `bool $confirmed` (see Guardrails):
 
 ```php
 $user->assignAccessRole('admin');
@@ -96,6 +100,49 @@ $user->isOwner();
 ```
 
 Never call Spatie's `assignRole`, `removeRole`, `syncRoles`, `givePermissionTo`, `revokePermissionTo` or `syncPermissions` directly; an architecture test enforces this inside the package.
+
+## Guardrails
+
+Every role change goes through `Guardrails::assert()` inside the Action's transaction. A violation throws `AccessException` (HTTP 403, rendered in the API envelope), changes nothing and writes no audit entry. Rules are listed in `roles.guardrails.rules`; each can be toggled in `roles.guardrails`.
+
+| Code | Meaning | Applies to system actor |
+| --- | --- | --- |
+| `guardrail.last_owner` | Fewer than `min_owners` owners would remain | yes |
+| `guardrail.self_role_change` | You changed your own role | no |
+| `guardrail.self_destructive` | You suspended, deactivated or deleted yourself | no |
+| `guardrail.escalation` | Granting a role with permissions you lack, or adding/removing the owner role as a non-owner | no |
+| `guardrail.high_risk_confirm_required` | Adding a high-risk or owner role without `confirmed: true` | yes |
+| `guardrail.system_role` | Deleting or renaming a system role (or the super role) | yes |
+| `guardrail.confirmation_mismatch` | Type-to-confirm text missing or wrong (an empty expected value, such as a user without an email, always mismatches) | yes |
+
+**Actor context.** The actor is `ActorContext::actor()`: the authenticated user on the `roles.guard`, or `null` (system/console). Force it with `runAs`:
+
+```php
+app(ActorContext::class)->runAs($admin, fn () => $user->assignAccessRole('manager'));
+app(ActorContext::class)->runAs(null, fn () => $user->assignAccessRole('viewer')); // system, even if someone is logged in
+```
+
+`roles:seed`, `roles:owner` and `roles:sync` always run as the system actor. State-based rules (last owner, high-risk confirmation, system role, destructive confirmation) still apply to it, so console code that grants the owner role must pass the flag: `$user->assignAccessRole('owner', confirmed: true)`.
+
+**Confirmation flags.** `confirmed: true` acknowledges a high-risk or owner role. Re-assigning a role the user already holds is a silent no-op (no exception, no audit entry).
+
+**Concurrency.** Assign/remove/sync lock the super-role row (`SELECT ... FOR UPDATE`) before the guardrails run, so two concurrent owner removals serialize and the last-owner rule cannot be raced.
+
+## Audit
+
+Writes go to `enadstack/laravel-action-logger` (^1.1), module `roles` or `permissions`:
+
+| Event | Subject | When |
+| --- | --- | --- |
+| `roles.assigned` / `roles.removed` / `roles.synced` | the user | only if the role set changed; `old_values`/`new_values` hold `roles`, `meta` holds `role` or `added`/`removed` |
+| `roles.seeded` | none | roles were created or restored |
+| `permissions.synced` | none | a non-dry-run sync changed something; counts per change type plus names (capped at 200 per list) |
+
+Severity: `critical` when the owner role is added or removed, `warning` when a high-risk role is added (or a sync deprecated/pruned permissions), otherwise `info`.
+
+**After-commit semantics.** Entries are written after the surrounding transaction commits: a rollback (including an outer transaction) writes nothing. A failing logger is reported via `report()` and never breaks the role change. Disable with `roles.audit.enabled` or `roles.modules.audit`.
+
+**Immutability.** Set `ACTION_LOGGER_IMMUTABLE=true` to make log rows read-only (updates and deletes throw `ImmutableLogException`). Bulk query deletes bypass model events; restrict the table at the database level if you need stronger guarantees.
 
 ## Commands
 

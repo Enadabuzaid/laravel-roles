@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 2.0.0-alpha.4 — 2026-10-09
+
+### Added
+- Guardrails: seven configurable rules enforced inside `AssignRoleToUser`, `RemoveRoleFromUser` and `SyncUserRoles` (last owner, self role change, escalation, high-risk confirmation, system role, destructive confirmation, self destructive), with stable `guardrail.*` codes.
+- Audit: `roles.assigned|removed|synced|seeded` and `permissions.synced` entries written after commit through action-logger, with `Info`/`Warning`/`Critical` severity (`RoleChangeSeverity`).
+- `ActorContext` is honored by every Action; `roles:seed`, `roles:owner` and `roles:sync` run as the system actor.
+- Role-changing Actions lock the super-role row (`FOR UPDATE`) so concurrent owner removals serialize.
+
+### Changed (breaking)
+- `AssignRoleToUser::handle`, `SyncUserRoles::handle`, `HasAccess::assignAccessRole` and `HasAccess::syncAccessRoles` gained a trailing `bool $confirmed = false`.
+- Assigning the owner role or any role with a high-risk permission now requires `confirmed: true`, including from the console (`roles:owner` passes it).
+- Requires `enadstack/laravel-action-logger ^1.1`.
+- Deleting a user without an email can never satisfy the type-to-confirm guardrail (always a mismatch).
+
 ## 2.0.0-alpha.3 — 2026-10-09
 
 ### Fixed

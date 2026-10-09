@@ -14,9 +14,9 @@ trait HasAccess
 {
     use HasRoles;
 
-    public function assignAccessRole(string|Role $role): static
+    public function assignAccessRole(string|Role $role, bool $confirmed = false): static
     {
-        app(AssignRoleToUser::class)->handle($this, $role);
+        app(AssignRoleToUser::class)->handle($this, $role, $confirmed);
 
         return $this;
     }
@@ -29,9 +29,9 @@ trait HasAccess
     }
 
     /** @param  list<string|Role>  $roles */
-    public function syncAccessRoles(array $roles): static
+    public function syncAccessRoles(array $roles, bool $confirmed = false): static
     {
-        app(SyncUserRoles::class)->handle($this, $roles);
+        app(SyncUserRoles::class)->handle($this, $roles, $confirmed);
 
         return $this;
     }

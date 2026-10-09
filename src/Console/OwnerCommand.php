@@ -7,6 +7,7 @@ namespace Enadstack\LaravelRoles\Console;
 use Enadstack\LaravelRoles\Concerns\HasAccess;
 use Enadstack\LaravelRoles\Contracts\AccessUser;
 use Enadstack\LaravelRoles\Roles\Actions\SeedDefaultRoles;
+use Enadstack\LaravelRoles\Support\ActorContext;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Model;
 
@@ -47,7 +48,7 @@ class OwnerCommand extends Command
         }
 
         $super = (string) config('roles.super_role');
-        $role = $seed->handle(only: [$super])->get($super);
+        $role = app(ActorContext::class)->runAs(null, fn () => $seed->handle(only: [$super])->get($super));
 
         if ($role === null) {
             $this->components->error("No default role template for [{$super}] in roles.default_roles.");
@@ -55,7 +56,7 @@ class OwnerCommand extends Command
             return self::FAILURE;
         }
 
-        $user->assignAccessRole($role);
+        app(ActorContext::class)->runAs(null, fn () => $user->assignAccessRole($role, confirmed: true));
         $this->components->info("{$user->getAttribute('email')} is now [{$super}].");
 
         return self::SUCCESS;
