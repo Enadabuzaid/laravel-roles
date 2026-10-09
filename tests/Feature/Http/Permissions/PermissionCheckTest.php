@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use Enadstack\LaravelRoles\Models\Permission;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 afterEach(function (): void {
     Model::preventLazyLoading(false);
@@ -12,7 +14,7 @@ afterEach(function (): void {
 function checker()
 {
     $user = makeUser('ck'.uniqid().'@example.test');
-    $user->assignRole(makeRole('ckr'.uniqid(), ['access.permissions.view']));
+    $user->assignRole(makeRole('ckr'.uniqid(), ['access.permissions.view', 'access.users.view']));
 
     return $user;
 }
@@ -42,17 +44,42 @@ it('reports direct access', function (): void {
         ->assertJsonPath('data', ['allowed' => true, 'via' => 'direct', 'roles' => []]);
 });
 
-it('reports no access, including unknown permissions', function (): void {
+it('reports no access', function (): void {
     $user = makeUser('n@example.test');
     makePermission('some.thing');
 
-    foreach (['some.thing', 'does.not.exist'] as $name) {
-        $this->actingAs(checker())->getJson("/api/access/permissions/check?user={$user->id}&permission={$name}")->assertOk()
-            ->assertJsonPath('data', ['allowed' => false, 'via' => null, 'roles' => []]);
-    }
+    $this->actingAs(checker())->getJson("/api/access/permissions/check?user={$user->id}&permission=some.thing")->assertOk()
+        ->assertJsonPath('data', ['allowed' => false, 'via' => null, 'roles' => []]);
+});
+
+it('requires users view as well as permissions view', function (): void {
+    $user = makeUser('n@example.test');
+    makePermission('some.thing');
+    $viewer = makeUser('pv@example.test');
+    $viewer->assignRole(makeRole('pv-only', ['access.permissions.view']));
+
+    $this->actingAs($viewer)->getJson("/api/access/permissions/check?user={$user->id}&permission=some.thing")
+        ->assertForbidden()->assertJson(['code' => 'forbidden']);
+});
+
+it('refuses permission names that do not exist instead of evaluating them as gate abilities', function (string $name): void {
+    $user = makeUser('n@example.test');
+    Gate::define('needs-argument', fn ($user, $post) => $post->id === 1);
+    Gate::define('always', fn () => true);
+
+    $this->actingAs(checker())->getJson('/api/access/permissions/check?user='.$user->id.'&permission='.urlencode($name))
+        ->assertStatus(422)->assertJson(['code' => 'validation_failed'])->assertJsonValidationErrorFor('permission', 'errors');
+})->with(['does.not.exist', 'needs-argument', 'always', 'viewPulse']);
+
+it('does not evaluate a permission of another guard', function (): void {
+    $user = makeUser('n@example.test');
+    Permission::create(['name' => 'foreign.thing', 'guard_name' => 'api']);
+
+    $this->actingAs(checker())->getJson("/api/access/permissions/check?user={$user->id}&permission=foreign.thing")->assertStatus(422);
 });
 
 it('404s an unknown user and validates the query', function (): void {
+    makePermission('a.b');
     $this->actingAs(checker())->getJson('/api/access/permissions/check?user=999999&permission=a.b')->assertNotFound()->assertJsonPath('code', 'not_found');
     $this->actingAs(checker())->getJson('/api/access/permissions/check?permission=a.b')->assertStatus(422)->assertJsonValidationErrorFor('user', 'errors');
     $this->actingAs(checker())->getJson('/api/access/permissions/check?user=1')->assertStatus(422)->assertJsonValidationErrorFor('permission', 'errors');

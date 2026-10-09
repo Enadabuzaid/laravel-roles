@@ -14,7 +14,7 @@ Route::get('me', MeController::class)->name('me')->middleware('access:any');
 Route::get('permissions', [PermissionController::class, 'index'])->name('permissions.index')->middleware('can:access.permissions.view');
 Route::get('permissions/overview', PermissionOverviewController::class)->name('permissions.overview')->middleware('can:access.permissions.view');
 Route::get('permissions/modules', PermissionModulesController::class)->name('permissions.modules')->middleware('can:access.permissions.view');
-Route::get('permissions/check', AccessCheckController::class)->name('permissions.check')->middleware('can:access.permissions.view');
+Route::get('permissions/check', AccessCheckController::class)->name('permissions.check')->middleware(['can:access.permissions.view', 'can:access.users.view']);
 Route::post('permissions/sync', SyncPermissionsController::class)->name('permissions.sync')->middleware('can:access.permissions.sync');
 Route::post('permissions', [PermissionController::class, 'store'])->name('permissions.store')->middleware('can:access.permissions.sync');
 Route::get('permissions/{permission}', [PermissionController::class, 'show'])->name('permissions.show')

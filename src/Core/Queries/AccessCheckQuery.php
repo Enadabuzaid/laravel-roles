@@ -6,7 +6,6 @@ namespace Enadstack\LaravelRoles\Core\Queries;
 
 use Enadstack\LaravelRoles\Contracts\AccessUser;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Gate;
 
 final class AccessCheckQuery
 {
@@ -28,10 +27,12 @@ final class AccessCheckQuery
         }
 
         $guard = (string) config('roles.guard');
-        $allowed = Gate::forUser($user)->allows($permission);
         $super = config('roles.super_role');
+        $isOwner = is_string($super) && $super !== '' && $user->hasRole($super);
+        // A direct permission check, never an arbitrary gate ability; the owner passes everything like the Gate::before rule.
+        $allowed = $isOwner || (method_exists($user, 'checkPermissionTo') && $user->checkPermissionTo($permission, $guard));
 
-        if (is_string($super) && $super !== '' && $user->hasRole($super)) {
+        if ($isOwner) {
             return ['allowed' => $allowed, 'via' => $allowed ? 'owner' : null, 'roles' => []];
         }
 

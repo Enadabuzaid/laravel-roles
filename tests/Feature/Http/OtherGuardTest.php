@@ -86,5 +86,5 @@ it('does not resolve another guard permission in the access check', function ():
     DB::table('model_has_permissions')->insert(['permission_id' => $this->foreignPermission->id, 'model_type' => $target->getMorphClass(), 'model_id' => $target->id]);
 
     $result = $this->actingAs($this->admin)->getJson("/api/access/permissions/check?user={$target->id}&permission=foreign.view");
-    $result->assertOk()->assertJsonPath('data.via', null)->assertJsonPath('data.roles', []);
+    $result->assertStatus(422);
 });
