@@ -54,7 +54,8 @@ class User extends Authenticatable implements AccessUser
 | `super_role` | `owner` | Role that bypasses permission checks |
 | `default_locale` / `fallback_locale` / `locales` | `en` / `en` / `['en','ar']` | Label translations |
 | `modules` | all `true` | Feature toggles for later phases |
-| `routes.prefix` / `routes.middleware` | `api/access` / `['api','auth:sanctum']` | API routes (later phases) |
+| `routes.prefix` / `routes.middleware` | `api/access` / `['api','auth:sanctum']` | API routes; the middleware is your authentication (and session/CSRF) stack |
+| `http.rate_limit` | `60` | Requests per minute per user (per IP for guests) through the `access` named limiter; `null` or `0` disables it. The legacy `'attempts,minutes'` string still parses. See Rate limiting |
 | `permissions_file` | `access/permissions.php` | Permission registry |
 | `guardrails` | see file | Rule list, toggles (`min_owners`, `prevent_self_escalation`, `prevent_self_destructive`, `prevent_escalation`, `confirm_high_risk`, `type_to_confirm_destructive`) and `disabled` rule classes. Enforced; see Guardrails |
 | `security` | see file | Lockout, MFA roles, login history |
@@ -103,18 +104,18 @@ Never call Spatie's `assignRole`, `removeRole`, `syncRoles`, `givePermissionTo`,
 
 ## Guardrails
 
-**Wired now:** `AssignRoleToUser`, `RemoveRoleFromUser` and `SyncUserRoles` enforce last owner, self role change, escalation and high-risk confirmation; `UpdateRolePermissions` and `UpdateMatrix` (role-permission edits) enforce the owner lock, self change (editing a role you hold), escalation (adding a permission you lack) and high-risk confirmation. **Implemented and unit-tested, wired when the operation exists (Phase 3/4):** self destructive, system role (delete/rename), destructive confirmation, and last-owner for suspend/deactivate/delete user. Toggles: `prevent_self_escalation` controls the self role change rule and `prevent_self_destructive` controls the self destructive rule (independent).
+**Wired now:** `AssignRoleToUser`, `RemoveRoleFromUser` and `SyncUserRoles` enforce last owner, self role change, escalation and high-risk confirmation; `RestoreRole` enforces self change (you hold the trashed role, checked on the pivot), escalation (the role has a permission you lack, or is the Owner role) and high-risk confirmation (the Owner role or any role with a high-risk permission needs `confirm: true`); `CreateRole` with `permissions` and `UpdateRolePermissions` / `UpdateMatrix` (role-permission edits) enforce the owner lock, self change (editing a role you hold), escalation (adding a permission you lack) and high-risk confirmation. **Implemented and unit-tested, wired when the operation exists (Phase 3/4):** self destructive, system role (delete/rename), destructive confirmation, and last-owner for suspend/deactivate/delete user. Toggles: `prevent_self_escalation` controls the self role change rule and `prevent_self_destructive` controls the self destructive rule (independent).
 
 Every user role change goes through `Guardrails::assert()` inside the Action's transaction. A violation throws `AccessException` (HTTP 403, rendered in the API envelope), changes nothing and writes no audit entry. Rules are listed in `roles.guardrails.rules`; each can be toggled in `roles.guardrails`. Guardrail rules and doctor checks merge additively: the package defaults are always applied first, then any extras your published config lists, so a config that omits `rules` (or lists only custom rules) still enforces all eight built-ins. To switch a rule off, list its class in `roles.guardrails.disabled` (doctor checks use `roles.doctor.disabled`). Disabling a built-in guardrail is a security decision; do it deliberately.
 
 | Code | Meaning | Applies to system actor |
 | --- | --- | --- |
 | `guardrail.last_owner` | Fewer than `min_owners` owners would remain | yes |
-| `guardrail.self_role_change` | You changed your own role | no |
+| `guardrail.self_role_change` | You changed your own role, edited a role you hold, or restored a role you hold | no |
 | `guardrail.self_destructive` | You suspended, deactivated or deleted yourself | no |
-| `guardrail.escalation` | Granting a role with permissions you lack, or adding/removing the owner role as a non-owner | no |
+| `guardrail.escalation` | Granting or restoring a role with permissions you lack, or adding/removing/restoring the owner role as a non-owner | no |
 | `guardrail.actor_required` | A guarded write ran outside console with no authenticated actor and no explicit `runAs(null)` | n/a |
-| `guardrail.high_risk_confirm_required` | Adding a high-risk or owner role without `confirmed: true` | yes |
+| `guardrail.high_risk_confirm_required` | Adding or restoring a high-risk or owner role, or granting a high-risk permission, without `confirmed: true` | yes |
 | `guardrail.owner_role_locked` | Editing the Owner role's permissions (always on, no toggle) | yes |
 | `guardrail.system_role` | Deleting or renaming a system role (or the super role) | yes |
 | `guardrail.confirmation_mismatch` | Type-to-confirm text missing or wrong (an empty expected value, such as a user without an email, always mismatches) | yes |
@@ -148,56 +149,160 @@ Role-permission edits go through `Roles\Actions\UpdateRolePermissions` (one role
 | `PUT matrix` | `access.roles.update` | Body `{changes: {"<roleId>": {grant: [...], revoke: [...]}}, confirm?: bool}`; max 200 roles and 500 entries per list. Returns `{roles: {"<roleId>": {added, removed}}, summary: {granted, revoked, roles_changed, high_risk_granted}}` |
 | `PUT roles/{role}/permissions` | `access.roles.update` | Body `{grant?: [...], revoke?: [...], confirm?: bool}`; entries are permission ids (integers) or names (strings). Returns `{role, added, removed}`; a trashed role is 404 |
 
-The Owner role can't be edited by anyone (`guardrail.owner_role_locked`), a non-owner can't edit a role they hold (`guardrail.self_role_change`) or add a permission they lack (`guardrail.escalation`), and adding a high-risk permission needs `confirm: true` (`guardrail.high_risk_confirm_required`, also for the system actor). Permission references are ids when they are JSON integers and names when they are strings, so form-encoded posts (everything is a string) can only use names. A matrix update may reference at most 5000 permissions in total. Editing the Owner role is refused even when the change would be a no-op, so clients must not send the owner column. Roles are created without permissions; use `PUT roles/{role}/permissions` afterwards.
+The Owner role can't be edited by anyone (`guardrail.owner_role_locked`), a non-owner can't edit a role they hold (`guardrail.self_role_change`) or add a permission they lack (`guardrail.escalation`), and adding a high-risk permission needs `confirm: true` (`guardrail.high_risk_confirm_required`, also for the system actor). Permission references are ids when they are JSON integers and names when they are strings, so form-encoded posts (everything is a string) can only use names. A matrix update may reference at most 5000 permissions in total. Editing the Owner role is refused even when the change would be a no-op, so clients must not send the owner column. A role can also be created with permissions in one atomic call (`POST roles` with `permissions`, see Endpoint reference).
 
 ## Endpoint reference
 
-All paths are relative to `roles.routes.prefix` (default `api/access`) and run under `roles.routes.middleware` (set `['web', 'auth']` for session auth or `['api', 'auth:sanctum']` for tokens). Every route also carries a `can:` middleware for the permission below; failures use the error envelope (401 `unauthenticated`, 403 `forbidden`, 404 `not_found`, 422 `validation_failed`, plus the stable `guardrail.*` codes).
+All paths are relative to `roles.routes.prefix` (default `api/access`) and run under `roles.routes.middleware` (set `['web', 'auth']` for session auth or `['api', 'auth:sanctum']` for tokens) plus the `throttle:access` limiter. Every route also carries a `can:` (or `access:`) middleware for the permission below, and the read controllers authorize again themselves, so a host that re-registers the routes without the middleware is still protected. Failures use the error envelope (see Error codes).
+
+**Reference rules.** A role in a JSON body is an id when it is a JSON integer and a name when it is a string; a permission is likewise an id (integer) or a name (string). Form-encoded requests send everything as strings, so they can only use names. A string role reference is always a name, even when it is all digits (`"12"` is the role named `12`, never id 12). Route parameters (`{role}`, `{permission}`, `{user}`) are digits only (1 to 18 digits): uuid and ulid keys are not supported in 2.0-alpha.
+
+**Lists.** Every list accepts `search`, `filter[key]`, `sort` (`-` prefix for descending), `page`, `per_page` (max `pagination.max`) and `include`. Unknown filters, sorts and includes are ignored. Responses carry `meta.pagination`.
 
 | Method | Path | Permission | Notes |
 | --- | --- | --- | --- |
-| GET | `roles` | `access.roles.view` | Paginated list; `search`, `filter[type]` (system/custom), `filter[status]` (trashed/all), `filter[default]`, `sort`, `include` |
-| GET | `roles/overview` | `access.roles.view` | Counts for dashboards |
-| POST | `roles` | `access.roles.create` | `name`, `label{en,...}`, optional `description`, `color`, `is_default`, `sort_order`; always non-system |
-| GET | `roles/{role}` | `access.roles.view` | `label` maps plus `label_text` in the request locale |
-| PUT/PATCH | `roles/{role}` | `access.roles.update` | Replaces `label`/`description` wholesale; the Owner role can't be renamed |
+| GET | `me` | any `access.*` permission (or Owner) | The current user's package permissions and abilities; see Me |
+| GET | `roles` | `access.roles.view` | Paginated Role list. `search` matches `name` and the per-locale `label` and `description` values. Filters: `type` (`system`/`custom`), `status` (`trashed`: only trashed, `all`: live and trashed; default live only), `default` (boolean). Sorts: `name`, `members`, `permissions`, `updated`, `sort_order` (default). `include=permissions` |
+| GET | `roles/overview` | `access.roles.view` | Counts; see Overview payloads |
+| POST | `roles` | `access.roles.create` | Body: `name` (required, slug `[a-z0-9][a-z0-9._-]*`, 2 to 64 chars, unique among live roles), `label` (required, `{en, ar, ...}` with the default locale required), optional `description` map, `color` (`#rrggbb` or null), `is_default`, `sort_order` (default max + 1), `permissions` (list of ids or names, max 500) and `confirm` (acknowledges high-risk permissions). Always non-system. Permissions are planned and asserted in the same transaction (escalation, high-risk, deprecated, unknown): a refusal leaves no role and writes no audit entry. `is_default` is refused for the Owner role name (422 `role.default_not_allowed`). 201 with the Role |
+| GET | `roles/{role}` | `access.roles.view` | Role with `permissions`; a trashed role is returned too |
+| PUT/PATCH | `roles/{role}` | `access.roles.update` | Same fields as create (all optional, `permissions` is not accepted here). Replaces `label` / `description` wholesale. The Owner role can't be renamed; `is_default` is refused for the Owner role and system roles (422 `role.default_not_allowed`); a trashed role is 404 |
 | DELETE | `roles/{role}` | `access.roles.delete` | Soft delete; `confirmation` (exact role name) required when it has members; system and Owner roles refused |
-| POST | `roles/{role}/restore` | `access.roles.delete` | 409 `role.not_trashed` for a live role |
+| POST | `roles/{role}/restore` | `access.roles.delete` | Optional `confirm`. Guardrails: you can't restore a role you hold (`guardrail.self_role_change`), a role with permissions you lack or the Owner role (`guardrail.escalation`), and the Owner role or a role with high-risk permissions needs `confirm: true` (`guardrail.high_risk_confirm_required`). 409 `role.not_trashed` for a live role |
 | DELETE | `roles/{role}/force` | `access.roles.delete` | Trashed roles only; `confirmation` (exact name); 204 |
-| GET | `roles/{role}/members` | `access.roles.view` + `access.users.view` | Paginated members |
+| GET | `roles/{role}/members` | `access.roles.view` + `access.users.view` | Paginated Member list; `search` (name, email); sorts `name`, `email` |
 | PUT | `roles/{role}/permissions` | `access.roles.update` | `grant`, `revoke`, `confirm`; see Permission matrix |
-| POST | `users/{user}/roles` | `access.roles.assign` | `role` (name or id), `confirm` for the Owner role or high-risk roles |
-| PUT | `users/{user}/roles` | `access.roles.assign` | `roles: [...]` replaces the set (empty list allowed), `confirm` |
-| DELETE | `users/{user}/roles/{role}` | `access.roles.assign` | Last-owner and self-change guardrails apply |
-| GET | `permissions` | `access.permissions.view` | Paginated list with `source`, `risk`, `deprecated` |
-| GET | `permissions/overview` | `access.permissions.view` | Totals, per-module counts, owner-only permissions |
-| GET | `permissions/modules` | `access.permissions.view` | Module list |
-| GET | `permissions/check` | `access.permissions.view` | `?user=<id>&permission=<name>`: does the user hold the permission? |
-| POST | `permissions` | `access.permissions.sync` | Manual permission (`name`, `module`, `label`, `risk`); `source` is always `manual` |
+| POST | `users/{user}/roles` | `access.roles.assign` | `role` (name or id), `confirm` for the Owner role or high-risk roles. Returns `{user, roles}` |
+| PUT | `users/{user}/roles` | `access.roles.assign` | `roles: [...]` replaces the set (empty list allowed), `confirm`. Returns `{user, roles}` |
+| DELETE | `users/{user}/roles/{role}` | `access.roles.assign` | Last-owner and self-change guardrails apply. Returns `{user, roles}` |
+| GET | `permissions` | `access.permissions.view` | Paginated Permission list. `search` matches `name` and the per-locale `label` / `description`. Filters: `module`, `risk` (`low`/`medium`/`high`), `source` (`registry`/`manual`), `status` (`active` default, `deprecated`, `all`), `held` (`yes`/`no`: held by at least one role). Sorts: `name`, `module`, `risk`, `roles`, `updated`, `sort_order` (default) |
+| GET | `permissions/overview` | `access.permissions.view` | Counts; see Overview payloads |
+| GET | `permissions/modules` | `access.permissions.view` | `[{key, label, permissions_count}]` of active permissions |
+| GET | `permissions/check` | `access.permissions.view` + `access.users.view` | `?user=<id>&permission=<name>`. `permission` must be an existing permission of the configured guard (422 `validation_failed` otherwise: arbitrary gate abilities are never evaluated); an unknown user is 404. Returns `{allowed, via, roles}`: `via` is `owner`, `role` (`roles` lists the granting role names), `direct` or `null` |
+| POST | `permissions` | `access.permissions.sync` | Manual permission: `name` (slug, unique), `module`, `label`, optional `description`, `risk`, `sort_order`; `source` is always `manual` |
 | GET | `permissions/{permission}` | `access.permissions.view` | |
-| PUT/PATCH | `permissions/{permission}` | `access.permissions.sync` | Manual permissions only; registry ones are 409 `permission.registry_managed` |
-| DELETE | `permissions/{permission}` | `access.permissions.sync` | Manual only; `confirmation` (exact name) |
-| POST | `permissions/sync` | `access.permissions.sync` | `dry_run`, `prune`; dry run writes and audits nothing |
-| GET | `matrix` | `access.permissions.view` | Modules, roles with `permission_ids`, summary |
+| PUT/PATCH | `permissions/{permission}` | `access.permissions.sync` | Manual permissions only (registry ones are 409 `permission.registry_managed`). Lowering `risk` from `high` is refused with 409 `permission.in_use` while any role or user holds the permission, and is audited as a warning otherwise |
+| DELETE | `permissions/{permission}` | `access.permissions.sync` | Manual only, unheld only (409 `permission.in_use`); `confirmation` (exact name); 204 |
+| POST | `permissions/sync` | `access.permissions.sync` | `dry_run`, `prune`; returns a SyncResult; a dry run writes and audits nothing |
+| GET | `matrix` | `access.permissions.view` | Matrix payload |
 | PUT | `matrix` | `access.roles.update` | Atomic multi-role grant/revoke |
 
-Each effective write produces exactly one audit entry (two roles changed in a matrix update produce two). JSON requests only receive the locale cookie when the test or client sends credentials; in Laravel tests use `withCredentials()->withUnencryptedCookie('locale', 'ar')`.
+Each effective write produces exactly one audit entry (two roles changed in a matrix update produce two). Reads and no-op writes produce none. JSON requests only receive the locale cookie when the test or client sends credentials; in Laravel tests use `withCredentials()->withUnencryptedCookie('locale', 'ar')`.
+
+### Payloads
+
+Every success is `{success: true, message, data, meta}`; the shapes below are `data`. Timestamps are ISO 8601 strings. `*_text` fields are the value in the request locale with the fallback locale as fallback.
+
+**Role** (list, show, create, update, trash, restore):
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id`, `name` | int, string | |
+| `label`, `description` | map or null | Per-locale values; `label_text`, `description_text` are the request-locale values |
+| `color` | string or null | `#rrggbb` |
+| `is_system`, `is_default` | bool | |
+| `sort_order` | int | |
+| `members_count`, `permissions_count` | int | Present on list and detail responses |
+| `permissions` | list or absent | `{id, name, label_text, risk, module}`; present on detail responses and with `include=permissions` |
+| `deleted_at`, `created_at`, `updated_at` | string or null | |
+| `is_owner` | bool | The role is the super role (`roles.super_role`) of the configured guard |
+| `locked` | bool | `lock_reason` is not null |
+| `lock_reason` | `owner`, `system`, `held` or null | `owner`: the super role; `system`: a system role; `held`: a role the current user holds and the user is not an Owner (trashed roles they hold included). Priority owner, then system, then held. A UI should disable the matching controls and show the reason |
+| `abilities.create` | bool | The user may create roles |
+| `abilities.update` | bool | The user may update roles. Label, description, color and sort order stay editable on locked roles |
+| `abilities.rename` | bool | `update` and the role is not `owner` or `system`: only then may the UI send `name` (and `is_default`) |
+| `abilities.update_permissions` | bool | `update` and `lock_reason` is neither `owner` nor `held` (the server refuses both) |
+| `abilities.delete` | bool | The user may delete roles and the role is not `owner` or `system` |
+| `abilities.assign` | bool | The user may assign roles, and the role is not the Owner role unless the user is an Owner |
+
+These flags are computed without per-role queries (one query for the current user's roles, memoized per request). They mirror what the server would accept; the guardrails remain the authority.
+
+**RoleLite** (the `roles` of assignment responses): `id`, `name`, `label`, `label_text`, `color`, `is_system`.
+
+**Member** (the `user` of assignment responses and the members list): `id` always; `name` and `email` only when the current user holds `access.users.view` (the members list requires it).
+
+**Permission:** `id`, `name`, `module`, `label`, `label_text`, `description`, `description_text`, `risk` (`low`/`medium`/`high`), `source` (`registry`/`manual`), `deprecated_at`, `is_deprecated`, `last_synced_at`, `sort_order`, `roles_count` (live roles of the configured guard holding it; present on list and detail), `created_at`, `updated_at`.
+
+**SyncResult** (`POST permissions/sync`): `added`, `updated`, `restored`, `deprecated`, `pruned` (lists of permission names), `has_changes` (bool), `dry_run` (bool).
+
+**Matrix** (`GET matrix`): `{modules, roles, summary}`.
+- `modules`: `[{key, label, permissions: [{id, name, label_text, label, risk, deprecated}]}]`. Active permissions plus deprecated ones a live role still holds.
+- `roles`: `[{id, name, label_text, color, is_system, is_owner, locked, permission_ids}]`; `locked` is true for the Owner role, a role you hold (unless you are an Owner) and every role when you may not update roles.
+- `summary`: `{roles, permissions, grants}`.
+
+**Me** (`GET me`): `{permissions, is_owner, role_ids, abilities}`. `permissions` are the package permission names (`access.*`) the user holds (all of them for an Owner); `role_ids` are the live roles the user holds; `abilities` is `{roles: {view, create, update, delete, assign}, permissions: {view, sync}, matrix: {view, update}}`. The route needs the `access:any` middleware (alias registered by the package): the user must be an Owner or hold at least one `access.*` permission, otherwise 403 `forbidden`.
+
+**Overview payloads.**
+- Roles (`GET roles/overview`): `total_roles` (includes trashed), `active_roles`, `system_roles`, `custom_roles`, `trashed_roles` (`active_roles` + `trashed_roles` = `total_roles`; `system_roles` + `custom_roles` = `active_roles`), `members_with_role`, `members_without_role` (users of `roles.user_model` holding at least one / no role of the configured guard), `avg_permissions_per_role`.
+- Permissions (`GET permissions/overview`): `total`, `active`, `deprecated`, `high_risk`, `manual`, `modules_count`, `unused` (active permissions held by no live role), `total_grants`, `avg_per_role`, `by_module` (`[{module, count, high_risk}]`) and `owner_only`. `owner_only` lists up to 5 active permissions (ordered by `sort_order`, then name) that no live role other than the Owner role holds, as `{id, name, label_text, module, risk}`: the permissions only the Owner can use today.
+
+All roles and permissions are scoped to `roles.guard`: rows of another guard are 404 on `{role}` / `{permission}` routes and never appear in lists, overviews, modules, the matrix or the access check.
+
+### Error codes
+
+Errors are `{success: false, message, code, errors}`. `errors` is a field map for validation failures and an empty object otherwise.
+
+| Code | HTTP | When |
+| --- | --- | --- |
+| `validation_failed` | 422 | Request validation failed (`errors` lists the fields), including an unknown `permission` on the access check |
+| `unauthenticated` | 401 | No authenticated user |
+| `forbidden` | 403 | The user lacks the route permission |
+| `not_found` | 404 | Unknown, trashed (on routes that exclude them) or other-guard role, permission or user; unknown route |
+| `method_not_allowed` | 405 | Wrong HTTP method for a route |
+| `session_expired` | 419 | CSRF token mismatch or expired session; see Clients |
+| `conflict` | 409 | Another HTTP 409 raised outside the package codes |
+| `too_many_requests` | 429 | The `access` rate limit was exceeded |
+| `http_error` | other 4xx/5xx | Any other HTTP exception |
+| `guardrail.last_owner` | 403 | Fewer than `min_owners` owners would remain |
+| `guardrail.self_role_change` | 403 | Changing, or restoring, a role you hold; editing a role you hold |
+| `guardrail.self_destructive` | 403 | Suspending, deactivating or deleting yourself |
+| `guardrail.escalation` | 403 | Granting access above your own, or touching the Owner role as a non-owner (assign, remove, restore) |
+| `guardrail.high_risk_confirm_required` | 403 | A high-risk grant, the Owner role or a high-risk restore without `confirm: true` |
+| `guardrail.owner_role_locked` | 403 | Editing the Owner role's permissions |
+| `guardrail.system_role` | 403 | Deleting or renaming a system role or the Owner role |
+| `guardrail.confirmation_mismatch` | 403 | Type-to-confirm text missing or wrong |
+| `guardrail.actor_required` | 403 | A guarded write with no authenticated actor outside the console |
+| `role.not_trashed` | 409 | Restoring or force deleting a live role |
+| `role.name_taken` | 409 | Restoring a role whose name is now used by another role |
+| `role.name_taken_trashed` | 409 | Creating or renaming onto the name of a trashed role |
+| `role.default_not_allowed` | 422 | `is_default` on the Owner role or a system role |
+| `permission.not_found` | 404 | A referenced permission does not exist |
+| `permission.deprecated` | 409 | Granting a deprecated permission |
+| `permission.conflicting_changes` | 422 | The same permission in `grant` and `revoke` |
+| `permission.registry_managed` | 409 | Editing or deleting a registry permission |
+| `permission.in_use` | 409 | Deleting a held permission, or lowering the risk of a held high-risk one |
+| `registry.invalid` | 422 | The registry file failed validation during `permissions/sync` |
+
+### Rate limiting
+
+Package routes use the named limiter `access` (`throttle:access`), registered by the package unless your app defines its own. The key is the user id, or the IP for guests; the limit is `roles.http.rate_limit` requests per minute (default 60; `null` disables the limiter). Exceeding it answers 429 `too_many_requests` with the usual `Retry-After` headers.
+
+### Clients
+
+With session authentication send the `X-XSRF-TOKEN` header (the value of the `XSRF-TOKEN` cookie) with `Accept: application/json` on every write. A CSRF mismatch or an expired session answers 419 `session_expired`: refresh the page or the CSRF cookie and retry once. Token clients (`auth:sanctum` tokens) are not subject to CSRF.
 
 ## Audit
 
-Writes go to `enadstack/laravel-action-logger` (^1.1), module `roles` or `permissions`:
+Writes go to `enadstack/laravel-action-logger` (^1.1), module `roles` or `permissions`. Each effective write is one entry; no-ops, refusals and rollbacks write none.
 
-| Event | Subject | When |
-| --- | --- | --- |
-| `roles.assigned` / `roles.removed` / `roles.synced` | the user | only if the role set changed; `old_values`/`new_values` hold `roles`, `meta` holds `role` or `added`/`removed` |
-| `roles.seeded` | none | roles were created or restored |
-| `permissions.synced` | none | a non-dry-run sync changed something; counts per change type plus names (capped at 200 per list) |
+| Event | Module | Severity | Subject | When |
+| --- | --- | --- | --- | --- |
+| `roles.created` | roles | `info` (`warning` when a high-risk permission was granted) | the role | `meta.permissions` lists the permissions granted at creation; `meta.default_cleared_from` when `is_default` moved |
+| `roles.updated` | roles | `info` | the role | Changed attributes only (`old_values` / `new_values`); `meta.default_cleared_from` when `is_default` moved |
+| `roles.trashed` | roles | `info` (`warning` when the role had members) | the role | `meta.members_count` |
+| `roles.restored` | roles | `info` | the role | |
+| `roles.deleted` | roles | `critical` | none | Force delete; `old_values` and `meta` carry the name |
+| `roles.permissions_updated` | roles | `info` (`warning` when a high-risk permission was added) | the role | `old_values` / `new_values` hold `permissions`; `meta` holds `added` / `removed` |
+| `roles.assigned` / `roles.removed` / `roles.synced` | roles | `critical` when the Owner role is added or removed, `warning` when a high-risk role is added, else `info` | the user | Only if the role set changed; `old_values` / `new_values` hold `roles`, `meta` holds `role` or `added` / `removed` |
+| `roles.seeded` | roles | `info` | none | Roles were created or restored |
+| `permissions.created` | permissions | `info` | the permission | |
+| `permissions.updated` | permissions | `info` (`warning` when a high risk was lowered) | the permission | Changed attributes only |
+| `permissions.deleted` | permissions | `warning` | none | `meta` holds `id` and `name` |
+| `permissions.synced` | permissions | `info` (`warning` when permissions were deprecated or pruned) | none | A non-dry-run sync changed something; counts per change type plus names (capped at 200 per list) |
 
 Role write events (`roles.created`, `roles.updated`, `roles.trashed`, `roles.restored`, `roles.deleted`) are written once per effective change; a no-op update writes nothing. Moving `is_default` records `default_cleared_from` in `meta`.
 
-**Role endpoint notes.** `PUT`/`PATCH roles/{role}` replaces the `label` and `description` maps wholesale: sending only `en` drops `ar`. Renaming or creating onto the name of a trashed role answers 409 `role.name_taken_trashed` (restore it instead).
-
-Severity: `critical` when the owner role is added or removed, `warning` when a high-risk role is added (or a sync deprecated/pruned permissions), otherwise `info`.
+**Role endpoint notes.** `PUT`/`PATCH roles/{role}` replaces the `label` and `description` maps wholesale: sending only `en` drops `ar`. Renaming or creating onto the name of a trashed role answers 409 `role.name_taken_trashed` (restore it instead), except that renaming a system role is `guardrail.system_role` first.
 
 **After-commit semantics.** Entries are written after the surrounding transaction commits: a rollback (including an outer transaction) writes nothing. A failing logger is reported via `report()` and never breaks the role change. Disable with `roles.audit.enabled` or `roles.modules.audit`.
 
@@ -221,8 +326,6 @@ Severity: `critical` when the owner role is added or removed, `warning` when a h
 ```
 
 List endpoints (`Support\ListQuery`) accept `search`, `filter[key]=value` (whitelisted keys), `sort=name` / `sort=-name` (whitelisted), `page`, `per_page` (clamped to `pagination.max`) and `include=a,b` (whitelisted). Anything not whitelisted is ignored.
-
-Roles overview (`GET roles/overview`): `total_roles` includes trashed roles (`active_roles` + `trashed_roles` = `total_roles`); `system_roles` + `custom_roles` = `active_roles`. `members_with_role` / `members_without_role` count users of the configured user model. Role search matches the per-locale values of `label` and `description` (locales from `roles.locales`), never the JSON keys.
 
 ## Testing
 
