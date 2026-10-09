@@ -9,7 +9,10 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Permission\Models\Role as SpatieRole;
 
-/** @property bool $is_system */
+/**
+ * @property bool $is_system
+ * @property bool $is_default
+ */
 class Role extends SpatieRole
 {
     use HasTranslations;
