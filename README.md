@@ -150,6 +150,39 @@ Role-permission edits go through `Roles\Actions\UpdateRolePermissions` (one role
 
 The Owner role can't be edited by anyone (`guardrail.owner_role_locked`), a non-owner can't edit a role they hold (`guardrail.self_role_change`) or add a permission they lack (`guardrail.escalation`), and adding a high-risk permission needs `confirm: true` (`guardrail.high_risk_confirm_required`, also for the system actor). Permission references are ids when they are JSON integers and names when they are strings, so form-encoded posts (everything is a string) can only use names. A matrix update may reference at most 5000 permissions in total. Editing the Owner role is refused even when the change would be a no-op, so clients must not send the owner column. Roles are created without permissions; use `PUT roles/{role}/permissions` afterwards.
 
+## Endpoint reference
+
+All paths are relative to `roles.routes.prefix` (default `api/access`) and run under `roles.routes.middleware` (set `['web', 'auth']` for session auth or `['api', 'auth:sanctum']` for tokens). Every route also carries a `can:` middleware for the permission below; failures use the error envelope (401 `unauthenticated`, 403 `forbidden`, 404 `not_found`, 422 `validation_failed`, plus the stable `guardrail.*` codes).
+
+| Method | Path | Permission | Notes |
+| --- | --- | --- | --- |
+| GET | `roles` | `access.roles.view` | Paginated list; `search`, `filter[type]` (system/custom), `filter[status]` (trashed/all), `filter[default]`, `sort`, `include` |
+| GET | `roles/overview` | `access.roles.view` | Counts for dashboards |
+| POST | `roles` | `access.roles.create` | `name`, `label{en,...}`, optional `description`, `color`, `is_default`, `sort_order`; always non-system |
+| GET | `roles/{role}` | `access.roles.view` | `label` maps plus `label_text` in the request locale |
+| PUT/PATCH | `roles/{role}` | `access.roles.update` | Replaces `label`/`description` wholesale; the Owner role can't be renamed |
+| DELETE | `roles/{role}` | `access.roles.delete` | Soft delete; `confirmation` (exact role name) required when it has members; system and Owner roles refused |
+| POST | `roles/{role}/restore` | `access.roles.delete` | 409 `role.not_trashed` for a live role |
+| DELETE | `roles/{role}/force` | `access.roles.delete` | Trashed roles only; `confirmation` (exact name); 204 |
+| GET | `roles/{role}/members` | `access.roles.view` + `access.users.view` | Paginated members |
+| PUT | `roles/{role}/permissions` | `access.roles.update` | `grant`, `revoke`, `confirm`; see Permission matrix |
+| POST | `users/{user}/roles` | `access.roles.assign` | `role` (name or id), `confirm` for the Owner role or high-risk roles |
+| PUT | `users/{user}/roles` | `access.roles.assign` | `roles: [...]` replaces the set (empty list allowed), `confirm` |
+| DELETE | `users/{user}/roles/{role}` | `access.roles.assign` | Last-owner and self-change guardrails apply |
+| GET | `permissions` | `access.permissions.view` | Paginated list with `source`, `risk`, `deprecated` |
+| GET | `permissions/overview` | `access.permissions.view` | Totals, per-module counts, owner-only permissions |
+| GET | `permissions/modules` | `access.permissions.view` | Module list |
+| GET | `permissions/check` | `access.permissions.view` | `?user=<id>&permission=<name>`: does the user hold the permission? |
+| POST | `permissions` | `access.permissions.sync` | Manual permission (`name`, `module`, `label`, `risk`); `source` is always `manual` |
+| GET | `permissions/{permission}` | `access.permissions.view` | |
+| PUT/PATCH | `permissions/{permission}` | `access.permissions.sync` | Manual permissions only; registry ones are 409 `permission.registry_managed` |
+| DELETE | `permissions/{permission}` | `access.permissions.sync` | Manual only; `confirmation` (exact name) |
+| POST | `permissions/sync` | `access.permissions.sync` | `dry_run`, `prune`; dry run writes and audits nothing |
+| GET | `matrix` | `access.permissions.view` | Modules, roles with `permission_ids`, summary |
+| PUT | `matrix` | `access.roles.update` | Atomic multi-role grant/revoke |
+
+Each effective write produces exactly one audit entry (two roles changed in a matrix update produce two). JSON requests only receive the locale cookie when the test or client sends credentials; in Laravel tests use `withCredentials()->withUnencryptedCookie('locale', 'ar')`.
+
 ## Audit
 
 Writes go to `enadstack/laravel-action-logger` (^1.1), module `roles` or `permissions`:
