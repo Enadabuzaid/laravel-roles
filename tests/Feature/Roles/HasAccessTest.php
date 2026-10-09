@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use Enadstack\LaravelRoles\Models\Permission;
 use Enadstack\LaravelRoles\Models\Role;
+use Enadstack\LaravelRoles\Roles\OwnerGate;
+use Illuminate\Contracts\Auth\Access\Gate as GateContract;
 use Illuminate\Support\Facades\Gate;
 use Spatie\Permission\Exceptions\RoleDoesNotExist;
 use Tests\Support\TestUser;
@@ -61,4 +63,30 @@ it('does not grant a role to a user whose assign fails inside the transaction', 
 
     expect(fn () => $user->assignAccessRole('does-not-exist'))->toThrow(RoleDoesNotExist::class);
     expect($user->getRoleNames()->all())->toBe([]);
+});
+
+it('does not block abilities defined on the gate for non-owners', function () {
+    Gate::define('custom.ability', fn () => true);
+    $user = makeUser('plain@example.test');
+
+    expect(Gate::forUser($user)->allows('custom.ability'))->toBeTrue()
+        ->and(Gate::forUser($user)->allows('undefined.ability'))->toBeFalse();
+});
+
+it('returns exactly null for non-owners and true for owners from the owner gate', function () {
+    $gate = new OwnerGate;
+    $plain = makeUser('plain@example.test');
+    $owner = makeUser('own@example.test');
+    Role::create(['name' => 'owner', 'guard_name' => 'web']);
+    $owner->assignAccessRole('owner');
+
+    expect($gate($plain))->toBeNull()
+        ->and($gate($owner->fresh()))->toBeTrue()
+        ->and($gate(new stdClass))->toBeNull();
+});
+
+it('registers the owner gate as a Gate::before callback', function () {
+    $callbacks = (new ReflectionProperty(app(GateContract::class), 'beforeCallbacks'))->getValue(app(GateContract::class));
+
+    expect(collect($callbacks)->contains(fn ($callback) => $callback instanceof OwnerGate))->toBeTrue();
 });

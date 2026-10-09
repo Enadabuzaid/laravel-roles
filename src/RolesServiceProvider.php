@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Enadstack\LaravelRoles;
 
-use Enadstack\LaravelRoles\Contracts\AccessUser;
 use Enadstack\LaravelRoles\Support\Http\ApiExceptionRenderer;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Filesystem\Filesystem;
@@ -53,11 +52,7 @@ class RolesServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        Gate::before(function ($user): ?bool {
-            $super = config('roles.super_role');
-
-            return $super && $user instanceof AccessUser && $user->hasRole($super) ? true : null;
-        });
+        Gate::before(new Roles\OwnerGate);
 
         if ($this->app->runningInConsole()) {
             $this->publishes([__DIR__.'/../config/roles.php' => config_path('roles.php')], 'roles-config');
