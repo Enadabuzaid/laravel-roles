@@ -86,5 +86,6 @@ return [
             DeprecatedStillHeldCheck::class,
             CacheWorkingCheck::class,
         ],
+        'disabled' => [],
     ],
 ];

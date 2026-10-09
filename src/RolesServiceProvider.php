@@ -20,6 +20,15 @@ class RolesServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/roles.php', 'roles');
 
+        $package = require __DIR__.'/../config/roles.php';
+        $checks = array_values(array_unique([
+            ...(array) ($package['doctor']['checks'] ?? []),
+            ...(array) config('roles.doctor.checks', []),
+        ]));
+        $disabled = (array) config('roles.doctor.disabled', []);
+
+        config(['roles.doctor.checks' => array_values(array_diff($checks, $disabled))]);
+
         foreach (['role' => Models\Role::class, 'permission' => Models\Permission::class] as $key => $class) {
             $spatie = $key === 'role' ? Role::class : Permission::class;
             $current = config("permission.models.{$key}");
