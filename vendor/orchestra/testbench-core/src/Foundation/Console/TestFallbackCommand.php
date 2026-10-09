@@ -32,6 +32,7 @@ class TestFallbackCommand extends Command
         {--profile : Lists top 10 slowest tests}
         {--recreate-databases : Indicates if the test databases should be re-created}
         {--drop-databases : Indicates if the test databases should be dropped}
+        {--without-cache : Indicates if cache configuration should be performed}
         {--without-databases : Indicates if database configuration should be performed}
         {--c|--custom-argument : Add custom env variables}
     ';
@@ -45,7 +46,7 @@ class TestFallbackCommand extends Command
 
     /** {@inheritDoc} */
     #[\Override]
-    public function configure()
+    public function configure(): void
     {
         parent::configure();
 
@@ -77,7 +78,7 @@ class TestFallbackCommand extends Command
      */
     protected function installCollisionDependencies(): void
     {
-        $version = '8.0';
+        $version = '8.9';
 
         $command = \sprintf('%s require "nunomaduro/collision:^%s" --dev', $this->findComposer(), $version);
 

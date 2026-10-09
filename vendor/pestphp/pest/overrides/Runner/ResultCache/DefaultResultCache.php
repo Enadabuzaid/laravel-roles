@@ -72,10 +72,7 @@ use function Pest\version;
  */
 final class DefaultResultCache implements ResultCache
 {
-    /**
-     * @var string
-     */
-    private const DEFAULT_RESULT_CACHE_FILENAME = '.phpunit.result.cache';
+    private const string DEFAULT_RESULT_CACHE_FILENAME = '.phpunit.result.cache';
 
     private readonly string $cacheFilename;
 

@@ -52,8 +52,11 @@ class HasOneThrough extends HasOneOrManyThrough implements SupportsPartialRelati
         // link them up with their children using the keyed dictionary to make the
         // matching very convenient and easy work. Then we'll just return them.
         foreach ($models as $model) {
-            if (isset($dictionary[$key = $this->getDictionaryKey($model->getAttribute($this->localKey))])) {
+            $key = $this->getDictionaryKey($model->getAttribute($this->localKey));
+
+            if ($key !== null && isset($dictionary[$key])) {
                 $value = $dictionary[$key];
+
                 $model->setRelation(
                     $relation, reset($value)
                 );
@@ -66,11 +69,13 @@ class HasOneThrough extends HasOneOrManyThrough implements SupportsPartialRelati
     /** @inheritDoc */
     public function getRelationExistenceQuery(Builder $query, Builder $parentQuery, $columns = ['*'])
     {
+        $query = parent::getRelationExistenceQuery($query, $parentQuery, $columns);
+
         if ($this->isOneOfMany()) {
             $this->mergeOneOfManyJoinsTo($query);
         }
 
-        return parent::getRelationExistenceQuery($query, $parentQuery, $columns);
+        return $query;
     }
 
     /** @inheritDoc */
@@ -105,6 +110,16 @@ class HasOneThrough extends HasOneOrManyThrough implements SupportsPartialRelati
     public function newRelatedInstanceFor(Model $parent)
     {
         return $this->related->newInstance();
+    }
+
+    /** @inheritDoc */
+    public function is($model)
+    {
+        return ! is_null($model) &&
+               ! is_null($this->getParentKey()) &&
+               $this->related->getTable() === $model->getTable() &&
+               $this->related->getConnectionName() === $model->getConnectionName() &&
+               (clone $this->query)->whereKey($model->getKey())->exists();
     }
 
     /** @inheritDoc */

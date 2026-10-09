@@ -1,14 +1,14 @@
 @props(['frame'])
 
 @php
-    if ($class = $frame->class()) {
-        $source = $class;
+    $class = $frame->class();
+    $operator = $frame->operator();
+    $callable = $frame->callable();
 
-        if ($previous = $frame->previous()) {
-            $source .= $previous->operator();
-            $source .= $previous->callable();
-            $source .= '('.implode(', ', $previous->args()).')';
-        }
+    if ($class && $operator) {
+        $source = $class.$operator.$callable.'('.implode(', ', $frame->args()).')';
+    } elseif ($callable !== 'throw') {
+        $source = $callable.'('.implode(', ', $frame->args()).')';
     } else {
         $source = $frame->source();
     }
@@ -19,5 +19,5 @@
     language="php"
     truncate
     class="text-xs min-w-0"
-    data-tippy-content="{{ $source }}"
+    data-tippy-html-content="{{ $source }}"
 />

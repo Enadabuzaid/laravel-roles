@@ -17,20 +17,13 @@ use Symfony\Component\Console\Output\OutputInterface;
  */
 final class Coverage implements AddsOutput, HandlesArguments
 {
-    /**
-     * @var string
-     */
-    private const COVERAGE_OPTION = 'coverage';
+    private const string COVERAGE_OPTION = 'coverage';
 
-    /**
-     * @var string
-     */
-    private const MIN_OPTION = 'min';
+    private const string MIN_OPTION = 'min';
 
-    /**
-     * @var string
-     */
-    private const EXACTLY_OPTION = 'exactly';
+    private const string EXACTLY_OPTION = 'exactly';
+
+    private const string ONLY_COVERED_OPTION = 'only-covered';
 
     /**
      * Whether it should show the coverage or not.
@@ -53,6 +46,11 @@ final class Coverage implements AddsOutput, HandlesArguments
     public ?float $coverageExactly = null;
 
     /**
+     * Whether it should show only covered files.
+     */
+    public bool $showOnlyCovered = false;
+
+    /**
      * Creates a new Plugin instance.
      */
     public function __construct(private readonly OutputInterface $output)
@@ -66,7 +64,7 @@ final class Coverage implements AddsOutput, HandlesArguments
     public function handleArguments(array $originals): array
     {
         $arguments = [...[''], ...array_values(array_filter($originals, function (string $original): bool {
-            foreach ([self::COVERAGE_OPTION, self::MIN_OPTION, self::EXACTLY_OPTION] as $option) {
+            foreach ([self::COVERAGE_OPTION, self::MIN_OPTION, self::EXACTLY_OPTION, self::ONLY_COVERED_OPTION] as $option) {
                 if ($original === sprintf('--%s', $option)) {
                     return true;
                 }
@@ -89,6 +87,7 @@ final class Coverage implements AddsOutput, HandlesArguments
         $inputs[] = new InputOption(self::COVERAGE_OPTION, null, InputOption::VALUE_NONE);
         $inputs[] = new InputOption(self::MIN_OPTION, null, InputOption::VALUE_REQUIRED);
         $inputs[] = new InputOption(self::EXACTLY_OPTION, null, InputOption::VALUE_REQUIRED);
+        $inputs[] = new InputOption(self::ONLY_COVERED_OPTION, null, InputOption::VALUE_NONE);
 
         $input = new ArgvInput($arguments, new InputDefinition($inputs));
         if ((bool) $input->getOption(self::COVERAGE_OPTION)) {
@@ -129,6 +128,10 @@ final class Coverage implements AddsOutput, HandlesArguments
             $this->coverageExactly = (float) $exactlyOption;
         }
 
+        if ((bool) $input->getOption(self::ONLY_COVERED_OPTION)) {
+            $this->showOnlyCovered = true;
+        }
+
         if ($_SERVER['COLLISION_PRINTER_COMPACT'] ?? false) {
             $this->compact = true;
         }
@@ -153,7 +156,7 @@ final class Coverage implements AddsOutput, HandlesArguments
                 exit(1);
             }
 
-            $coverage = \Pest\Support\Coverage::report($this->output, $this->compact);
+            $coverage = \Pest\Support\Coverage::report($this->output, $this->compact, $this->showOnlyCovered);
             $exitCode = (int) ($coverage < $this->coverageMin);
 
             if ($exitCode === 0 && $this->coverageExactly !== null) {

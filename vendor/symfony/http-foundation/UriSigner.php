@@ -57,18 +57,8 @@ class UriSigner
      *
      * The expiration is added as a query string parameter.
      */
-    public function sign(string $uri/* , \DateTimeInterface|\DateInterval|int|null $expiration = null */): string
+    public function sign(string $uri, \DateTimeInterface|\DateInterval|int|null $expiration = null): string
     {
-        $expiration = null;
-
-        if (1 < \func_num_args()) {
-            $expiration = func_get_arg(1);
-        }
-
-        if (null !== $expiration && !$expiration instanceof \DateTimeInterface && !$expiration instanceof \DateInterval && !\is_int($expiration)) {
-            throw new \TypeError(\sprintf('The second argument of "%s()" must be an instance of "%s" or "%s", an integer or null (%s given).', __METHOD__, \DateTimeInterface::class, \DateInterval::class, get_debug_type($expiration)));
-        }
-
         $url = parse_url($uri);
         $params = [];
 
@@ -121,19 +111,12 @@ class UriSigner
         $uri = self::normalize($uri);
         $status = $this->doVerify($uri);
 
-        if (self::STATUS_VALID === $status) {
-            return;
-        }
-
-        if (self::STATUS_MISSING === $status) {
-            throw new UnsignedUriException();
-        }
-
-        if (self::STATUS_INVALID === $status) {
-            throw new UnverifiedSignedUriException();
-        }
-
-        throw new ExpiredSignedUriException();
+        match ($status) {
+            self::STATUS_VALID => null,
+            self::STATUS_INVALID => throw new UnverifiedSignedUriException(),
+            self::STATUS_EXPIRED => throw new ExpiredSignedUriException(),
+            default => throw new UnsignedUriException(),
+        };
     }
 
     private function computeHash(string $uri): string
@@ -189,18 +172,17 @@ class UriSigner
             parse_str($url['query'], $params);
         }
 
-        if (empty($params[$this->hashParameter])) {
+        if (!\is_string($hash = $params[$this->hashParameter] ?? null) || '' === $hash) {
             return self::STATUS_MISSING;
         }
 
-        $hash = $params[$this->hashParameter];
         unset($params[$this->hashParameter]);
 
         if (!hash_equals($this->computeHash($this->buildUrl($url, $params)), strtr(rtrim($hash, '='), ['/' => '_', '+' => '-']))) {
             return self::STATUS_INVALID;
         }
 
-        if (!$expiration = $params[$this->expirationParameter] ?? false) {
+        if (null === $expiration = $params[$this->expirationParameter] ?? null) {
             return self::STATUS_VALID;
         }
 

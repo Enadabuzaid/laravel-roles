@@ -34,7 +34,7 @@ final class CompactPrinter
     /**
      * @var array<string, array<int, string>>
      */
-    private const LOOKUP_TABLE = [
+    private const array LOOKUP_TABLE = [
         '.' => ['gray', '.'],
         'S' => ['yellow', 's'],
         'T' => ['cyan', 't'],
@@ -62,12 +62,12 @@ final class CompactPrinter
     /**
      * Creates a new instance of the Compact Printer.
      */
-    public static function default(): self
+    public static function default(bool $decorated = true): self
     {
         return new self(
             terminal(),
-            new ConsoleOutput(decorated: true),
-            new Style(new ConsoleOutput(decorated: true)),
+            new ConsoleOutput(decorated: $decorated),
+            new Style(new ConsoleOutput(decorated: $decorated)),
             terminal()->width() - 4,
         );
     }
@@ -131,14 +131,14 @@ final class CompactPrinter
             $status['collected'],
             $status['threshold'],
             $status['roots'],
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
+            0.00,
+            0.00,
+            0.00,
+            0.00,
+            false,
+            false,
+            false,
+            0,
         );
 
         $telemetry = new Info(

@@ -13,7 +13,7 @@ use Throwable;
  */
 final class ExceptionTrace
 {
-    private const UNDEFINED_METHOD = 'Call to undefined method P\\';
+    private const string UNDEFINED_METHOD = 'Call to undefined method P\\';
 
     /**
      * Ensures the given closure reports the good execution context.
@@ -26,6 +26,7 @@ final class ExceptionTrace
             return $closure();
         } catch (Throwable $throwable) {
             if (Str::startsWith($message = $throwable->getMessage(), self::UNDEFINED_METHOD)) {
+                // @phpstan-ignore-next-line
                 $class = preg_match('/^Call to undefined method ([^:]+)::/', $message, $matches) === false ? null : $matches[1];
 
                 $message = str_replace(self::UNDEFINED_METHOD, 'Call to undefined method ', $message);

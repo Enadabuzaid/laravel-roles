@@ -12,6 +12,7 @@ use Pest\Factories\Attribute;
 use Pest\Factories\TestCaseMethodFactory;
 use Pest\Mutate\Repositories\ConfigurationRepository;
 use Pest\PendingCalls\Concerns\Describable;
+use Pest\Plugins\Environment;
 use Pest\Plugins\Only;
 use Pest\Support\Backtrace;
 use Pest\Support\Container;
@@ -21,6 +22,10 @@ use Pest\Support\NullClosure;
 use Pest\Support\Str;
 use Pest\TestSuite;
 use PHPUnit\Framework\AssertionFailedError;
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\CoversFunction;
+use PHPUnit\Framework\Attributes\CoversTrait;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -178,10 +183,9 @@ final class TestCall // @phpstan-ignore-line
     }
 
     /**
-     * Runs the current test multiple times with
-     * each item of the given `iterable`.
+     * Runs the current test multiple times with each item of the given `iterable`.
      *
-     * @param  array<\Closure|iterable<int|string, mixed>|string>  $data
+     * @param  Closure|iterable<array-key, mixed>|string  $data
      */
     public function with(Closure|iterable|string ...$data): self
     {
@@ -211,7 +215,7 @@ final class TestCall // @phpstan-ignore-line
     {
         foreach ($groups as $group) {
             $this->testCaseMethod->attributes[] = new Attribute(
-                \PHPUnit\Framework\Attributes\Group::class,
+                Group::class,
                 [$group],
             );
         }
@@ -316,6 +320,61 @@ final class TestCall // @phpstan-ignore-line
     }
 
     /**
+     * Weather the current test is running on a CI environment.
+     */
+    private function runningOnCI(): bool
+    {
+        foreach ([
+            'CI',
+            'GITHUB_ACTIONS',
+            'GITLAB_CI',
+            'CIRCLECI',
+            'TRAVIS',
+            'APPVEYOR',
+            'BITBUCKET_BUILD_NUMBER',
+            'BUILDKITE',
+            'TEAMCITY_VERSION',
+            'JENKINS_URL',
+            'SYSTEM_COLLECTIONURI',
+            'CI_NAME',
+            'TASKCLUSTER_ROOT_URL',
+            'DRONE',
+            'WERCKER',
+            'NEVERCODE',
+            'SEMAPHORE',
+            'NETLIFY',
+            'NOW_BUILDER',
+        ] as $env) {
+            if (getenv($env) !== false) {
+                return true;
+            }
+        }
+
+        return Environment::name() === Environment::CI;
+    }
+
+    /**
+     * Skips the current test when running on a CI environments.
+     */
+    public function skipOnCI(): self
+    {
+        if ($this->runningOnCI()) {
+            return $this->skip('This test is skipped on [CI].');
+        }
+
+        return $this;
+    }
+
+    public function skipLocally(): self
+    {
+        if ($this->runningOnCI() === false) {
+            return $this->skip('This test is skipped [locally].');
+        }
+
+        return $this;
+    }
+
+    /**
      * Skips the current test unless the given test is running on Windows.
      */
     public function onlyOnWindows(): self
@@ -349,6 +408,20 @@ final class TestCall // @phpstan-ignore-line
         }
 
         $this->testCaseMethod->repetitions = $times;
+
+        return $this;
+    }
+
+    /**
+     * Marks the test as flaky, retrying it up to the given number of times.
+     */
+    public function flaky(int $tries = 3): self
+    {
+        if ($tries < 1) {
+            throw new InvalidArgumentException('The number of tries must be greater than 0.');
+        }
+
+        $this->testCaseMethod->flakyTries = $tries;
 
         return $this;
     }
@@ -549,7 +622,7 @@ final class TestCall // @phpstan-ignore-line
     {
         foreach ($classes as $class) {
             $this->testCaseFactoryAttributes[] = new Attribute(
-                \PHPUnit\Framework\Attributes\CoversClass::class,
+                CoversClass::class,
                 [$class],
             );
         }
@@ -572,7 +645,7 @@ final class TestCall // @phpstan-ignore-line
     {
         foreach ($traits as $trait) {
             $this->testCaseFactoryAttributes[] = new Attribute(
-                \PHPUnit\Framework\Attributes\CoversTrait::class,
+                CoversTrait::class,
                 [$trait],
             );
         }
@@ -595,7 +668,7 @@ final class TestCall // @phpstan-ignore-line
     {
         foreach ($functions as $function) {
             $this->testCaseFactoryAttributes[] = new Attribute(
-                \PHPUnit\Framework\Attributes\CoversFunction::class,
+                CoversFunction::class,
                 [$function],
             );
         }
@@ -604,16 +677,27 @@ final class TestCall // @phpstan-ignore-line
     }
 
     /**
-     * Sets that the current test covers nothing.
+     * Adds one or more references to the tested method or class. This helps
+     * to link test cases to the source code for easier navigation.
+     *
+     * @param  array<class-string|string>|class-string  ...$classes
      */
-    public function coversNothing(): self
+    public function references(string|array ...$classes): self
     {
-        $this->testCaseMethod->attributes[] = new Attribute(
-            \PHPUnit\Framework\Attributes\CoversNothing::class,
-            [],
-        );
+        assert($classes !== []);
 
         return $this;
+    }
+
+    /**
+     * Adds one or more references to the tested method or class. This helps
+     * to link test cases to the source code for easier navigation.
+     *
+     * @param  array<class-string|string>|class-string  ...$classes
+     */
+    public function see(string|array ...$classes): self
+    {
+        return $this->references(...$classes);
     }
 
     /**
@@ -693,7 +777,12 @@ final class TestCall // @phpstan-ignore-line
         $this->testSuite->tests->set($this->testCaseMethod);
 
         if (! is_null($testCase = $this->testSuite->tests->get($this->filename))) {
-            $testCase->attributes = array_merge($testCase->attributes, $this->testCaseFactoryAttributes);
+            $attributesToMerge = array_filter(
+                $this->testCaseFactoryAttributes,
+                fn (Attribute $attributeToMerge): bool => array_filter($testCase->attributes, fn (Attribute $attribute): bool => serialize($attributeToMerge) === serialize($attribute)) === []
+            );
+
+            $testCase->attributes = array_merge($testCase->attributes, $attributesToMerge);
         }
     }
 }

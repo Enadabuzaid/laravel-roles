@@ -44,6 +44,16 @@ final class PendingArchExpectation
     }
 
     /**
+     * Filters the given "targets" by only abstract classes.
+     */
+    public function abstractClasses(): self
+    {
+        $this->excludeCallbacks[] = fn (ObjectDescription $object): bool => ! class_exists($object->name) || ! $object->reflectionClass->isAbstract();
+
+        return $this;
+    }
+
+    /**
      * Filters the given "targets" by only interfaces.
      */
     public function interfaces(): self
@@ -90,7 +100,6 @@ final class PendingArchExpectation
      */
     public function extending(string $parentClass): self
     {
-        // @phpstan-ignore-next-line
         $this->excludeCallbacks[] = fn (ObjectDescription $object): bool => ! is_subclass_of($object->name, $parentClass);
 
         return $this;
@@ -130,7 +139,7 @@ final class PendingArchExpectation
 
         if ($archExpectation instanceof HigherOrderExpectation) { // @phpstan-ignore-line
             // @phpstan-ignore-next-line
-            $originalExpectation = (fn (): \Pest\Expectation => $this->original)->call($archExpectation);
+            $originalExpectation = (fn (): Expectation => $this->original)->call($archExpectation);
         } else {
             $originalExpectation = $archExpectation;
         }

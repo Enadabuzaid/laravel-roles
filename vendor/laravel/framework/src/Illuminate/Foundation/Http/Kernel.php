@@ -12,7 +12,7 @@ use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Routing\Pipeline;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Facade;
+use Illuminate\Support\Facades\Request;
 use Illuminate\Support\InteractsWithTime;
 use InvalidArgumentException;
 use Throwable;
@@ -165,7 +165,7 @@ class Kernel implements KernelContract
     {
         $this->app->instance('request', $request);
 
-        Facade::clearResolvedInstance('request');
+        Request::clearResolvedInstance();
 
         $this->bootstrap();
 
@@ -485,23 +485,21 @@ class Kernel implements KernelContract
     protected function addToMiddlewarePriorityRelative($existing, $middleware, $after = true)
     {
         if (! in_array($middleware, $this->middlewarePriority)) {
-            $index = $after ? 0 : count($this->middlewarePriority);
+            $index = null;
 
             foreach ((array) $existing as $existingMiddleware) {
                 if (in_array($existingMiddleware, $this->middlewarePriority)) {
                     $middlewareIndex = array_search($existingMiddleware, $this->middlewarePriority);
 
-                    if ($after && $middlewareIndex > $index) {
+                    if ($after && (is_null($index) || $middlewareIndex >= $index)) {
                         $index = $middlewareIndex + 1;
-                    } elseif ($after === false && $middlewareIndex < $index) {
+                    } elseif ($after === false && (is_null($index) || $middlewareIndex < $index)) {
                         $index = $middlewareIndex;
                     }
                 }
             }
 
-            if ($index === 0 && $after === false) {
-                array_unshift($this->middlewarePriority, $middleware);
-            } elseif (($after && $index === 0) || $index === count($this->middlewarePriority)) {
+            if (is_null($index) || $index === count($this->middlewarePriority)) {
                 $this->middlewarePriority[] = $middleware;
             } else {
                 array_splice($this->middlewarePriority, $index, 0, $middleware);
@@ -577,7 +575,7 @@ class Kernel implements KernelContract
     /**
      * Get the application's global middleware.
      *
-     * @return array
+     * @return array<int, class-string|string>
      */
     public function getGlobalMiddleware()
     {
@@ -602,7 +600,7 @@ class Kernel implements KernelContract
     /**
      * Get the application's route middleware groups.
      *
-     * @return array
+     * @return array<string, array<int, class-string|string>>
      */
     public function getMiddlewareGroups()
     {

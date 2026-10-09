@@ -9,7 +9,6 @@
  */
 namespace SebastianBergmann\FileIterator;
 
-use function assert;
 use function preg_match;
 use function realpath;
 use function str_ends_with;
@@ -25,8 +24,8 @@ use SplFileInfo;
  */
 final class Iterator extends FilterIterator
 {
-    public const PREFIX = 0;
-    public const SUFFIX = 1;
+    public const int PREFIX = 0;
+    public const int SUFFIX = 1;
     private false|string $basePath;
 
     /**
@@ -40,8 +39,9 @@ final class Iterator extends FilterIterator
     private array $prefixes;
 
     /**
-     * @param list<string> $suffixes
-     * @param list<string> $prefixes
+     * @param \Iterator<int, SplFileInfo> $iterator
+     * @param list<string>                $suffixes
+     * @param list<string>                $prefixes
      */
     public function __construct(string $basePath, \Iterator $iterator, array $suffixes = [], array $prefixes = [])
     {
@@ -55,8 +55,6 @@ final class Iterator extends FilterIterator
     public function accept(): bool
     {
         $current = $this->getInnerIterator()->current();
-
-        assert($current instanceof SplFileInfo);
 
         $filename = $current->getFilename();
         $realPath = $current->getRealPath();
@@ -75,7 +73,7 @@ final class Iterator extends FilterIterator
     private function acceptPath(string $path): bool
     {
         // Filter files in hidden directories by checking path that is relative to the base path.
-        if (preg_match('=/\.[^/]*/=', str_replace((string) $this->basePath, '', $path))) {
+        if (preg_match('=/\.[^/]*/=', str_replace((string) $this->basePath, '', $path)) === 1) {
             return false;
         }
 
@@ -97,7 +95,7 @@ final class Iterator extends FilterIterator
      */
     private function acceptSubString(string $filename, array $subStrings, int $type): bool
     {
-        if (empty($subStrings)) {
+        if ($subStrings === []) {
             return true;
         }
 

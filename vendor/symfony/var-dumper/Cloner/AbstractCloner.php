@@ -29,6 +29,7 @@ abstract class AbstractCloner implements ClonerInterface
 
         'Symfony\Component\VarDumper\Caster\CutStub' => ['Symfony\Component\VarDumper\Caster\StubCaster', 'castStub'],
         'Symfony\Component\VarDumper\Caster\CutArrayStub' => ['Symfony\Component\VarDumper\Caster\StubCaster', 'castCutArray'],
+        'Symfony\Component\VarDumper\Caster\ClassDumpStub' => ['Symfony\Component\VarDumper\Caster\StubCaster', 'castClassDump'],
         'Symfony\Component\VarDumper\Caster\ConstStub' => ['Symfony\Component\VarDumper\Caster\StubCaster', 'castStub'],
         'Symfony\Component\VarDumper\Caster\EnumStub' => ['Symfony\Component\VarDumper\Caster\StubCaster', 'castEnum'],
         'Symfony\Component\VarDumper\Caster\ScalarStub' => ['Symfony\Component\VarDumper\Caster\StubCaster', 'castScalar'],
@@ -167,8 +168,6 @@ abstract class AbstractCloner implements ClonerInterface
         'CurlHandle' => ['Symfony\Component\VarDumper\Caster\CurlCaster', 'castCurl'],
 
         'Dba\Connection' => ['Symfony\Component\VarDumper\Caster\ResourceCaster', 'castDba'],
-        ':dba' => ['Symfony\Component\VarDumper\Caster\ResourceCaster', 'castDba'],
-        ':dba persistent' => ['Symfony\Component\VarDumper\Caster\ResourceCaster', 'castDba'],
 
         'GdImage' => ['Symfony\Component\VarDumper\Caster\GdCaster', 'castGd'],
 
@@ -236,18 +235,33 @@ abstract class AbstractCloner implements ClonerInterface
     /**
      * Adds casters for resources and objects.
      *
-     * Maps resources or objects types to a callback.
-     * Types are in the key, with a callable caster for value.
-     * Resource types are to be prefixed with a `:`,
-     * see e.g. static::$defaultCasters.
+     * Maps resources or object types to a callback.
+     * Use types as keys and callable casters as values.
+     * Prefix types with `::`,
+     * see e.g. self::$defaultCasters.
      *
-     * @param callable[] $casters A map of casters
+     * @param array<string, callable> $casters A map of casters
      */
     public function addCasters(array $casters): void
     {
         foreach ($casters as $type => $callback) {
             $this->casters[$type][] = $callback;
         }
+    }
+
+    /**
+     * Adds default casters for resources and objects.
+     *
+     * Maps resources or object types to a callback.
+     * Use types as keys and callable casters as values.
+     * Prefix types with `::`,
+     * see e.g. self::$defaultCasters.
+     *
+     * @param array<string, callable> $casters A map of casters
+     */
+    public static function addDefaultCasters(array $casters): void
+    {
+        self::$defaultCasters = [...self::$defaultCasters, ...$casters];
     }
 
     /**

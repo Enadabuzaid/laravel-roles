@@ -3,13 +3,13 @@
 namespace Orchestra\Testbench\Attributes;
 
 use Attribute;
-use Illuminate\Foundation\Application;
-use Illuminate\Support\Facades\Facade;
 use Orchestra\Testbench\Contracts\Attributes\AfterEach as AfterEachContract;
 use Orchestra\Testbench\Contracts\Attributes\BeforeEach as BeforeEachContract;
+use Orchestra\Testbench\Foundation\Actions\CreateVendorSymlink;
 use Orchestra\Testbench\Foundation\Actions\DeleteVendorSymlink;
-use Orchestra\Testbench\Foundation\Application as Testbench;
+use Orchestra\Testbench\PHPUnit\Assert;
 
+use function Orchestra\Testbench\in_parallel_testing;
 use function Orchestra\Testbench\package_path;
 
 #[Attribute(Attribute::TARGET_CLASS | Attribute::TARGET_METHOD)]
@@ -28,14 +28,15 @@ final class UsesVendor implements AfterEachContract, BeforeEachContract
      */
     public function beforeEach($app): void
     {
-        $laravel = Testbench::createVendorSymlink(base_path(), package_path('vendor'));
+        Assert::markTestSkippedWhen(
+            in_parallel_testing(), \sprintf('Unable to use parallel testing with `#[%s]` attribute.', self::class)
+        );
+
+        $laravel = clone $app;
+
+        (new CreateVendorSymlink(package_path('vendor')))->handle($laravel);
 
         $this->vendorSymlinkCreated = $laravel['TESTBENCH_VENDOR_SYMLINK'] ?? false;
-
-        Facade::clearResolvedInstances();
-        Facade::setFacadeApplication($app);
-
-        Application::setInstance($app);
     }
 
     /**

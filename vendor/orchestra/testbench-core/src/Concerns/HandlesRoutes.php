@@ -12,12 +12,14 @@ use Orchestra\Testbench\Attributes\UsesVendor;
 use Orchestra\Testbench\Features\TestingFeature;
 use Orchestra\Testbench\Foundation\Bootstrap\SyncTestbenchCachedRoutes;
 
-use function Orchestra\Sidekick\join_paths;
+use function Orchestra\Sidekick\Filesystem\join_paths;
+use function Orchestra\Testbench\in_parallel_testing;
 use function Orchestra\Testbench\refresh_router_lookups;
 use function Orchestra\Testbench\remote;
 
 trait HandlesRoutes
 {
+    use HandlesAssertions;
     use InteractsWithPHPUnit;
     use InteractsWithTestCase;
 
@@ -52,9 +54,6 @@ trait HandlesRoutes
                 $router->middleware('web')
                     ->group(fn ($router) => $this->defineWebRoutes($router));
             },
-            annotation: fn () => $this->parseTestMethodAnnotations($app, 'define-route', function ($method) use ($router) {
-                $this->{$method}($router);
-            }),
             attribute: fn () => $this->parseTestMethodAttributes($app, DefineRoute::class),
             pest: function () use ($router) {
                 $this->defineRoutesUsingPest($router); // @phpstan-ignore method.notFound
@@ -117,6 +116,8 @@ trait HandlesRoutes
      */
     protected function defineCacheRoutes(Closure|string $route, bool $cached = true): void
     {
+        $this->markTestSkippedWhen(in_parallel_testing(), 'Unable to support parallel testing with `defineCacheRoutes()`.');
+
         static::usesTestingFeature($attribute = new UsesVendor, Attribute::TARGET_METHOD);
 
         if (

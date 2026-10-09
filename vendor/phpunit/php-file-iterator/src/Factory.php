@@ -9,6 +9,7 @@
  */
 namespace SebastianBergmann\FileIterator;
 
+use const DIRECTORY_SEPARATOR;
 use const GLOB_ONLYDIR;
 use function array_filter;
 use function array_map;
@@ -20,12 +21,14 @@ use function is_dir;
 use function is_string;
 use function realpath;
 use function sort;
+use function str_ends_with;
 use function stripos;
 use function substr;
 use AppendIterator;
 use FilesystemIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use UnexpectedValueException;
 
 /**
  * @internal This class is not covered by the backward compatibility promise for phpunit/php-file-iterator
@@ -37,6 +40,8 @@ final class Factory
      * @param list<non-empty-string>|string           $suffixes
      * @param list<non-empty-string>|string           $prefixes
      * @param list<non-empty-string>                  $exclude
+     *
+     * @phpstan-ignore missingType.generics
      */
     public function getFileIterator(array|string $paths, array|string $suffixes = '', array|string $prefixes = '', array $exclude = []): AppendIterator
     {
@@ -66,24 +71,55 @@ final class Factory
         $iterator = new AppendIterator;
 
         foreach ($paths as $path) {
-            if (is_dir($path)) {
-                $iterator->append(
-                    new Iterator(
-                        $path,
-                        new RecursiveIteratorIterator(
-                            new ExcludeIterator(
-                                new RecursiveDirectoryIterator($path, FilesystemIterator::FOLLOW_SYMLINKS | FilesystemIterator::SKIP_DOTS),
-                                $exclude,
-                            ),
-                        ),
-                        $suffixes,
-                        $prefixes,
-                    ),
-                );
+            if (!is_dir($path)) {
+                continue;
             }
+
+            $directoryIterator = $this->directoryIterator($path);
+
+            if ($directoryIterator === null) {
+                continue;
+            }
+
+            $iterator->append(
+                new Iterator(
+                    $path,
+                    new RecursiveIteratorIterator(
+                        new ExcludeIterator(
+                            $directoryIterator,
+                            $exclude,
+                        ),
+                        RecursiveIteratorIterator::LEAVES_ONLY,
+                        RecursiveIteratorIterator::CATCH_GET_CHILD,
+                    ),
+                    $suffixes,
+                    $prefixes,
+                ),
+            );
         }
 
         return $iterator;
+    }
+
+    /**
+     * A directory that cannot be opened is skipped instead of aborting the
+     * traversal it is part of.
+     *
+     * This happens when the directory cannot be read by the current user, and
+     * it happens when the directory is removed by another process after it was
+     * read from its parent directory and before it is opened here.
+     *
+     * RecursiveIteratorIterator::CATCH_GET_CHILD does this for the directories
+     * that are descended into; this method does it for the root of a traversal,
+     * which is opened here and not by RecursiveIteratorIterator.
+     */
+    private function directoryIterator(string $path): ?RecursiveDirectoryIterator
+    {
+        try {
+            return new RecursiveDirectoryIterator($path, FilesystemIterator::FOLLOW_SYMLINKS | FilesystemIterator::SKIP_DOTS);
+        } catch (UnexpectedValueException) {
+            return null;
+        }
     }
 
     /**
@@ -96,12 +132,31 @@ final class Factory
         $_paths = [[]];
 
         foreach ($paths as $path) {
-            if ($locals = $this->globstar($path)) {
-                $_paths[] = array_map('\realpath', $locals);
+            $pathEndsWithDirectorySeparator = str_ends_with($path, '/') || str_ends_with($path, DIRECTORY_SEPARATOR);
+            $locals                         = $this->globstar($path);
+
+            if ($locals !== []) {
+                $_paths[] = array_map(
+                    static function (string $local) use ($pathEndsWithDirectorySeparator): string|false
+                    {
+                        $realPath = realpath($local);
+
+                        if ($realPath !== false && $pathEndsWithDirectorySeparator && is_dir($realPath)) {
+                            return $realPath . DIRECTORY_SEPARATOR;
+                        }
+
+                        return $realPath;
+                    },
+                    $locals,
+                );
             } else {
-                // @codeCoverageIgnoreStart
-                $_paths[] = [realpath($path)];
-                // @codeCoverageIgnoreEnd
+                $realPath = realpath($path);
+
+                if ($realPath !== false && $pathEndsWithDirectorySeparator && is_dir($realPath)) {
+                    $_paths[] = [$realPath . DIRECTORY_SEPARATOR];
+                } else {
+                    $_paths[] = [$realPath];
+                }
             }
         }
 
@@ -113,7 +168,7 @@ final class Factory
      *
      * @return list<string>
      */
-    private function globstar(string $pattern)
+    private function globstar(string $pattern): array
     {
         if (stripos($pattern, '**') === false) {
             $files = glob($pattern, GLOB_ONLYDIR);
@@ -125,23 +180,24 @@ final class Factory
             $patterns = [$rootPattern . $restPattern];
             $rootPattern .= '/*';
 
-            while ($dirs = glob($rootPattern, GLOB_ONLYDIR)) {
+            while ($directories = glob($rootPattern, GLOB_ONLYDIR)) {
                 $rootPattern .= '/*';
 
-                foreach ($dirs as $dir) {
-                    $patterns[] = $dir . $restPattern;
+                foreach ($directories as $directory) {
+                    $patterns[] = $directory . $restPattern;
                 }
             }
 
             $files = [];
 
-            foreach ($patterns as $pat) {
-                $files = array_merge($files, $this->globstar($pat));
+            foreach ($patterns as $_pattern) {
+                $files = array_merge($files, $this->globstar($_pattern));
             }
         }
 
         if ($files !== false) {
             $files = array_unique($files);
+
             sort($files);
 
             return $files;

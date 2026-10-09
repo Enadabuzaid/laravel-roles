@@ -11,6 +11,10 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\Concerns\InteractsWithDictionary;
 use Illuminate\Database\Query\Grammars\MySqlGrammar;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection as BaseCollection;
+
+use function Illuminate\Support\enum_value;
 
 /**
  * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
@@ -98,11 +102,11 @@ abstract class HasOneOrManyThrough extends Relation
     {
         $query = $this->getRelationQuery();
 
-        $localValue = $this->farParent[$this->localKey];
-
         $this->performJoin($query);
 
         if (static::$constraints) {
+            $localValue = $this->farParent[$this->localKey];
+
             $query->where($this->getQualifiedFirstKeyName(), '=', $localValue);
         }
     }
@@ -129,7 +133,7 @@ abstract class HasOneOrManyThrough extends Relation
     }
 
     /**
-     * Get the fully qualified parent key name.
+     * Get the fully-qualified parent key name.
      *
      * @return string
      */
@@ -177,20 +181,42 @@ abstract class HasOneOrManyThrough extends Relation
      * Build model dictionary keyed by the relation's foreign key.
      *
      * @param  \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>  $results
-     * @return array<array<TRelatedModel>>
+     * @return array<array<array-key, TRelatedModel>>
      */
     protected function buildDictionary(EloquentCollection $results)
     {
         $dictionary = [];
 
+        $isAssociative = Arr::isAssoc($results->all());
+
         // First we will create a dictionary of models keyed by the foreign key of the
         // relationship as this will allow us to quickly access all of the related
         // models without having to do nested looping which will be quite slow.
-        foreach ($results as $result) {
-            $dictionary[$result->laravel_through_key][] = $result;
+        foreach ($results as $key => $result) {
+            if ($isAssociative) {
+                $dictionary[$result->laravel_through_key][$key] = $result;
+            } else {
+                $dictionary[$result->laravel_through_key][] = $result;
+            }
         }
 
         return $dictionary;
+    }
+
+    /**
+     * Find a related model by its primary key or return a new instance of the related model.
+     *
+     * @param  mixed  $id
+     * @param  array  $columns
+     * @return ($id is (\Illuminate\Contracts\Support\Arrayable<array-key, mixed>|array<mixed>) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel> : TRelatedModel)
+     */
+    public function findOrNew($id, $columns = ['*'])
+    {
+        if (is_null($instance = $this->find($id, $columns))) {
+            $instance = $this->related->newInstance();
+        }
+
+        return $instance;
     }
 
     /**
@@ -213,29 +239,31 @@ abstract class HasOneOrManyThrough extends Relation
      * Get the first record matching the attributes. If the record is not found, create it.
      *
      * @param  array  $attributes
-     * @param  array  $values
+     * @param  (\Closure(): array)|array  $values
      * @return TRelatedModel
      */
-    public function firstOrCreate(array $attributes = [], array $values = [])
+    public function firstOrCreate(array $attributes = [], Closure|array $values = [])
     {
         if (! is_null($instance = (clone $this)->where($attributes)->first())) {
             return $instance;
         }
 
-        return $this->createOrFirst(array_merge($attributes, $values));
+        return $this->createOrFirst(array_merge($attributes, value($values)));
     }
 
     /**
      * Attempt to create the record. If a unique constraint violation occurs, attempt to find the matching record.
      *
      * @param  array  $attributes
-     * @param  array  $values
+     * @param  (\Closure(): array)|array  $values
      * @return TRelatedModel
+     *
+     * @throws \Illuminate\Database\UniqueConstraintViolationException
      */
-    public function createOrFirst(array $attributes = [], array $values = [])
+    public function createOrFirst(array $attributes = [], Closure|array $values = [])
     {
         try {
-            return $this->getQuery()->withSavepointIfNeeded(fn () => $this->create(array_merge($attributes, $values)));
+            return $this->getQuery()->withSavepointIfNeeded(fn () => $this->create(array_merge($attributes, value($values))));
         } catch (UniqueConstraintViolationException $exception) {
             return $this->where($attributes)->first() ?? throw $exception;
         }
@@ -396,6 +424,8 @@ abstract class HasOneOrManyThrough extends Relation
         $id = $id instanceof Arrayable ? $id->toArray() : $id;
 
         if (is_array($id)) {
+            $id = array_map(enum_value(...), $id);
+
             if (count($result) === count(array_unique($id))) {
                 return $result;
             }
@@ -433,6 +463,8 @@ abstract class HasOneOrManyThrough extends Relation
         $id = $id instanceof Arrayable ? $id->toArray() : $id;
 
         if (is_array($id)) {
+            $id = array_map(enum_value(...), $id);
+
             if (count($result) === count(array_unique($id))) {
                 return $result;
             }
@@ -584,9 +616,9 @@ abstract class HasOneOrManyThrough extends Relation
      */
     public function eachById(callable $callback, $count = 1000, $column = null, $alias = null)
     {
-        $column = $column ?? $this->getRelated()->getQualifiedKeyName();
+        $column ??= $this->getRelated()->getQualifiedKeyName();
 
-        $alias = $alias ?? $this->getRelated()->getKeyName();
+        $alias ??= $this->getRelated()->getKeyName();
 
         return $this->prepareQueryBuilder()->eachById($callback, $count, $column, $alias);
     }
@@ -617,6 +649,28 @@ abstract class HasOneOrManyThrough extends Relation
                 }
             }
         });
+    }
+
+    /**
+     * Run a map over each item while chunking.
+     *
+     * @template TReturn
+     *
+     * @param  callable(TRelatedModel): TReturn  $callback
+     * @param  int  $count
+     * @return \Illuminate\Support\Collection<int, TReturn>
+     */
+    public function chunkMap(callable $callback, $count = 1000)
+    {
+        $collection = new BaseCollection;
+
+        $this->chunk($count, function ($items) use ($collection, $callback) {
+            $items->each(function ($item) use ($collection, $callback) {
+                $collection->push($callback($item));
+            });
+        });
+
+        return $collection;
     }
 
     /**

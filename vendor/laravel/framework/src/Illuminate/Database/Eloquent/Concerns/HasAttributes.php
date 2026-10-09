@@ -13,6 +13,10 @@ use DateTimeInterface;
 use Illuminate\Contracts\Database\Eloquent\Castable;
 use Illuminate\Contracts\Database\Eloquent\CastsInboundAttributes;
 use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Database\Eloquent\Attributes\Appends;
+use Illuminate\Database\Eloquent\Attributes\DateFormat;
+use Illuminate\Database\Eloquent\Attributes\Initialize;
+use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Casts\AsArrayObject;
 use Illuminate\Database\Eloquent\Casts\AsCollection;
 use Illuminate\Database\Eloquent\Casts\AsEncryptedArrayObject;
@@ -205,6 +209,12 @@ trait HasAttributes
         $this->casts = $this->ensureCastsAreStringValues(
             array_merge($this->casts, $this->casts()),
         );
+
+        $this->dateFormat ??= static::resolveClassAttribute(DateFormat::class, 'format')
+            ?? static::resolveClassAttribute(Table::class)->dateFormat
+            ?? null;
+
+        $this->mergeAppends(static::resolveClassAttribute(Appends::class, 'columns') ?? []);
     }
 
     /**
@@ -236,7 +246,7 @@ trait HasAttributes
         // as these attributes are not really in the attributes array, but are run
         // when we need to array or JSON the model for convenience to the coder.
         foreach ($this->getArrayableAppends() as $key) {
-            $attributes[$key] = $this->mutateAttributeForArray($key, null);
+            $attributes[$key] = $this->mutateAttributeForArray($key, $this->getAttributeFromArray($key));
         }
 
         return $attributes;
@@ -251,7 +261,7 @@ trait HasAttributes
     protected function addDateAttributesToArray(array $attributes)
     {
         foreach ($this->getDates() as $key) {
-            if (! isset($attributes[$key])) {
+            if (is_null($key) || ! isset($attributes[$key])) {
                 continue;
             }
 
@@ -363,12 +373,14 @@ trait HasAttributes
      */
     protected function getArrayableAppends()
     {
-        if (! count($this->appends)) {
+        $appends = $this->getAppends();
+
+        if (! count($appends)) {
             return [];
         }
 
         return $this->getArrayableItems(
-            array_combine($this->appends, $this->appends)
+            array_combine($appends, $appends)
         );
     }
 
@@ -508,11 +520,13 @@ trait HasAttributes
         if ($this->exists &&
             ! $this->wasRecentlyCreated &&
             static::preventsAccessingMissingAttributes()) {
+            $exception = new MissingAttributeException($this, $key);
+
             if (isset(static::$missingAttributeViolationCallback)) {
-                return call_user_func(static::$missingAttributeViolationCallback, $this, $key);
+                return call_user_func(static::$missingAttributeViolationCallback, $this, $key, $exception);
             }
 
-            throw new MissingAttributeException($this, $key);
+            throw $exception;
         }
 
         return null;
@@ -537,7 +551,9 @@ trait HasAttributes
      */
     protected function getAttributeFromArray($key)
     {
-        return $this->getAttributes()[$key] ?? null;
+        $this->mergeAttributeFromCachedCasts($key);
+
+        return $this->attributes[$key] ?? null;
     }
 
     /**
@@ -594,18 +610,24 @@ trait HasAttributes
      *
      * @param  string  $key
      * @return mixed
+     *
+     * @throws \Illuminate\Database\LazyLoadingViolationException
      */
     protected function handleLazyLoadingViolation($key)
     {
+        $exception = new LazyLoadingViolationException($this, $key);
+
         if (isset(static::$lazyLoadingViolationCallback)) {
-            return call_user_func(static::$lazyLoadingViolationCallback, $this, $key);
+            return call_user_func(
+                static::$lazyLoadingViolationCallback, $this, $key, $exception
+            );
         }
 
         if (! $this->exists || $this->wasRecentlyCreated) {
             return;
         }
 
-        throw new LazyLoadingViolationException($this, $key);
+        throw $exception;
     }
 
     /**
@@ -618,7 +640,7 @@ trait HasAttributes
      */
     protected function getRelationshipFromMethod($method)
     {
-        $relation = $this->$method();
+        $relation = Relation::withConstraintsForNestedRelation(fn () => $this->$method());
 
         if (! $relation instanceof Relation) {
             if (is_null($relation)) {
@@ -710,6 +732,8 @@ trait HasAttributes
      */
     protected function mutateAttribute($key, $value)
     {
+        $this->mergeAttributesFromCachedCasts();
+
         return $this->{'get'.Str::studly($key).'Attribute'}($value);
     }
 
@@ -725,6 +749,8 @@ trait HasAttributes
         if (array_key_exists($key, $this->attributeCastCache)) {
             return $this->attributeCastCache[$key];
         }
+
+        $this->mergeAttributesFromCachedCasts();
 
         $attribute = $this->{Str::camel($key)}();
 
@@ -786,6 +812,8 @@ trait HasAttributes
      *
      * @param  array  $casts
      * @return array
+     *
+     * @throws \InvalidArgumentException
      */
     protected function ensureCastsAreStringValues($casts)
     {
@@ -1157,6 +1185,8 @@ trait HasAttributes
      */
     protected function setMutatedAttributeValue($key, $value)
     {
+        $this->mergeAttributesFromCachedCasts();
+
         return $this->{'set'.Str::studly($key).'Attribute'}($value);
     }
 
@@ -1169,6 +1199,8 @@ trait HasAttributes
      */
     protected function setAttributeMarkedMutatedAttributeValue($key, $value)
     {
+        $this->mergeAttributesFromCachedCasts();
+
         $attribute = $this->{Str::camel($key)}();
 
         $callback = $attribute->set ?: function ($value) use ($key) {
@@ -1214,13 +1246,17 @@ trait HasAttributes
     {
         [$key, $path] = explode('->', $key, 2);
 
+        $this->mergeAttributeFromCachedCasts($key);
+
         $value = $this->asJson($this->getArrayAttributeWithValue(
             $path, $key, $value
         ), $this->getJsonCastFlags($key));
 
-        $this->attributes[$key] = $this->isEncryptedCastable($key)
-            ? $this->castAttributeAsEncryptedString($key, $value)
-            : $value;
+        $this->attributes[$key] = match (true) {
+            $this->isEncryptedCastable($key) => $this->castAttributeAsEncryptedString($key, $value),
+            $this->isEncryptedClassCastable($key) => Crypt::encryptString($value),
+            default => $value,
+        };
 
         if ($this->isClassCastable($key)) {
             unset($this->classCastCache[$key]);
@@ -1283,7 +1319,7 @@ trait HasAttributes
      *
      * @param  string  $enumClass
      * @param  string|int  $value
-     * @return \UnitEnum|\BackedEnum
+     * @return \UnitEnum
      */
     protected function getEnumCaseFromValue($enumClass, $value)
     {
@@ -1296,8 +1332,10 @@ trait HasAttributes
      * Get the storable value from the given enum.
      *
      * @param  string  $expectedEnum
-     * @param  \UnitEnum|\BackedEnum  $value
+     * @param  \UnitEnum  $value
      * @return string|int
+     *
+     * @throws \ValueError
      */
     protected function getStorableEnumValue($expectedEnum, $value)
     {
@@ -1314,7 +1352,7 @@ trait HasAttributes
      * @param  string  $path
      * @param  string  $key
      * @param  mixed  $value
-     * @return $this
+     * @return array
      */
     protected function getArrayAttributeWithValue($path, $key, $value)
     {
@@ -1335,11 +1373,11 @@ trait HasAttributes
             return [];
         }
 
-        return $this->fromJson(
-            $this->isEncryptedCastable($key)
-                ? $this->fromEncryptedString($this->attributes[$key])
-                : $this->attributes[$key]
-        );
+        return $this->fromJson(match (true) {
+            $this->isEncryptedCastable($key) => $this->fromEncryptedString($this->attributes[$key]),
+            $this->isEncryptedClassCastable($key) => Crypt::decryptString($this->attributes[$key]),
+            default => $this->attributes[$key],
+        });
     }
 
     /**
@@ -1348,6 +1386,8 @@ trait HasAttributes
      * @param  string  $key
      * @param  mixed  $value
      * @return string
+     *
+     * @throws \Illuminate\Database\Eloquent\JsonEncodingException
      */
     protected function castAttributeAsJson($key, $value)
     {
@@ -1456,7 +1496,9 @@ trait HasAttributes
      *
      * @param  string  $key
      * @param  mixed  $value
-     * @return string
+     * @return string|null
+     *
+     * @throws \RuntimeException
      */
     protected function castAttributeAsHashedString($key, #[\SensitiveParameter] $value)
     {
@@ -1498,11 +1540,13 @@ trait HasAttributes
      * @param  float|string  $value
      * @param  int  $decimals
      * @return string
+     *
+     * @throws \Illuminate\Support\Exceptions\MathException
      */
     protected function asDecimal($value, $decimals)
     {
         try {
-            return (string) BigDecimal::of($value)->toScale($decimals, RoundingMode::HALF_UP);
+            return (string) BigDecimal::of((string) $value)->toScale($decimals, RoundingMode::HalfUp);
         } catch (BrickMathException $e) {
             throw new MathException('Unable to cast value to a decimal.', previous: $e);
         }
@@ -1622,7 +1666,7 @@ trait HasAttributes
     /**
      * Get the attributes that should be converted to dates.
      *
-     * @return array
+     * @return array<int, string|null>
      */
     public function getDates()
     {
@@ -1688,11 +1732,25 @@ trait HasAttributes
     /**
      * Get the attributes that should be cast.
      *
-     * @return array<string, string>
+     * @return array<string, Stringable|string>
      */
     protected function casts()
     {
         return [];
+    }
+
+    /**
+     * Merge the default values into the model's attributes.
+     *
+     * @return void
+     */
+    protected function mergeDefaultAttributes()
+    {
+        if (! in_array(HasDefaultAttributes::class, class_uses_recursive(static::class), true)) {
+            return;
+        }
+
+        $this->attributes = array_merge($this->attributes, $this->defaults());
     }
 
     /**
@@ -1737,6 +1795,18 @@ trait HasAttributes
     protected function isEncryptedCastable($key)
     {
         return $this->hasCast($key, ['encrypted', 'encrypted:array', 'encrypted:collection', 'encrypted:json', 'encrypted:object']);
+    }
+
+    /**
+     * Determine whether a value is an encrypted class castable for inbound manipulation.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    protected function isEncryptedClassCastable($key)
+    {
+        return $this->isClassCastable($key) &&
+            Str::startsWith($this->getCasts()[$key], [AsEncryptedArrayObject::class, AsEncryptedCollection::class]);
     }
 
     /**
@@ -1897,6 +1967,17 @@ trait HasAttributes
     }
 
     /**
+     * Merge the cast class and attribute cast attribute back into the model.
+     *
+     * @return void
+     */
+    protected function mergeAttributeFromCachedCasts(string $key)
+    {
+        $this->mergeAttributeFromClassCasts($key);
+        $this->mergeAttributeFromAttributeCasts($key);
+    }
+
+    /**
      * Merge the cast class attributes back into the model.
      *
      * @return void
@@ -1904,15 +1985,31 @@ trait HasAttributes
     protected function mergeAttributesFromClassCasts()
     {
         foreach ($this->classCastCache as $key => $value) {
-            $caster = $this->resolveCasterClass($key);
-
-            $this->attributes = array_merge(
-                $this->attributes,
-                $caster instanceof CastsInboundAttributes
-                    ? [$key => $value]
-                    : $this->normalizeCastClassResponse($key, $caster->set($this, $key, $value, $this->attributes))
-            );
+            $this->mergeAttributeFromClassCasts($key);
         }
+    }
+
+    /**
+     * Merge the cast class attribute back into the model.
+     *
+     * @return void
+     */
+    protected function mergeAttributeFromClassCasts(string $key): void
+    {
+        if (! isset($this->classCastCache[$key])) {
+            return;
+        }
+
+        $value = $this->classCastCache[$key];
+
+        $caster = $this->resolveCasterClass($key);
+
+        $this->attributes = array_merge(
+            $this->attributes,
+            $caster instanceof CastsInboundAttributes
+                ? [$key => $value]
+                : $this->normalizeCastClassResponse($key, $caster->set($this, $key, $value, $this->attributes))
+        );
     }
 
     /**
@@ -1923,23 +2020,39 @@ trait HasAttributes
     protected function mergeAttributesFromAttributeCasts()
     {
         foreach ($this->attributeCastCache as $key => $value) {
-            $attribute = $this->{Str::camel($key)}();
-
-            if ($attribute->get && ! $attribute->set) {
-                continue;
-            }
-
-            $callback = $attribute->set ?: function ($value) use ($key) {
-                $this->attributes[$key] = $value;
-            };
-
-            $this->attributes = array_merge(
-                $this->attributes,
-                $this->normalizeCastClassResponse(
-                    $key, $callback($value, $this->attributes)
-                )
-            );
+            $this->mergeAttributeFromAttributeCasts($key);
         }
+    }
+
+    /**
+     * Merge the cast class attribute back into the model.
+     *
+     * @return void
+     */
+    protected function mergeAttributeFromAttributeCasts(string $key): void
+    {
+        if (! isset($this->attributeCastCache[$key])) {
+            return;
+        }
+
+        $value = $this->attributeCastCache[$key];
+
+        $attribute = $this->{Str::camel($key)}();
+
+        if ($attribute->get && ! $attribute->set) {
+            return;
+        }
+
+        $callback = $attribute->set ?: function ($value) use ($key) {
+            $this->attributes[$key] = $value;
+        };
+
+        $this->attributes = array_merge(
+            $this->attributes,
+            $this->normalizeCastClassResponse(
+                $key, $callback($value, $this->attributes)
+            )
+        );
     }
 
     /**
@@ -2007,7 +2120,7 @@ trait HasAttributes
     public function getOriginal($key = null, $default = null)
     {
         return (new static)->setRawAttributes(
-            $this->original, $sync = true
+            $this->original, sync: true
         )->getOriginalWithoutRewindingModel($key, $default);
     }
 
@@ -2407,6 +2520,10 @@ trait HasAttributes
      */
     public function mergeAppends(array $appends)
     {
+        if ($appends === []) {
+            return $this;
+        }
+
         $this->appends = array_values(array_unique(array_merge($this->appends, $appends)));
 
         return $this;
@@ -2420,7 +2537,17 @@ trait HasAttributes
      */
     public function hasAppended($attribute)
     {
-        return in_array($attribute, $this->appends);
+        return in_array($attribute, $this->getAppends());
+    }
+
+    /**
+     * Remove all appended properties from the model.
+     *
+     * @return $this
+     */
+    public function withoutAppends()
+    {
+        return $this->setAppends([]);
     }
 
     /**

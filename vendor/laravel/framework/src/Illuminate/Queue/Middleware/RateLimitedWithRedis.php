@@ -12,11 +12,11 @@ class RateLimitedWithRedis extends RateLimited
     use InteractsWithTime;
 
     /**
-     * The Redis factory implementation.
+     * The name of the Redis connection that should be used.
      *
-     * @var \Illuminate\Contracts\Redis\Factory
+     * @var string|null
      */
-    protected $redis;
+    protected $connectionName = null;
 
     /**
      * The timestamp of the end of the current duration by key.
@@ -28,13 +28,13 @@ class RateLimitedWithRedis extends RateLimited
     /**
      * Create a new middleware instance.
      *
-     * @param  string  $limiterName
+     * @param  \UnitEnum|string  $limiterName
      */
-    public function __construct($limiterName)
+    public function __construct($limiterName, ?string $connection = null)
     {
         parent::__construct($limiterName);
 
-        $this->redis = Container::getInstance()->make(Redis::class);
+        $this->connectionName = $connection;
     }
 
     /**
@@ -55,6 +55,14 @@ class RateLimitedWithRedis extends RateLimited
             }
         }
 
+        foreach ($limits as $limit) {
+            if (! $this->acquire($limit->key, $limit->maxAttempts, $limit->decaySeconds)) {
+                return $this->shouldRelease
+                    ? $job->release($this->releaseAfter ?: $this->getTimeUntilNextRetry($limit->key))
+                    : false;
+            }
+        }
+
         return $next($job);
     }
 
@@ -68,11 +76,38 @@ class RateLimitedWithRedis extends RateLimited
      */
     protected function tooManyAttempts($key, $maxAttempts, $decaySeconds)
     {
+        $redis = Container::getInstance()
+            ->make(Redis::class)
+            ->connection($this->connectionName);
+
         $limiter = new DurationLimiter(
-            $this->redis, $key, $maxAttempts, $decaySeconds
+            $redis, $key, $maxAttempts, $decaySeconds
         );
 
-        return tap(! $limiter->acquire(), function () use ($key, $limiter) {
+        return tap($limiter->tooManyAttempts(), function () use ($key, $limiter) {
+            $this->decaysAt[$key] = $limiter->decaysAt;
+        });
+    }
+
+    /**
+     * Acquire a slot for the given key.
+     *
+     * @param  string  $key
+     * @param  int  $maxAttempts
+     * @param  int  $decaySeconds
+     * @return bool
+     */
+    protected function acquire($key, $maxAttempts, $decaySeconds)
+    {
+        $redis = Container::getInstance()
+            ->make(Redis::class)
+            ->connection($this->connectionName);
+
+        $limiter = new DurationLimiter(
+            $redis, $key, $maxAttempts, $decaySeconds
+        );
+
+        return tap($limiter->acquire(), function () use ($key, $limiter) {
             $this->decaysAt[$key] = $limiter->decaysAt;
         });
     }
@@ -89,6 +124,29 @@ class RateLimitedWithRedis extends RateLimited
     }
 
     /**
+     * Specify the Redis connection that should be used.
+     *
+     * @param  string  $name
+     * @return $this
+     */
+    public function connection(string $name)
+    {
+        $this->connectionName = $name;
+
+        return $this;
+    }
+
+    /**
+     * Prepare the object for serialization.
+     *
+     * @return array
+     */
+    public function __sleep()
+    {
+        return array_merge(parent::__sleep(), ['connectionName']);
+    }
+
+    /**
      * Prepare the object after unserialization.
      *
      * @return void
@@ -96,7 +154,5 @@ class RateLimitedWithRedis extends RateLimited
     public function __wakeup()
     {
         parent::__wakeup();
-
-        $this->redis = Container::getInstance()->make(Redis::class);
     }
 }

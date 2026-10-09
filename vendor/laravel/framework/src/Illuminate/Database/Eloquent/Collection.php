@@ -2,7 +2,6 @@
 
 namespace Illuminate\Database\Eloquent;
 
-use Closure;
 use Illuminate\Contracts\Queue\QueueableCollection;
 use Illuminate\Contracts\Queue\QueueableEntity;
 use Illuminate\Contracts\Support\Arrayable;
@@ -62,6 +61,8 @@ class Collection extends BaseCollection implements QueueableCollection
     public function findOrFail($key)
     {
         $result = $this->find($key);
+
+        $key = $key instanceof Arrayable ? $key->toArray() : $key;
 
         if (is_array($key) && count($result) === count(array_unique($key))) {
             return $result;
@@ -222,7 +223,7 @@ class Collection extends BaseCollection implements QueueableCollection
             $relations = func_get_args();
         }
 
-        if ($this->isNotEmpty()) {
+        if ($this->isNotEmpty() && ! empty($relations)) {
             $query = $this->first()->newQueryWithoutRelationships()->with($relations);
 
             foreach ($query->getEagerLoads() as $key => $value) {
@@ -252,7 +253,7 @@ class Collection extends BaseCollection implements QueueableCollection
     /**
      * Load a relationship path for models of the given type if it is not already eager loaded.
      *
-     * @param  array<int, <string, class-string>>  $tuples
+     * @param  array<int, array<string, class-string>>  $tuples
      * @return void
      */
     public function loadMissingRelationshipChain(array $tuples)
@@ -261,8 +262,8 @@ class Collection extends BaseCollection implements QueueableCollection
 
         $this->filter(function ($model) use ($relation, $class) {
             return ! is_null($model) &&
-                ! $model->relationLoaded($relation) &&
-                $model::class === $class;
+                $model::class === $class &&
+                ! $model->relationLoaded($relation);
         })->load($relation);
 
         if (empty($tuples)) {
@@ -307,7 +308,9 @@ class Collection extends BaseCollection implements QueueableCollection
             $models = $models->collapse();
         }
 
-        $this->loadMissingRelation(new static($models), $path);
+        $models->groupBy(fn ($model) => $model::class)->each(
+            fn ($models) => $this->loadMissingRelation(new static($models), $path)
+        );
     }
 
     /**
@@ -399,7 +402,11 @@ class Collection extends BaseCollection implements QueueableCollection
         $dictionary = $this->getDictionary();
 
         foreach ($items as $item) {
-            $dictionary[$this->getDictionaryKey($item->getKey())] = $item;
+            $key = $this->getDictionaryKey($item->getKey());
+
+            if ($key !== null) {
+                $dictionary[$key] = $item;
+            }
         }
 
         return new static(array_values($dictionary));
@@ -475,7 +482,9 @@ class Collection extends BaseCollection implements QueueableCollection
         $dictionary = $this->getDictionary($items);
 
         foreach ($this->items as $item) {
-            if (! isset($dictionary[$this->getDictionaryKey($item->getKey())])) {
+            $key = $this->getDictionaryKey($item->getKey());
+
+            if ($key === null || ! isset($dictionary[$key])) {
                 $diff->add($item);
             }
         }
@@ -500,7 +509,9 @@ class Collection extends BaseCollection implements QueueableCollection
         $dictionary = $this->getDictionary($items);
 
         foreach ($this->items as $item) {
-            if (isset($dictionary[$this->getDictionaryKey($item->getKey())])) {
+            $key = $this->getDictionaryKey($item->getKey());
+
+            if ($key !== null && isset($dictionary[$key])) {
                 $intersect->add($item);
             }
         }
@@ -570,25 +581,14 @@ class Collection extends BaseCollection implements QueueableCollection
     }
 
     /**
-     * Make the given, typically hidden, attributes visible across the entire collection.
+     * Merge the given, typically visible, attributes hidden across the entire collection.
      *
      * @param  array<array-key, string>|string  $attributes
      * @return $this
      */
-    public function makeVisible($attributes)
+    public function mergeHidden($attributes)
     {
-        return $this->each->makeVisible($attributes);
-    }
-
-    /**
-     * Set the visible attributes across the entire collection.
-     *
-     * @param  array<int, string>  $visible
-     * @return $this
-     */
-    public function setVisible($visible)
-    {
-        return $this->each->setVisible($visible);
+        return $this->each->mergeHidden($attributes);
     }
 
     /**
@@ -600,6 +600,39 @@ class Collection extends BaseCollection implements QueueableCollection
     public function setHidden($hidden)
     {
         return $this->each->setHidden($hidden);
+    }
+
+    /**
+     * Make the given, typically hidden, attributes visible across the entire collection.
+     *
+     * @param  array<array-key, string>|string  $attributes
+     * @return $this
+     */
+    public function makeVisible($attributes)
+    {
+        return $this->each->makeVisible($attributes);
+    }
+
+    /**
+     * Merge the given, typically hidden, attributes visible across the entire collection.
+     *
+     * @param  array<array-key, string>|string  $attributes
+     * @return $this
+     */
+    public function mergeVisible($attributes)
+    {
+        return $this->each->mergeVisible($attributes);
+    }
+
+    /**
+     * Set the visible attributes across the entire collection.
+     *
+     * @param  array<int, string>  $visible
+     * @return $this
+     */
+    public function setVisible($visible)
+    {
+        return $this->each->setVisible($visible);
     }
 
     /**
@@ -647,7 +680,11 @@ class Collection extends BaseCollection implements QueueableCollection
         $dictionary = [];
 
         foreach ($items as $value) {
-            $dictionary[$this->getDictionaryKey($value->getKey())] = $value;
+            $key = $this->getDictionaryKey($value->getKey());
+
+            if ($key !== null) {
+                $dictionary[$key] = $value;
+            }
         }
 
         return $dictionary;
@@ -658,113 +695,144 @@ class Collection extends BaseCollection implements QueueableCollection
      */
 
     /**
-     * Count the number of items in the collection by a field or using a callback.
+     * {@inheritDoc}
      *
-     * @param  (callable(TModel, TKey): array-key)|string|null  $countBy
      * @return \Illuminate\Support\Collection<array-key, int>
      */
+    #[\Override]
     public function countBy($countBy = null)
     {
         return $this->toBase()->countBy($countBy);
     }
 
     /**
-     * Collapse the collection of items into a single array.
+     * {@inheritDoc}
      *
      * @return \Illuminate\Support\Collection<int, mixed>
      */
+    #[\Override]
     public function collapse()
     {
         return $this->toBase()->collapse();
     }
 
     /**
-     * Get a flattened array of the items in the collection.
+     * {@inheritDoc}
      *
-     * @param  int  $depth
      * @return \Illuminate\Support\Collection<int, mixed>
      */
+    #[\Override]
     public function flatten($depth = INF)
     {
         return $this->toBase()->flatten($depth);
     }
 
     /**
-     * Flip the items in the collection.
+     * {@inheritDoc}
      *
      * @return \Illuminate\Support\Collection<TModel, TKey>
      */
+    #[\Override]
     public function flip()
     {
         return $this->toBase()->flip();
     }
 
     /**
-     * Get the keys of the collection items.
+     * {@inheritDoc}
      *
      * @return \Illuminate\Support\Collection<int, TKey>
      */
+    #[\Override]
     public function keys()
     {
         return $this->toBase()->keys();
     }
 
     /**
-     * Pad collection to the specified length with a value.
+     * {@inheritDoc}
      *
      * @template TPadValue
      *
-     * @param  int  $size
-     * @param  TPadValue  $value
      * @return \Illuminate\Support\Collection<int, TModel|TPadValue>
      */
+    #[\Override]
     public function pad($size, $value)
     {
         return $this->toBase()->pad($size, $value);
     }
 
     /**
-     * Partition the collection into two arrays using the given callback or key.
+     * {@inheritDoc}
      *
-     * @param  (callable(TModel, TKey): bool)|TModel|string  $key
-     * @param  mixed  $operator
-     * @param  mixed  $value
      * @return \Illuminate\Support\Collection<int<0, 1>, static<TKey, TModel>>
      */
+    #[\Override]
     public function partition($key, $operator = null, $value = null)
     {
         return parent::partition(...func_get_args())->toBase();
     }
 
     /**
-     * Get an array with the values of a given key.
+     * {@inheritDoc}
      *
-     * @param  string|array<array-key, string>|Closure|null  $value
-     * @param  string|Closure|null  $key
      * @return \Illuminate\Support\Collection<array-key, mixed>
      */
+    #[\Override]
     public function pluck($value, $key = null)
     {
         return $this->toBase()->pluck($value, $key);
     }
 
     /**
-     * Zip the collection together with one or more arrays.
+     * {@inheritDoc}
      *
      * @template TZipValue
      *
-     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, TZipValue>|iterable<array-key, TZipValue>  ...$items
      * @return \Illuminate\Support\Collection<int, \Illuminate\Support\Collection<int, TModel|TZipValue>>
      */
+    #[\Override]
     public function zip($items)
     {
         return $this->toBase()->zip(...func_get_args());
     }
 
     /**
+     * Retrieve duplicate items from the collection.
+     *
+     * @param  (callable(TModel): mixed)|string|null  $callback
+     * @param  bool  $strict
+     * @return \Illuminate\Support\Collection<array-key, mixed>|static
+     */
+    #[\Override]
+    public function duplicates($callback = null, $strict = false)
+    {
+        if (! is_null($callback)) {
+            return $this->toBase()->duplicates($callback, $strict);
+        }
+
+        return parent::duplicates($callback, $strict);
+    }
+
+    /**
+     * Retrieve duplicate items from the collection using strict comparison.
+     *
+     * @param  (callable(TModel): mixed)|string|null  $callback
+     * @return \Illuminate\Support\Collection<array-key, mixed>|static
+     */
+    #[\Override]
+    public function duplicatesStrict($callback = null)
+    {
+        if (! is_null($callback)) {
+            return $this->toBase()->duplicatesStrict($callback);
+        }
+
+        return parent::duplicatesStrict($callback);
+    }
+
+    /**
      * Get the comparison function to detect duplicates.
      *
-     * @param  bool  $strict
      * @return callable(TModel, TModel): bool
      */
     protected function duplicateComparator($strict)
@@ -906,7 +974,7 @@ class Collection extends BaseCollection implements QueueableCollection
 
         $class = get_class($model);
 
-        if ($this->reject(fn ($model) => $model instanceof $class)->isNotEmpty()) {
+        if ($this->contains(fn ($model) => ! $model instanceof $class)) {
             throw new LogicException('Unable to create query for collection with mixed types.');
         }
 

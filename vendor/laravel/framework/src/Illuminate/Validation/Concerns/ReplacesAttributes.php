@@ -22,11 +22,7 @@ trait ReplacesAttributes
 
         $parameters[0] = $this->getDisplayableAttribute($parameters[0]);
 
-        return str_replace(
-            [':other', ':OTHER', ':Other', ':value', ':VALUE', ':Value'],
-            [$parameters[0], Str::upper($parameters[0]), Str::ucfirst($parameters[0]), $parameters[1], Str::upper($parameters[1]), Str::ucfirst($parameters[1])],
-            $message
-        );
+        return $this->replaceWhileKeepingCase($message, ['other' => $parameters[0], 'value' => $parameters[1]]);
     }
 
     /**
@@ -131,6 +127,20 @@ trait ReplacesAttributes
     protected function replaceDigitsBetween($message, $attribute, $rule, $parameters)
     {
         return $this->replaceBetween($message, $attribute, $rule, $parameters);
+    }
+
+    /**
+     * Replace all place-holders for the encoding rule.
+     *
+     * @param  string  $message
+     * @param  string  $attribute
+     * @param  string  $rule
+     * @param  array<int,string>  $parameters
+     * @return string
+     */
+    protected function replaceEncoding($message, $attribute, $rule, $parameters)
+    {
+        return str_replace(':encoding', $parameters[0], $message);
     }
 
     /**
@@ -337,11 +347,7 @@ trait ReplacesAttributes
     {
         $value = $this->getDisplayableAttribute($parameters[0]);
 
-        return str_replace(
-            [':other', ':OTHER', ':Other'],
-            [$value, Str::upper($value), Str::ucfirst($value)],
-            $message
-        );
+        return $this->replaceWhileKeepingCase($message, ['other' => $value]);
     }
 
     /**
@@ -356,6 +362,33 @@ trait ReplacesAttributes
     protected function replaceInArrayKeys($message, $attribute, $rule, $parameters)
     {
         return $this->replaceIn($message, $attribute, $rule, $parameters);
+    }
+
+    /**
+     * Replace all place-holders for the array_keys rule.
+     *
+     * @param  string  $message
+     * @param  string  $attribute
+     * @param  string  $rule
+     * @param  array<int,string>  $parameters
+     * @return string
+     */
+    protected function replaceArrayKeys($message, $attribute, $rule, $parameters)
+    {
+        $message = $this->replaceIn($message, $attribute, $rule, $parameters);
+
+        $value = $this->getValue($attribute);
+
+        $unexpected = is_array($value)
+            ? array_keys(array_diff_key($value, array_fill_keys($parameters, '')))
+            : [];
+
+        $unexpected = array_map(
+            fn ($key) => $this->getDisplayableValue($attribute, $key),
+            $unexpected,
+        );
+
+        return $this->replaceWhileKeepingCase($message, ['unexpected' => implode(', ', $unexpected)]);
     }
 
     /**
@@ -629,11 +662,7 @@ trait ReplacesAttributes
     {
         $value = $this->getDisplayableAttribute($parameters[0]);
 
-        return str_replace(
-            [':other', ':OTHER', ':Other'],
-            [$value, Str::upper($value), Str::ucfirst($value)],
-            $message
-        );
+        return $this->replaceWhileKeepingCase($message, ['other' => $value]);
     }
 
     /**
@@ -774,11 +803,7 @@ trait ReplacesAttributes
     {
         $value = $this->getDisplayableAttribute($parameters[0]);
 
-        return str_replace(
-            [':other', ':OTHER', ':Other'],
-            [$value, Str::upper($value), Str::ucfirst($value)],
-            $message
-        );
+        return $this->replaceWhileKeepingCase($message, ['other' => $value]);
     }
 
     /**
@@ -945,5 +970,29 @@ trait ReplacesAttributes
     protected function replaceDoesntContain($message, $attribute, $rule, $parameters)
     {
         return $this->replaceIn($message, $attribute, $rule, $parameters);
+    }
+
+    /**
+     * Replace the given string while maintaining different casing variants.
+     *
+     * @param  array<string, string>  $mapping
+     */
+    private function replaceWhileKeepingCase(string $message, array $mapping): string
+    {
+        $fn = [fn ($v) => $v, Str::upper(...), Str::ucfirst(...)];
+
+        $cases = array_reduce(
+            array_keys($mapping),
+            fn (array $carry, string $placeholder) => [...$carry, ...array_map(fn (callable $fn) => ':'.$fn($placeholder), $fn)],
+            [],
+        );
+
+        $replacements = array_reduce(
+            array_values($mapping),
+            fn (array $carry, string $parameter) => [...$carry, ...array_map(fn (callable $fn) => $fn($parameter), $fn)],
+            [],
+        );
+
+        return str_replace($cases, $replacements, $message);
     }
 }

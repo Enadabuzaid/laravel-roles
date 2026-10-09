@@ -35,6 +35,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 
 use function Illuminate\Filesystem\join_paths;
+use function Illuminate\Support\enum_value;
 
 class Application extends Container implements ApplicationContract, CachesConfiguration, CachesRoutes, HttpKernelInterface
 {
@@ -45,7 +46,7 @@ class Application extends Container implements ApplicationContract, CachesConfig
      *
      * @var string
      */
-    const VERSION = '12.36.1';
+    const VERSION = '13.35.0';
 
     /**
      * The base path for the Laravel installation.
@@ -209,6 +210,13 @@ class Application extends Container implements ApplicationContract, CachesConfig
     protected $absoluteCachePathPrefixes = ['/', '\\'];
 
     /**
+     * The application builder class.
+     *
+     * @var class-string<Configuration\ApplicationBuilder>
+     */
+    protected static string $applicationBuilder = Configuration\ApplicationBuilder::class;
+
+    /**
      * Create a new Illuminate application instance.
      *
      * @param  string|null  $basePath
@@ -238,7 +246,7 @@ class Application extends Container implements ApplicationContract, CachesConfig
             default => static::inferBasePath(),
         };
 
-        return (new Configuration\ApplicationBuilder(new static($basePath)))
+        return (new static::$applicationBuilder(new static($basePath)))
             ->withKernels()
             ->withEvents()
             ->withCommands()
@@ -317,12 +325,12 @@ class Application extends Container implements ApplicationContract, CachesConfig
 
         $this['events']->listen(
             'bootstrapping: *',
-            fn ($bootstrapper) => Cloud::bootstrapperBootstrapping($this, Str::after($bootstrapper, 'bootstrapping: '))
+            fn ($bootstrapper) => CloudBootstrapper::bootstrapping($this, Str::after($bootstrapper, 'bootstrapping: '))
         );
 
         $this['events']->listen(
             'bootstrapped: *',
-            fn ($bootstrapper) => Cloud::bootstrapperBootstrapped($this, Str::after($bootstrapper, 'bootstrapped: '))
+            fn ($bootstrapper) => CloudBootstrapper::bootstrapped($this, Str::after($bootstrapper, 'bootstrapped: '))
         );
     }
 
@@ -731,7 +739,7 @@ class Application extends Container implements ApplicationContract, CachesConfig
     }
 
     /**
-     * Get the fully qualified path to the environment file.
+     * Get the fully-qualified path to the environment file.
      *
      * @return string
      */
@@ -743,15 +751,15 @@ class Application extends Container implements ApplicationContract, CachesConfig
     /**
      * Get or check the current application environment.
      *
-     * @param  string|array  ...$environments
+     * @param  \UnitEnum|string|array  ...$environments
      * @return string|bool
      */
     public function environment(...$environments)
     {
-        if (count($environments) > 0) {
+        if ($environments !== []) {
             $patterns = is_array($environments[0]) ? $environments[0] : $environments;
 
-            return Str::is($patterns, $this['env']);
+            return Str::is(array_map(enum_value(...), $patterns), $this['env']);
         }
 
         return $this['env'];
@@ -1302,7 +1310,11 @@ class Application extends Container implements ApplicationContract, CachesConfig
      */
     public function configurationIsCached()
     {
-        return is_file($this->getCachedConfigPath());
+        if ($this->bound('config_loaded_from_cache')) {
+            return (bool) $this->make('config_loaded_from_cache');
+        }
+
+        return $this->instance('config_loaded_from_cache', is_file($this->getCachedConfigPath()));
     }
 
     /**
@@ -1322,7 +1334,11 @@ class Application extends Container implements ApplicationContract, CachesConfig
      */
     public function routesAreCached()
     {
-        return $this['files']->exists($this->getCachedRoutesPath());
+        if ($this->bound('routes.cached')) {
+            return (bool) $this->make('routes.cached');
+        }
+
+        return $this->instance('routes.cached', $this['files']->exists($this->getCachedRoutesPath()));
     }
 
     /**
@@ -1342,7 +1358,13 @@ class Application extends Container implements ApplicationContract, CachesConfig
      */
     public function eventsAreCached()
     {
-        return $this['files']->exists($this->getCachedEventsPath());
+        if ($this->bound('events.cached')) {
+            return (bool) $this->make('events.cached');
+        }
+
+        return $this->instance(
+            'events.cached', $this['files']->exists($this->getCachedEventsPath())
+        );
     }
 
     /**
@@ -1581,11 +1603,13 @@ class Application extends Container implements ApplicationContract, CachesConfig
      */
     public function setLocale($locale)
     {
+        $previous = $this['config']->get('app.locale');
+
         $this['config']->set('app.locale', $locale);
 
         $this['translator']->setLocale($locale);
 
-        $this['events']->dispatch(new LocaleUpdated($locale));
+        $this['events']->dispatch(new LocaleUpdated($locale, $previous));
     }
 
     /**
@@ -1623,6 +1647,8 @@ class Application extends Container implements ApplicationContract, CachesConfig
             'app' => [self::class, \Illuminate\Contracts\Container\Container::class, \Illuminate\Contracts\Foundation\Application::class, \Psr\Container\ContainerInterface::class],
             'auth' => [\Illuminate\Auth\AuthManager::class, \Illuminate\Contracts\Auth\Factory::class],
             'auth.driver' => [\Illuminate\Contracts\Auth\Guard::class],
+            'auth.password' => [\Illuminate\Auth\Passwords\PasswordBrokerManager::class, \Illuminate\Contracts\Auth\PasswordBrokerFactory::class],
+            'auth.password.broker' => [\Illuminate\Auth\Passwords\PasswordBroker::class, \Illuminate\Contracts\Auth\PasswordBroker::class],
             'blade.compiler' => [\Illuminate\View\Compilers\BladeCompiler::class],
             'cache' => [\Illuminate\Cache\CacheManager::class, \Illuminate\Contracts\Cache\Factory::class],
             'cache.store' => [\Illuminate\Cache\Repository::class, \Illuminate\Contracts\Cache\Repository::class, \Psr\SimpleCache\CacheInterface::class],
@@ -1640,12 +1666,10 @@ class Application extends Container implements ApplicationContract, CachesConfig
             'filesystem.cloud' => [\Illuminate\Contracts\Filesystem\Cloud::class],
             'hash' => [\Illuminate\Hashing\HashManager::class],
             'hash.driver' => [\Illuminate\Contracts\Hashing\Hasher::class],
-            'translator' => [\Illuminate\Translation\Translator::class, \Illuminate\Contracts\Translation\Translator::class],
+            'image' => [\Illuminate\Image\ImageManager::class],
             'log' => [\Illuminate\Log\LogManager::class, \Psr\Log\LoggerInterface::class],
             'mail.manager' => [\Illuminate\Mail\MailManager::class, \Illuminate\Contracts\Mail\Factory::class],
             'mailer' => [\Illuminate\Mail\Mailer::class, \Illuminate\Contracts\Mail\Mailer::class, \Illuminate\Contracts\Mail\MailQueue::class],
-            'auth.password' => [\Illuminate\Auth\Passwords\PasswordBrokerManager::class, \Illuminate\Contracts\Auth\PasswordBrokerFactory::class],
-            'auth.password.broker' => [\Illuminate\Auth\Passwords\PasswordBroker::class, \Illuminate\Contracts\Auth\PasswordBroker::class],
             'queue' => [\Illuminate\Queue\QueueManager::class, \Illuminate\Contracts\Queue\Factory::class, \Illuminate\Contracts\Queue\Monitor::class],
             'queue.connection' => [\Illuminate\Contracts\Queue\Queue::class],
             'queue.failer' => [\Illuminate\Queue\Failed\FailedJobProviderInterface::class],
@@ -1656,6 +1680,7 @@ class Application extends Container implements ApplicationContract, CachesConfig
             'router' => [\Illuminate\Routing\Router::class, \Illuminate\Contracts\Routing\Registrar::class, \Illuminate\Contracts\Routing\BindingRegistrar::class],
             'session' => [\Illuminate\Session\SessionManager::class],
             'session.store' => [\Illuminate\Session\Store::class, \Illuminate\Contracts\Session\Session::class],
+            'translator' => [\Illuminate\Translation\Translator::class, \Illuminate\Contracts\Translation\Translator::class],
             'url' => [\Illuminate\Routing\UrlGenerator::class, \Illuminate\Contracts\Routing\UrlGenerator::class],
             'validator' => [\Illuminate\Validation\Factory::class, \Illuminate\Contracts\Validation\Factory::class],
             'view' => [\Illuminate\View\Factory::class, \Illuminate\Contracts\View\Factory::class],

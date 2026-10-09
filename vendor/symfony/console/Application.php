@@ -11,6 +11,8 @@
 
 namespace Symfony\Component\Console;
 
+use Psr\Container\ContainerInterface;
+use Symfony\Component\Console\ArgumentResolver\ArgumentResolverInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Command\CompleteCommand;
 use Symfony\Component\Console\Command\DumpCompletionCommand;
@@ -51,6 +53,7 @@ use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\SignalRegistry\SignalRegistry;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\DependencyInjection\ContainerInterface as SymfonyContainerInterface;
 use Symfony\Component\ErrorHandler\ErrorHandler;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 use Symfony\Contracts\Service\ResetInterface;
@@ -65,7 +68,7 @@ use Symfony\Contracts\Service\ResetInterface;
  * Usage:
  *
  *     $app = new Application('myapp', '1.0 (stable)');
- *     $app->add(new SimpleCommand());
+ *     $app->addCommand(new SimpleCommand());
  *     $app->run();
  *
  * @author Fabien Potencier <fabien@symfony.com>
@@ -82,6 +85,7 @@ class Application implements ResetInterface
     private InputDefinition $definition;
     private HelperSet $helperSet;
     private ?EventDispatcherInterface $dispatcher = null;
+    private ?ArgumentResolverInterface $argumentResolver = null;
     private Terminal $terminal;
     private string $defaultCommand;
     private bool $singleCommand = false;
@@ -93,6 +97,7 @@ class Application implements ResetInterface
     public function __construct(
         private string $name = 'UNKNOWN',
         private string $version = 'UNKNOWN',
+        private ?ContainerInterface $container = null,
     ) {
         $this->terminal = new Terminal();
         $this->defaultCommand = 'list';
@@ -108,6 +113,24 @@ class Application implements ResetInterface
     public function setDispatcher(EventDispatcherInterface $dispatcher): void
     {
         $this->dispatcher = $dispatcher;
+    }
+
+    public function getDispatcher(): ?EventDispatcherInterface
+    {
+        return $this->dispatcher;
+    }
+
+    /**
+     * @final
+     */
+    public function setArgumentResolver(ArgumentResolverInterface $argumentResolver): void
+    {
+        $this->argumentResolver = $argumentResolver;
+    }
+
+    public function getArgumentResolver(): ?ArgumentResolverInterface
+    {
+        return $this->argumentResolver;
     }
 
     public function setCommandLoader(CommandLoaderInterface $commandLoader): void
@@ -258,7 +281,7 @@ class Application implements ResetInterface
      */
     public function doRun(InputInterface $input, OutputInterface $output): int
     {
-        if (true === $input->hasParameterOption(['--version', '-V'], true)) {
+        if ($input->hasParameterOption(['--version', '-V'], true)) {
             $output->writeln($this->getLongVersion());
 
             return 0;
@@ -272,7 +295,7 @@ class Application implements ResetInterface
         }
 
         $name = $this->getCommandName($input);
-        if (true === $input->hasParameterOption(['--help', '-h'], true)) {
+        if ($input->hasParameterOption(['--help', '-h'], true)) {
             if (!$name) {
                 $name = 'help';
                 $input = new ArrayInput(['command_name' => $this->defaultCommand]);
@@ -361,6 +384,9 @@ class Application implements ResetInterface
 
     public function reset(): void
     {
+        if ($this->container?->has('services_resetter')) {
+            $this->container->get('services_resetter')->reset();
+        }
     }
 
     public function setHelperSet(HelperSet $helperSet): void
@@ -389,10 +415,7 @@ class Application implements ResetInterface
         $this->definition ??= $this->getDefaultInputDefinition();
 
         if ($this->singleCommand) {
-            $inputDefinition = $this->definition;
-            $inputDefinition->setArguments();
-
-            return $inputDefinition;
+            $this->definition->setArguments();
         }
 
         return $this->definition;
@@ -423,6 +446,15 @@ class Application implements ResetInterface
 
         if (CompletionInput::TYPE_OPTION_NAME === $input->getCompletionType()) {
             $suggestions->suggestOptions($this->getDefinition()->getOptions());
+        }
+
+        if (
+            CompletionInput::TYPE_OPTION_VALUE === $input->getCompletionType()
+            && ($definition = $this->getDefinition())->hasOption($input->getCompletionName())
+        ) {
+            $definition->getOption($input->getCompletionName())->complete($input, $suggestions);
+
+            return;
         }
     }
 
@@ -513,13 +545,19 @@ class Application implements ResetInterface
     {
         if ('UNKNOWN' !== $this->getName()) {
             if ('UNKNOWN' !== $this->getVersion()) {
-                return \sprintf('%s <info>%s</info>', $this->getName(), $this->getVersion());
+                $version = \sprintf('%s <info>%s</info>', $this->getName(), $this->getVersion());
+            } else {
+                $version = $this->getName();
             }
-
-            return $this->getName();
+        } else {
+            $version = 'Console Tool';
         }
 
-        return 'Console Tool';
+        if ($this->container instanceof SymfonyContainerInterface && $this->container->hasParameter('kernel.environment')) {
+            $version .= \sprintf(' (env: <comment>%s</>, debug: <comment>%s</>)', $this->container->getParameter('kernel.environment'), $this->container->getParameter('kernel.debug') ? 'true' : 'false');
+        }
+
+        return $version;
     }
 
     /**
@@ -527,7 +565,7 @@ class Application implements ResetInterface
      */
     public function register(string $name): Command
     {
-        return $this->add(new Command($name));
+        return $this->addCommand(new Command($name));
     }
 
     /**
@@ -535,12 +573,12 @@ class Application implements ResetInterface
      *
      * If a Command is not enabled it will not be added.
      *
-     * @param Command[] $commands An array of commands
+     * @param callable[]|Command[] $commands An array of commands
      */
     public function addCommands(array $commands): void
     {
         foreach ($commands as $command) {
-            $this->add($command);
+            $this->addCommand($command);
         }
     }
 
@@ -550,9 +588,13 @@ class Application implements ResetInterface
      * If a command with the same name already exists, it will be overridden.
      * If the command is not enabled it will not be added.
      */
-    public function add(Command $command): ?Command
+    public function addCommand(callable|Command $command): ?Command
     {
         $this->init();
+
+        if (!$command instanceof Command) {
+            $command = new Command(null, $command);
+        }
 
         $command->setApplication($this);
 
@@ -619,7 +661,7 @@ class Application implements ResetInterface
     {
         $this->init();
 
-        return isset($this->commands[$name]) || ($this->commandLoader?->has($name) && $this->add($this->commandLoader->get($name)));
+        return isset($this->commands[$name]) || ($this->commandLoader?->has($name) && $this->addCommand($this->commandLoader->get($name)));
     }
 
     /**
@@ -676,6 +718,8 @@ class Application implements ResetInterface
 
         $exact = \in_array($namespace, $namespaces, true);
         if (\count($namespaces) > 1 && !$exact) {
+            sort($namespaces);
+
             throw new NamespaceNotFoundException(\sprintf("The namespace \"%s\" is ambiguous.\nDid you mean one of these?\n%s.", $namespace, $this->getAbbreviationSuggestions(array_values($namespaces))), array_values($namespaces));
         }
 
@@ -716,6 +760,8 @@ class Application implements ResetInterface
             $commands = preg_grep('{^'.$expr.'}i', $allCommands);
         }
 
+        sort($commands);
+
         // if no commands matched or we just matched namespaces
         if (!$commands || \count(preg_grep('{^'.$expr.'$}i', $commands)) < 1) {
             if (false !== $pos = strrpos($name, ':')) {
@@ -726,15 +772,14 @@ class Application implements ResetInterface
             $message = \sprintf('Command "%s" is not defined.', $name);
 
             if ($alternatives = $this->findAlternatives($name, $allCommands)) {
-                // remove hidden commands
-                $alternatives = array_filter($alternatives, fn ($name) => !$this->get($name)->isHidden());
+                $wantHelps = $this->wantHelps;
+                $this->wantHelps = false;
 
-                if (1 == \count($alternatives)) {
-                    $message .= "\n\nDid you mean this?\n    ";
-                } else {
-                    $message .= "\n\nDid you mean one of these?\n    ";
+                // remove hidden commands
+                if ($alternatives = array_filter($alternatives, fn ($name) => !$this->get($name)->isHidden())) {
+                    $message .= \sprintf("\n\nDid you mean %s?\n    %s", 1 === \count($alternatives) ? 'this' : 'one of these', implode("\n    ", $alternatives));
                 }
-                $message .= implode("\n    ", $alternatives);
+                $this->wantHelps = $wantHelps;
             }
 
             throw new CommandNotFoundException($message, array_values($alternatives));
@@ -756,14 +801,30 @@ class Application implements ResetInterface
             }));
         }
 
+        // check whether all commands left are aliases to the same one
         if (\count($commands) > 1) {
+            $uniqueCommands = array_unique(array_map(function ($nameOrAlias) use (&$commandList) {
+                if (!$commandList[$nameOrAlias] instanceof Command) {
+                    $commandList[$nameOrAlias] = $this->commandLoader->get($nameOrAlias);
+                }
+
+                return $commandList[$nameOrAlias]->getName();
+            }, $commands));
+
+            if (1 === \count($uniqueCommands)) {
+                $commands = [reset($uniqueCommands)];
+            }
+        }
+
+        if (\count($commands) > 1) {
+            sort($commands);
             $usableWidth = $this->terminal->getWidth() - 10;
             $abbrevs = array_values($commands);
             $maxLen = 0;
             foreach ($abbrevs as $abbrev) {
                 $maxLen = max(Helper::width($abbrev), $maxLen);
             }
-            $abbrevs = array_map(function ($cmd) use ($commandList, $usableWidth, $maxLen, &$commands) {
+            $abbrevs = array_map(static function ($cmd) use ($commandList, $usableWidth, $maxLen, &$commands) {
                 if ($commandList[$cmd]->isHidden()) {
                     unset($commands[array_search($cmd, $commands)]);
 
@@ -778,13 +839,13 @@ class Application implements ResetInterface
             if (\count($commands) > 1) {
                 $suggestions = $this->getAbbreviationSuggestions(array_filter($abbrevs));
 
-                throw new CommandNotFoundException(\sprintf("Command \"%s\" is ambiguous.\nDid you mean one of these?\n%s.", $name, $suggestions), array_values($commands));
+                throw new CommandNotFoundException(\sprintf("Command \"%s\" is ambiguous.\nDid you mean one of these?\n%s", $name, $suggestions), array_values($commands));
             }
         }
 
-        $command = $this->get(reset($commands));
+        $command = $commands ? $this->get(reset($commands)) : null;
 
-        if ($command->isHidden()) {
+        if (!$command || $command->isHidden()) {
             throw new CommandNotFoundException(\sprintf('The command "%s" does not exist.', $name));
         }
 
@@ -878,7 +939,7 @@ class Application implements ResetInterface
             }
 
             if (str_contains($message, "@anonymous\0")) {
-                $message = preg_replace_callback('/[a-zA-Z_\x7f-\xff][\\\\a-zA-Z0-9_\x7f-\xff]*+@anonymous\x00.*?\.php(?:0x?|:[0-9]++\$)?[0-9a-fA-F]++/', fn ($m) => class_exists($m[0], false) ? (get_parent_class($m[0]) ?: key(class_implements($m[0])) ?: 'class').'@anonymous' : $m[0], $message);
+                $message = preg_replace_callback('/[a-zA-Z_\x7f-\xff][\\\\a-zA-Z0-9_\x7f-\xff]*+@anonymous\x00.*?\.php(?:0x?|:[0-9]++\$)?[0-9a-fA-F]++/', static fn ($m) => class_exists($m[0], false) ? (get_parent_class($m[0]) ?: key(class_implements($m[0])) ?: 'class').'@anonymous' : $m[0], $message);
             }
 
             $width = $this->terminal->getWidth() ? $this->terminal->getWidth() - 1 : \PHP_INT_MAX;
@@ -993,8 +1054,12 @@ class Application implements ResetInterface
             }
         }
 
+        $registeredSignals = false;
         if (($commandSignals = $command->getSubscribedSignals()) || $this->dispatcher && $this->signalsToDispatchEvent) {
             $signalRegistry = $this->getSignalRegistry();
+
+            $registeredSignals = true;
+            $this->getSignalRegistry()->pushCurrentHandlers();
 
             if ($this->dispatcher) {
                 // We register application signals, so that we can dispatch the event
@@ -1052,7 +1117,13 @@ class Application implements ResetInterface
         }
 
         if (null === $this->dispatcher) {
-            return $command->run($input, $output);
+            try {
+                return $command->run($input, $output);
+            } finally {
+                if ($registeredSignals) {
+                    $this->getSignalRegistry()->popPreviousHandlers();
+                }
+            }
         }
 
         // bind before the console.command event, so the listeners have access to input options/arguments
@@ -1081,6 +1152,10 @@ class Application implements ResetInterface
 
             if (0 === $exitCode = $event->getExitCode()) {
                 $e = null;
+            }
+        } finally {
+            if ($registeredSignals) {
+                $this->getSignalRegistry()->popPreviousHandlers();
             }
         }
 
@@ -1204,7 +1279,7 @@ class Application implements ResetInterface
             }
         }
 
-        $alternatives = array_filter($alternatives, fn ($lev) => $lev < 2 * $threshold);
+        $alternatives = array_filter($alternatives, static fn ($lev) => $lev < 2 * $threshold);
         ksort($alternatives, \SORT_NATURAL | \SORT_FLAG_CASE);
 
         return array_keys($alternatives);
@@ -1268,9 +1343,7 @@ class Application implements ResetInterface
 
         $lines[] = \count($lines) ? str_pad($line, $width) : $line;
 
-        mb_convert_variables($encoding, 'utf8', $lines);
-
-        return $lines;
+        return mb_convert_encoding($lines, $encoding, 'utf8');
     }
 
     /**
@@ -1285,7 +1358,7 @@ class Application implements ResetInterface
         $namespaces = [];
 
         foreach ($parts as $part) {
-            if (\count($namespaces)) {
+            if ($namespaces) {
                 $namespaces[] = end($namespaces).':'.$part;
             } else {
                 $namespaces[] = $part;
@@ -1303,7 +1376,46 @@ class Application implements ResetInterface
         $this->initialized = true;
 
         foreach ($this->getDefaultCommands() as $command) {
-            $this->add($command);
+            $this->addCommand($command);
+        }
+
+        $this->registerContainerServices();
+    }
+
+    private function registerContainerServices(): void
+    {
+        if (!$this->container) {
+            return;
+        }
+
+        if ($this->container->has('event_dispatcher')) {
+            $this->setDispatcher($this->container->get('event_dispatcher'));
+        }
+        if ($this->container->has('console.argument_resolver')) {
+            $this->setArgumentResolver($this->container->get('console.argument_resolver'));
+        }
+        if ($this->container->has('console.command_loader')) {
+            $this->setCommandLoader($this->container->get('console.command_loader'));
+        }
+
+        if (!$commandIds = match (true) {
+            !$this->container instanceof SymfonyContainerInterface => $this->container->has('console.command.ids') ? $this->container->get('console.command.ids') : [],
+            $this->container->hasParameter('console.command.ids') => $this->container->getParameter('console.command.ids'),
+            default => [],
+        }) {
+            return;
+        }
+
+        $lazyCommandIds = match (true) {
+            !$this->container instanceof SymfonyContainerInterface => $this->container->has('console.lazy_command.ids') ? $this->container->get('console.lazy_command.ids') : [],
+            $this->container->hasParameter('console.lazy_command.ids') => $this->container->getParameter('console.lazy_command.ids'),
+            default => [],
+        };
+
+        foreach ($commandIds as $id) {
+            if (!isset($lazyCommandIds[$id])) {
+                $this->addCommand($this->container->get($id));
+            }
         }
     }
 }
