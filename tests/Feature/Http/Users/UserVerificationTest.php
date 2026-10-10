@@ -92,10 +92,11 @@ it('refuses a non-owner verifying an owner and answers 401 and 403 in the envelo
         ->assertJson(['code' => 'guardrail.target_above_actor']);
 
     $target = makeUser('t@example.test');
+    $viewer = usersActor(['access.users.view'], 'v2@example.test');
     foreach (['verify-email', 'resend-verification'] as $uri) {
         auth()->forgetGuards();
         $this->postJson("/api/access/users/{$target->id}/{$uri}")->assertUnauthorized();
-        $this->actingAs(usersActor(['access.users.view'], 'v2@example.test'))->postJson("/api/access/users/{$target->id}/{$uri}")
+        $this->actingAs($viewer)->postJson("/api/access/users/{$target->id}/{$uri}")
             ->assertForbidden()->assertJson(['code' => 'forbidden']);
     }
 });
