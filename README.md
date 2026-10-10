@@ -139,7 +139,7 @@ app(ActorContext::class)->runAs(null, fn () => $user->assignAccessRole('viewer')
 **Concurrency.** Assign/remove/sync lock the super-role row (`SELECT ... FOR UPDATE`) before the guardrails run, so two concurrent owner removals serialize and the last-owner rule cannot be raced.
 
 **Known limitations.**
-- Suspended owners are still counted by the last-owner rule.
+- The last-owner rule counts only active owners (a Locked owner still counts; Suspended and Deactivated owners do not).
 - The last-owner lock relies on `SELECT ... FOR UPDATE`; on MySQL under REPEATABLE READ the snapshot read can still race. PostgreSQL and SQLite are supported.
 - Spatie's `permission:*` artisan commands and raw `HasRoles` mutators (`assignRole`, `syncRoles`, `givePermissionTo`, ...) bypass guardrails and audit. Use the `HasAccess` methods; `roles:doctor` warns about the gap.
 - `syncAccessRoles` replaces roles of every guard (Spatie semantics): other-guard roles count as removed.
