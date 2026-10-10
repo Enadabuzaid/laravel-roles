@@ -8,6 +8,7 @@ use Enadstack\LaravelRoles\Users\Http\Controllers\UserLifecycleController;
 use Enadstack\LaravelRoles\Users\Http\Controllers\UserOverviewController;
 use Enadstack\LaravelRoles\Users\Http\Controllers\UserPermissionsController;
 use Enadstack\LaravelRoles\Users\Http\Controllers\UserTrashController;
+use Enadstack\LaravelRoles\Users\Http\Controllers\UserVerificationController;
 use Enadstack\LaravelRoles\Users\Http\Middleware\EnsureHostSoftDeletes;
 use Illuminate\Support\Facades\Route;
 
@@ -15,6 +16,12 @@ Route::get('users', [UserController::class, 'index'])->name('users.index')->midd
 Route::get('users/overview', UserOverviewController::class)->name('users.overview')->middleware('can:access.users.view');
 Route::get('users/{user}', [UserController::class, 'show'])->name('users.show')
     ->middleware('can:access.users.view')->where('user', '[0-9]{1,18}');
+Route::patch('users/{user}', [UserController::class, 'update'])->name('users.update')
+    ->middleware('can:access.users.update')->where('user', '[0-9]{1,18}');
+Route::post('users/{user}/verify-email', [UserVerificationController::class, 'verify'])->name('users.verify-email')
+    ->middleware('can:access.users.update')->where('user', '[0-9]{1,18}');
+Route::post('users/{user}/resend-verification', [UserVerificationController::class, 'resend'])->name('users.resend-verification')
+    ->middleware('can:access.users.update')->where('user', '[0-9]{1,18}');
 Route::get('users/{user}/permissions', UserPermissionsController::class)->name('users.permissions')
     ->middleware('can:access.users.view')->where('user', '[0-9]{1,18}');
 

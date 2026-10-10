@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 2.0.0-alpha.9 — 2026-10-10
+
+### Added
+- Users trash for hosts whose user model uses SoftDeletes (`HostSoftDeletes`): `DELETE users/{user}` moves the user to the trash (`users.trashed`, roles and state kept, sessions ended), `POST users/{user}/restore` and `DELETE users/{user}/force` (exact email confirmation, full access clean-up, `users.force_deleted`), `filter[status][]=trashed`, `deleted_at` and status `trashed` on users, `trashed` in the users overview. The routes answer 404 on hosts without SoftDeletes, which keep the permanent delete.
+- `PATCH users/{user}` (name, email; unique across live and trashed users, verification cleared and re-sent for `MustVerifyEmail` hosts), `POST users/{user}/verify-email` and `POST users/{user}/resend-verification` (3 per 10 minutes per user) with the `UpdateUser`, `VerifyUserEmail` and `ResendVerification` Actions.
+- User abilities `restore`, `force_delete`, `edit` and `verify`; error codes `user.not_trashed`, `user.trashed`, `user.email_taken`, `user.self_email_change`, `user.already_verified`, `user.verification_unsupported`; audit keys `users.trashed`, `users.restored`, `users.force_deleted`, `users.updated`, `users.email_verified`, `users.verification_resent`.
+- Operation types `RestoreUser`, `ForceDeleteUser`, `UpdateUser` (covered by `TargetAboveActorRule`; `ForceDeleteUser` by the self-destructive, last-owner and typed-confirmation rules).
+
+### Changed
+- Live-only user and role-assignment actions on a trashed user answer 409 `user.trashed` instead of 404.
+- A direct soft delete of a user keeps the state row and saved views and audits `users.trashed` (the clean-up and `users.deleted` stay for force deletes and hosts without SoftDeletes).
+- `UserResource.abilities` has four more keys (see above).
+
 ## 2.0.0-alpha.8 — 2026-10-10
 
 ### Added
