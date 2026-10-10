@@ -8,7 +8,9 @@ use Enadstack\LaravelRoles\Support\RawSql;
 use Enadstack\LaravelRoles\Users\Enums\UserStatus;
 use Enadstack\LaravelRoles\Users\Models\AccessInvitation;
 use Enadstack\LaravelRoles\Users\Support\HostMfaColumn;
+use Enadstack\LaravelRoles\Users\Support\HostSoftDeletes;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -21,7 +23,7 @@ final class UsersOverviewQuery
      * sqlite, pgsql and mysql) plus two small counts. `series` has `WEEKS` rolling weekly buckets ending now:
      * `joined[i]` counts users created in (b[i], b[i+1]] and `members[i]` those created up to b[i+1].
      *
-     * @return array{total_members: int, active: int, pending_invites: int, suspended: int, locked: int, deactivated: int, without_mfa: int, without_role: int, joined_last_30_days: int, series: array{members: list<int>, joined: list<int>}}
+     * @return array{total_members: int, active: int, pending_invites: int, suspended: int, locked: int, deactivated: int, without_mfa: int, without_role: int, joined_last_30_days: int, trashed: int, series: array{members: list<int>, joined: list<int>}}
      */
     public static function summary(): array
     {
@@ -81,9 +83,23 @@ final class UsersOverviewQuery
             'deactivated' => (int) ($counts['status_deactivated'] ?? 0),
             'without_mfa' => (int) ($counts['without_mfa'] ?? 0),
             'without_role' => self::withoutRole(),
+            'trashed' => self::trashed(),
             'joined_last_30_days' => (int) ($counts['joined_last_30_days'] ?? 0),
             'series' => ['members' => $members, 'joined' => $joined],
         ];
+    }
+
+    /** Users in the trash (0 for hosts without SoftDeletes). */
+    private static function trashed(): int
+    {
+        if (! HostSoftDeletes::enabled()) {
+            return 0;
+        }
+
+        /** @var class-string<Model> $userModel */
+        $userModel = (string) config('roles.user_model');
+
+        return $userModel::query()->withoutGlobalScope(SoftDeletingScope::class)->whereNotNull((new $userModel)->qualifyColumn('deleted_at'))->count();
     }
 
     private static function withoutRole(): int

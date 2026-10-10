@@ -21,6 +21,9 @@ enum OperationType: string
     case ReactivateUser = 'reactivate_user';
     case UnlockUser = 'unlock_user';
     case ForcePasswordReset = 'force_password_reset';
+    case RestoreUser = 'restore_user';
+    case ForceDeleteUser = 'force_delete_user';
+    case UpdateUser = 'update_user';
 
     public function isRoleChange(): bool
     {
@@ -29,6 +32,6 @@ enum OperationType: string
 
     public function isUserDestructive(): bool
     {
-        return in_array($this, [self::SuspendUser, self::DeactivateUser, self::DeleteUser], true);
+        return in_array($this, [self::SuspendUser, self::DeactivateUser, self::DeleteUser, self::ForceDeleteUser], true);
     }
 }

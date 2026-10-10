@@ -61,6 +61,7 @@ it('summarises the user base with exact numbers and weekly series', function ():
                 'deactivated' => 1,
                 'without_mfa' => 5,
                 'without_role' => 3,
+                'trashed' => 0,
                 'joined_last_30_days' => 3,
                 'series' => [
                     'members' => [3, 3, 3, 3, 3, 4, 5, 6],

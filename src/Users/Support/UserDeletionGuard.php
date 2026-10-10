@@ -21,7 +21,8 @@ use Illuminate\Database\Eloquent\Model;
  *   `min_owners` active owners would remain. The check is not serialized by a lock (the model event runs outside
  *   any transaction); use the Action for locked, guardrailed deletes.
  * - `deleted`: removes the user's state row and saved views, revokes the invitations they sent and writes ONE
- *   `users.deleted` audit entry.
+ *   `users.deleted` audit entry. A soft delete (SoftDeletes hosts) keeps those rows, ends the sessions and writes
+ *   ONE `users.trashed` entry instead.
  *
  * The Action marks its own delete with viaAction(), so nothing is done twice. Query builder deletes and
  * `withoutEvents()` bypass model events by nature. Inactive when `roles.modules.users` is off.
@@ -81,6 +82,22 @@ final class UserDeletionGuard
 
         $sweeper = app(InvitationSweeper::class);
         $swept = $sweeper->revokeAllPending($user);
+
+        if (method_exists($user, 'isForceDeleting') && ! $user->isForceDeleting()) {
+            // Moved to the trash: roles and state stay so a restore brings the access back; only the sessions end.
+            app(SessionRevoker::class)->revoke($user);
+            app(AuditRecorder::class)->record(
+                'users',
+                'trashed',
+                $user,
+                null,
+                null,
+                ['was_owner' => $context['was_owner'], 'via' => 'model'] + InvitationSweeper::auditMeta($swept),
+                $context['was_owner'] ? Severity::Critical : Severity::Warning,
+            );
+
+            return;
+        }
 
         UserAccessState::query()->where('user_id', $user->getKey())->delete();
         SavedView::query()->where('user_id', $user->getKey())->delete();

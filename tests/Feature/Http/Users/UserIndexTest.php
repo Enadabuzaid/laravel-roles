@@ -42,7 +42,7 @@ it('lists users in the envelope with the resource shape', function (): void {
         ->and($row['last_login_at'])->toStartWith('2026-03-01T10:00:00')
         ->and($row['roles'])->toHaveCount(1)
         ->and($row['roles'][0])->toMatchArray(['name' => 'team', 'color' => '#123456'])
-        ->and(array_keys($row['abilities']))->toBe(['view', 'update', 'suspend', 'delete', 'assign']);
+        ->and(array_keys($row['abilities']))->toBe(['view', 'update', 'suspend', 'delete', 'assign', 'restore', 'force_delete', 'edit', 'verify']);
 });
 
 it('omits roles unless included', function (): void {

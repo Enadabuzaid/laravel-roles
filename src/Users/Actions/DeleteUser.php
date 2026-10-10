@@ -12,21 +12,23 @@ use Enadstack\LaravelRoles\Guardrails\OperationType;
 use Enadstack\LaravelRoles\Guardrails\OwnerCounter;
 use Enadstack\LaravelRoles\Support\ActorContext;
 use Enadstack\LaravelRoles\Support\Exceptions\AccessException;
-use Enadstack\LaravelRoles\Users\Models\AccessInvitation;
-use Enadstack\LaravelRoles\Users\Models\SavedView;
-use Enadstack\LaravelRoles\Users\Models\UserAccessState;
+use Enadstack\LaravelRoles\Users\Support\HostSoftDeletes;
 use Enadstack\LaravelRoles\Users\Support\InvitationSweeper;
 use Enadstack\LaravelRoles\Users\Support\UserDeletionGuard;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\QueryException;
-use Illuminate\Support\Facades\DB;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
- * Deletes the user through the host model (soft-deleted when the model uses SoftDeletes) and cleans the access rows
- * that point at it: role and permission pivots of this model, its state row and saved views. Invitations and
- * state rows it created are kept with `invited_by` set to null. The audit entry has no subject (the row is gone)
- * and carries the id, name and email as old attributes.
+ * Deletes the user through the host model.
+ *
+ * - Host without SoftDeletes: the user row is deleted for good and the access rows that point at it are cleaned
+ *   up: role and permission pivots of this model, its state row and saved views. Invitations and state rows it created
+ *   are kept with `invited_by` set to null. The audit entry (`users.deleted`) has no subject (the row is gone) and
+ *   carries the id, name and email as old attributes.
+ * - Host with SoftDeletes: the user is moved to the trash. Roles, permissions and the access state are kept so a
+ *   restore brings back exactly the access they had; sessions and tokens end and pending invitations are revoked.
+ *   One `users.trashed` entry is recorded on the (still existing) user. ForceDeleteUser removes a trashed user.
  */
 final class DeleteUser extends UserLifecycleAction
 {
@@ -45,19 +47,25 @@ final class DeleteUser extends UserLifecycleAction
                     confirmation: $confirmation,
                 ));
 
+                $isOwner = app(OwnerCounter::class)->isOwner($target);
+                $swept = app(InvitationSweeper::class)->revokeAllPending($target);
+
+                if (HostSoftDeletes::usedBy($target)) {
+                    app(UserDeletionGuard::class)->viaAction(static fn () => $target->delete());
+                    $this->revokeAccessAfterCommit($target);
+
+                    app(AuditRecorder::class)->record('users', 'trashed', $target, null, null, ['was_owner' => $isOwner] + InvitationSweeper::auditMeta($swept), $isOwner ? Severity::Critical : Severity::Warning);
+
+                    return;
+                }
+
                 $old = [
                     'id' => $target->getKey(),
                     'name' => $target->getAttribute('name'),
                     'email' => $target->getAttribute('email'),
                 ];
-                $isOwner = app(OwnerCounter::class)->isOwner($target);
 
-                $swept = app(InvitationSweeper::class)->revokeAllPending($target);
-                $this->detachPivots($target);
-                UserAccessState::query()->where('user_id', $target->getKey())->delete();
-                SavedView::query()->where('user_id', $target->getKey())->delete();
-                AccessInvitation::query()->where('invited_by', $target->getKey())->update(['invited_by' => null]);
-                UserAccessState::query()->where('invited_by', $target->getKey())->update(['invited_by' => null]);
+                $this->removeAccessRows($target);
 
                 app(UserDeletionGuard::class)->viaAction(static fn () => $target->delete());
                 $this->revokeAccessAfterCommit($target);
@@ -74,29 +82,5 @@ final class DeleteUser extends UserLifecycleAction
         }
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
-    }
-
-    /** Foreign key violations only: SQLSTATE 23503 (Postgres), MySQL 1451/1452, the SQLite message. Other integrity errors propagate. */
-    private function isForeignKeyViolation(QueryException $e): bool
-    {
-        $info = $e->errorInfo ?? [];
-
-        return ($info[0] ?? null) === '23503'
-            || in_array($info[1] ?? null, [1451, 1452], true)
-            || str_contains(strtoupper($e->getMessage()), 'FOREIGN KEY');
-    }
-
-    /** Only rows of this model type: another model sharing the numeric id keeps its roles. */
-    private function detachPivots(Model $user): void
-    {
-        $morphKey = (string) config('permission.column_names.model_morph_key', 'model_id');
-        $types = array_values(array_unique([$user->getMorphClass(), $user::class]));
-
-        foreach (['model_has_roles', 'model_has_permissions'] as $pivot) {
-            DB::table((string) config("permission.table_names.{$pivot}", $pivot))
-                ->whereIn('model_type', $types)
-                ->where($morphKey, $user->getKey())
-                ->delete();
-        }
     }
 }

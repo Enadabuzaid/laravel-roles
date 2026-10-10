@@ -12,7 +12,7 @@ use Enadstack\LaravelRoles\Users\Support\TargetStanding;
 
 /**
  * A non-owner may not manage (suspend, reactivate, deactivate, delete, unlock, force a password reset for)
- * an owner or a user whose effective permissions exceed their own; the same goes for removing roles from such a user
+ * an owner or a user whose effective permissions exceed their own (this includes restoring, permanently deleting and editing); the same goes for removing roles from such a user
  * (remove, or a sync that removes something; assign-only changes are unaffected). The system actor and owners skip it.
  */
 final class TargetAboveActorRule implements Guardrail
@@ -25,6 +25,9 @@ final class TargetAboveActorRule implements Guardrail
         OperationType::ReactivateUser,
         OperationType::UnlockUser,
         OperationType::ForcePasswordReset,
+        OperationType::RestoreUser,
+        OperationType::ForceDeleteUser,
+        OperationType::UpdateUser,
     ];
 
     public function __construct(private readonly TargetStanding $standing) {}

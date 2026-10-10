@@ -39,7 +39,7 @@ it('shows a user profile with state, roles and effective permission count', func
         ->and($data['state']['password_changed_at'])->toStartWith('2026-03-01T08:00:00')
         ->and(array_keys($data['state']))->toBe(['status', 'reason', 'activated_at', 'last_login_at', 'last_login_ip', 'failed_login_count', 'locked_until', 'mfa_enabled_at', 'mfa_method', 'password_changed_at'])
         ->and(collect($data['roles'])->pluck('permissions_count', 'name')->all())->toBe(['analyst' => 2, 'finance' => 2])
-        ->and(array_keys($data['abilities']))->toBe(['view', 'update', 'suspend', 'delete', 'assign']);
+        ->and(array_keys($data['abilities']))->toBe(['view', 'update', 'suspend', 'delete', 'assign', 'restore', 'force_delete', 'edit', 'verify']);
 });
 
 it('shows a user without a state row as active and marks the current user', function (): void {

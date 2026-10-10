@@ -9,15 +9,36 @@ use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Support\ActorContext;
 use Enadstack\LaravelRoles\Support\Exceptions\AccessException;
 use Enadstack\LaravelRoles\Users\Models\UserAccessState;
+use Enadstack\LaravelRoles\Users\Policies\UserPolicy;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
 use Tests\Support\TestUser;
 
 function makeUser(string $email = 'a@example.test'): TestUser
 {
-    return TestUser::create(['name' => 'A', 'email' => $email, 'password' => 'x']);
+    /** @var class-string<TestUser> $class */
+    $class = config('roles.user_model');
+
+    return $class::create(['name' => 'A', 'email' => $email, 'password' => 'x']);
+}
+
+/**
+ * Switches the host to another user model variant: config, auth provider, the user policy and, for soft deleting models, the `deleted_at` column.
+ *
+ * @param  class-string<TestUser>  $class
+ */
+function useHostUserModel(string $class): void
+{
+    if (in_array(SoftDeletes::class, class_uses_recursive($class), true) && ! Schema::hasColumn('users', 'deleted_at')) {
+        Schema::table('users', fn (Blueprint $table) => $table->softDeletes());
+    }
+
+    config(['roles.user_model' => $class, 'auth.providers.users.model' => $class]);
+    Gate::policy($class, UserPolicy::class);
 }
 
 /**

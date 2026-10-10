@@ -6,8 +6,11 @@ namespace Enadstack\LaravelRoles\Roles\Http\Requests;
 
 use Enadstack\LaravelRoles\Contracts\AccessUser;
 use Enadstack\LaravelRoles\Models\Role;
+use Enadstack\LaravelRoles\Support\Exceptions\AccessException;
+use Enadstack\LaravelRoles\Users\Support\HostSoftDeletes;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 
@@ -30,6 +33,7 @@ class UserRoleRequest extends FormRequest
 
     /**
      * @throws ModelNotFoundException
+     * @throws AccessException 409 user.trashed for a user in the trash
      */
     public function targetUser(): AccessUser&Model
     {
@@ -40,7 +44,17 @@ class UserRoleRequest extends FormRequest
         }
 
         $id = $this->route('user');
-        $user = $model::query()->findOrFail(is_scalar($id) ? $id : 0);
+        $query = $model::query();
+
+        if (HostSoftDeletes::usedBy($model)) {
+            $query->withoutGlobalScope(SoftDeletingScope::class);
+        }
+
+        $user = $query->findOrFail(is_scalar($id) ? $id : 0);
+
+        if (method_exists($user, 'trashed') && $user->trashed()) {
+            throw new AccessException((string) trans('access::user.trashed'), 'user.trashed', 409);
+        }
 
         if (! $user instanceof AccessUser) {
             throw new \LogicException('roles.user_model must implement AccessUser.');

@@ -7,6 +7,8 @@ use Enadstack\LaravelRoles\Users\Http\Controllers\UserController;
 use Enadstack\LaravelRoles\Users\Http\Controllers\UserLifecycleController;
 use Enadstack\LaravelRoles\Users\Http\Controllers\UserOverviewController;
 use Enadstack\LaravelRoles\Users\Http\Controllers\UserPermissionsController;
+use Enadstack\LaravelRoles\Users\Http\Controllers\UserTrashController;
+use Enadstack\LaravelRoles\Users\Http\Middleware\EnsureHostSoftDeletes;
 use Illuminate\Support\Facades\Route;
 
 Route::get('users', [UserController::class, 'index'])->name('users.index')->middleware('can:access.users.view');
@@ -28,6 +30,12 @@ foreach ([
 }
 Route::delete('users/{user}', [UserLifecycleController::class, 'destroy'])->name('users.destroy')
     ->middleware('can:access.users.delete')->where('user', '[0-9]{1,18}');
+
+// The trash exists only for hosts whose user model uses SoftDeletes (EnsureHostSoftDeletes answers 404 otherwise).
+Route::post('users/{user}/restore', [UserTrashController::class, 'restore'])->name('users.restore')
+    ->middleware(['can:access.users.delete', EnsureHostSoftDeletes::class])->where('user', '[0-9]{1,18}');
+Route::delete('users/{user}/force', [UserTrashController::class, 'force'])->name('users.force-delete')
+    ->middleware(['can:access.users.delete', EnsureHostSoftDeletes::class])->where('user', '[0-9]{1,18}');
 
 Route::get('saved-views', [SavedViewController::class, 'index'])->name('saved-views.index')->middleware('can:access.users.view');
 Route::post('saved-views', [SavedViewController::class, 'store'])->name('saved-views.store')->middleware('can:access.users.view');

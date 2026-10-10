@@ -30,17 +30,17 @@ it('reports self, owner and above locks with the matching abilities', function (
     $rows = rowsByEmail($this, $actor);
 
     expect($rows['actor@example.test'])->toMatchArray(['is_self' => true, 'is_owner' => false, 'locked' => true, 'lock_reason' => 'self'])
-        ->and($rows['actor@example.test']['abilities'])->toBe(['view' => true, 'update' => true, 'suspend' => false, 'delete' => false, 'assign' => false])
+        ->and($rows['actor@example.test']['abilities'])->toBe(['view' => true, 'update' => true, 'suspend' => false, 'delete' => false, 'assign' => false, 'restore' => false, 'force_delete' => false, 'edit' => true, 'verify' => true])
         ->and($rows['owner@example.test'])->toMatchArray(['is_self' => false, 'is_owner' => true, 'locked' => true, 'lock_reason' => 'owner'])
-        ->and($rows['owner@example.test']['abilities'])->toBe(['view' => true, 'update' => false, 'suspend' => false, 'delete' => false, 'assign' => false])
+        ->and($rows['owner@example.test']['abilities'])->toBe(['view' => true, 'update' => false, 'suspend' => false, 'delete' => false, 'assign' => false, 'restore' => false, 'force_delete' => false, 'edit' => false, 'verify' => false])
         ->and($rows['above@example.test'])->toMatchArray(['is_owner' => false, 'locked' => true, 'lock_reason' => 'above'])
-        ->and($rows['above@example.test']['abilities'])->toBe(['view' => true, 'update' => false, 'suspend' => false, 'delete' => false, 'assign' => false])
+        ->and($rows['above@example.test']['abilities'])->toBe(['view' => true, 'update' => false, 'suspend' => false, 'delete' => false, 'assign' => false, 'restore' => false, 'force_delete' => false, 'edit' => false, 'verify' => false])
         ->and($rows['peer@example.test'])->toMatchArray(['locked' => false, 'lock_reason' => null])
-        ->and($rows['peer@example.test']['abilities'])->toBe(['view' => true, 'update' => true, 'suspend' => true, 'delete' => true, 'assign' => true])
+        ->and($rows['peer@example.test']['abilities'])->toBe(['view' => true, 'update' => true, 'suspend' => true, 'delete' => true, 'assign' => true, 'restore' => false, 'force_delete' => false, 'edit' => true, 'verify' => true])
         ->and($rows['none@example.test']['lock_reason'])->toBeNull();
 
     $viewerOnly = usersActor(email: 'viewer@example.test');
-    expect(rowsByEmail($this, $viewerOnly)['peer@example.test']['abilities'])->toBe(['view' => true, 'update' => false, 'suspend' => false, 'delete' => false, 'assign' => false]);
+    expect(rowsByEmail($this, $viewerOnly)['peer@example.test']['abilities'])->toBe(['view' => true, 'update' => false, 'suspend' => false, 'delete' => false, 'assign' => false, 'restore' => false, 'force_delete' => false, 'edit' => false, 'verify' => false]);
 });
 
 it('lets an owner act on other owners and marks only itself as locked', function (): void {
@@ -52,7 +52,7 @@ it('lets an owner act on other owners and marks only itself as locked', function
 
     expect($rows['owner@example.test']['lock_reason'])->toBe('self')
         ->and($rows['second@example.test'])->toMatchArray(['is_owner' => true, 'locked' => false, 'lock_reason' => null])
-        ->and($rows['second@example.test']['abilities'])->toBe(['view' => true, 'update' => true, 'suspend' => true, 'delete' => true, 'assign' => true])
+        ->and($rows['second@example.test']['abilities'])->toBe(['view' => true, 'update' => true, 'suspend' => true, 'delete' => true, 'assign' => true, 'restore' => false, 'force_delete' => false, 'edit' => true, 'verify' => true])
         ->and($rows['plain@example.test']['lock_reason'])->toBeNull();
 });
 

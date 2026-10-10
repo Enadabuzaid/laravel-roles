@@ -10,10 +10,12 @@ use Enadstack\LaravelRoles\Support\RawSql;
 use Enadstack\LaravelRoles\Users\Enums\UserStatus;
 use Enadstack\LaravelRoles\Users\Models\UserAccessState;
 use Enadstack\LaravelRoles\Users\Support\HostMfaColumn;
+use Enadstack\LaravelRoles\Users\Support\HostSoftDeletes;
 use Enadstack\LaravelRoles\Users\Support\TargetStanding;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Database\Grammar;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -27,6 +29,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class UsersQuery
 {
+    /** The status filter value and resource status of users in the trash. */
+    public const TRASHED = 'trashed';
+
     public static function definition(): ListDefinition
     {
         $users = self::userTable();
@@ -34,8 +39,18 @@ final class UsersQuery
         return new ListDefinition(
             filters: [
                 'status' => static function (Builder $query, mixed $value): void {
+                    $requested = array_map('strval', (array) $value);
+
+                    // `trashed` lists the trash (soft-deleting hosts only) and wins over every other status.
+                    if (in_array(self::TRASHED, $requested, true) && HostSoftDeletes::enabled()) {
+                        $query->withoutGlobalScope(SoftDeletingScope::class)
+                            ->whereNotNull($query->getModel()->qualifyColumn('deleted_at'));
+
+                        return;
+                    }
+
                     $statuses = array_values(array_filter(
-                        array_map('strval', (array) $value),
+                        $requested,
                         static fn (string $status): bool => UserStatus::tryFrom($status) !== null,
                     ));
 
@@ -125,7 +140,13 @@ final class UsersQuery
      */
     public static function row(string|int $id, ?Model $actor): Model
     {
-        $user = self::base()->findOrFail($id);
+        $builder = self::base();
+
+        if (HostSoftDeletes::enabled()) {
+            $builder->withoutGlobalScope(SoftDeletingScope::class); // lifecycle responses (restore) show trashed users too
+        }
+
+        $user = $builder->findOrFail($id);
 
         if ($actor !== null) {
             self::annotate($actor, [$user]);

@@ -26,24 +26,27 @@ final class UserResource extends JsonResource
         $user = $this->user();
         $standing = self::standing($request, $user);
         $reason = $standing['reason'];
+        $deletedAt = $user->getAttribute('deleted_at');
+        $trashed = $deletedAt !== null;
 
         return [
             'id' => $user->getKey(),
             'name' => $user->getAttribute('name'),
             'email' => $user->getAttribute('email'),
-            'status' => (string) ($user->getAttribute('access_status') ?? UsersQuery::defaultStatus()),
+            'status' => $trashed ? UsersQuery::TRASHED : (string) ($user->getAttribute('access_status') ?? UsersQuery::defaultStatus()),
             'status_reason' => $user->getAttribute('access_status_reason'),
             'last_login_at' => self::date($user->getAttribute('access_last_login_at')),
             'last_login_ip' => $user->getAttribute('access_last_login_ip'),
             'mfa_enabled' => self::mfaEnabled($user),
             'email_verified_at' => $user->getAttribute('email_verified_at'),
             'created_at' => $user->getAttribute('created_at'),
+            'deleted_at' => $deletedAt,
             'roles' => $this->whenLoaded('roles', fn (): array => RoleLiteResource::collection($user->getRelation('roles'))->resolve()),
             'is_self' => $reason === 'self',
             'is_owner' => $standing['is_owner'],
             'locked' => $reason !== null,
             'lock_reason' => $reason,
-            'abilities' => self::abilities($request, $reason),
+            'abilities' => self::abilities($request, $reason, $trashed, $user->getAttribute('email_verified_at') === null),
         ];
     }
 
@@ -89,11 +92,12 @@ final class UserResource extends JsonResource
 
     /**
      * Permission checks resolve once per request; the per-row lock only narrows what the server would accept.
+     * A trashed user only offers `view`, `restore` and `force_delete`; `edit` and `verify` mirror the edit endpoints.
      *
      * @param  'self'|'owner'|'above'|null  $reason
-     * @return array{view: bool, update: bool, suspend: bool, delete: bool, assign: bool}
+     * @return array{view: bool, update: bool, suspend: bool, delete: bool, assign: bool, restore: bool, force_delete: bool, edit: bool, verify: bool}
      */
-    private static function abilities(Request $request, ?string $reason): array
+    private static function abilities(Request $request, ?string $reason, bool $trashed, bool $unverified): array
     {
         /** @var array{view: bool, update: bool, suspend: bool, delete: bool, assign: bool}|null $cached */
         $cached = $request->attributes->get('users.abilities');
@@ -110,12 +114,18 @@ final class UserResource extends JsonResource
             $request->attributes->set('users.abilities', $cached);
         }
 
+        $edit = ! $trashed && $cached['update'] && $reason !== 'owner' && $reason !== 'above';
+
         return [
             'view' => $cached['view'],
-            'update' => $cached['update'] && $reason !== 'owner' && $reason !== 'above',
-            'suspend' => $cached['suspend'] && $reason === null,
-            'delete' => $cached['delete'] && $reason === null,
-            'assign' => $cached['assign'] && $reason === null,
+            'update' => $edit,
+            'suspend' => ! $trashed && $cached['suspend'] && $reason === null,
+            'delete' => ! $trashed && $cached['delete'] && $reason === null,
+            'assign' => ! $trashed && $cached['assign'] && $reason === null,
+            'restore' => $trashed && $cached['delete'] && $reason === null,
+            'force_delete' => $trashed && $cached['delete'] && $reason === null,
+            'edit' => $edit,
+            'verify' => $edit && $unverified,
         ];
     }
 }

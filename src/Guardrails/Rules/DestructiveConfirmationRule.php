@@ -38,7 +38,7 @@ final class DestructiveConfirmationRule implements Guardrail
             OperationType::ForceDeleteRole => $role?->name,
             OperationType::DeleteRole => $role !== null && $role->users()->count() > 0 ? $role->name : null,
             OperationType::DeletePermission => $operation->target === null ? null : (string) $operation->target->getAttribute('name'),
-            OperationType::DeleteUser => $operation->target === null ? null : (string) $operation->target->getAttribute('email'),
+            OperationType::DeleteUser, OperationType::ForceDeleteUser => $operation->target === null ? null : (string) $operation->target->getAttribute('email'),
             default => null,
         };
     }
