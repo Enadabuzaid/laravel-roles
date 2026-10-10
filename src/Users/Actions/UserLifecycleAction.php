@@ -54,7 +54,10 @@ abstract class UserLifecycleAction extends Action
     protected function invalidTransition(UserStatus $current, string $action): AccessException
     {
         return new AccessException(
-            "A {$current->value} user can't be {$action}.",
+            (string) trans('access::errors.invalid_transition', [
+                'status' => (string) trans('access::errors.status.'.$current->value),
+                'action' => (string) trans('access::errors.action.'.$action),
+            ]),
             'user.invalid_transition',
             409,
             ['status' => [$current->value]],

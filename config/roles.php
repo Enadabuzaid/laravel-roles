@@ -6,6 +6,7 @@ use Enadstack\LaravelRoles\Core\Doctor\Checks\CacheWorkingCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\ConfigConsistencyCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\DeprecatedStillHeldCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\GuardrailConfigCheck;
+use Enadstack\LaravelRoles\Core\Doctor\Checks\InvitationsRequireUsersCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\NoEmptyRolesCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\OwnerExistsCheck;
 use Enadstack\LaravelRoles\Core\Doctor\Checks\PermissionsSyncedCheck;
@@ -130,6 +131,7 @@ return [
             AuditReadyCheck::class,
             GuardrailConfigCheck::class,
             UsersStateCheck::class,
+            InvitationsRequireUsersCheck::class,
         ],
         'disabled' => [],
     ],

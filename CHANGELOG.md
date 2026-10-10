@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 2.0.0-alpha.7 — 2026-10-10
+
+### Added
+- `HasAccess` deleting/deleted hooks (`UserDeletionGuard`): a direct `$user->delete()` is refused for the last active owner (`LastOwnerDeletionException`, `guardrail.last_owner`) and otherwise cleans the access rows, revokes sent invitations and audits once.
+- Arabic and English texts for guardrail, invitation, transition, saved-view and actor-required messages (`access::guardrail`, `access::errors`).
+- `invitations-require-users` doctor check (invitation routes need the users module); `PasswordReset` listener stamping `password_changed_at`.
+
+### Changed
+- `TargetAboveActorRule` also covers role removal (remove, or sync that removes); `abilities.assign` is false for `above` rows.
+- Accept answers 410 when the invited role was trashed or deleted; trashing or deleting a role revokes its pending invitations (`invitations.revoked_role_removed`); resend stamps the resender as the inviter; trash and force delete take the super-role lock first.
+- `owner-exists` counts active owners; `roles:owner` reactivates a suspended or deactivated target (invited targets are refused); reactivate, unlock and forced reset of an owner are audited `critical`.
+- Removed the unused `UserStatus::isFinal()`.
+
 ## 2.0.0-alpha.6 — 2026-10-10
 
 ### Added

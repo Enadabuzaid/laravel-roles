@@ -57,7 +57,7 @@ class ActorContext
     public function assertKnownActor(): void
     {
         if ($this->actor() === null && ! $this->isSystem()) {
-            throw new AccessException('Authentication required.', 'guardrail.actor_required', 403);
+            throw new AccessException((string) trans('access::guardrail.actor_required'), 'guardrail.actor_required', 403);
         }
     }
 

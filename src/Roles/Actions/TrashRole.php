@@ -9,6 +9,7 @@ use Enadstack\LaravelRoles\Audit\Severity;
 use Enadstack\LaravelRoles\Guardrails\Guardrails;
 use Enadstack\LaravelRoles\Guardrails\Operation;
 use Enadstack\LaravelRoles\Guardrails\OperationType;
+use Enadstack\LaravelRoles\Guardrails\OwnerCounter;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Support\Action;
 use Enadstack\LaravelRoles\Support\ActorContext;
@@ -22,6 +23,7 @@ final class TrashRole extends Action
         app(ActorContext::class)->assertKnownActor();
 
         $this->transaction(function () use ($role, $confirmation): void {
+            app(OwnerCounter::class)->lockSuperRole(); // documented lock order: the super role first
             $fresh = Role::query()->lockForUpdate()->whereKey($role->getKey())->firstOrFail();
 
             app(Guardrails::class)->assert(new Operation(
@@ -35,6 +37,7 @@ final class TrashRole extends Action
             $inviters = $members > 0 ? app(InvitationSweeper::class)->invitersHolding($fresh) : [];
             $fresh->delete();
             app(InvitationSweeper::class)->revokeUnauthorizedFor($inviters);
+            app(InvitationSweeper::class)->revokeForRole($fresh);
 
             app(AuditRecorder::class)->record(
                 'roles',

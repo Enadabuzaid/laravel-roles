@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Enadstack\LaravelRoles\Users\Actions;
 
 use Enadstack\LaravelRoles\Audit\AuditRecorder;
+use Enadstack\LaravelRoles\Audit\Severity;
 use Enadstack\LaravelRoles\Guardrails\Guardrails;
 use Enadstack\LaravelRoles\Guardrails\Operation;
 use Enadstack\LaravelRoles\Guardrails\OperationType;
+use Enadstack\LaravelRoles\Guardrails\OwnerCounter;
 use Enadstack\LaravelRoles\Support\ActorContext;
 use Enadstack\LaravelRoles\Users\Enums\UserStatus;
 use Illuminate\Database\Eloquent\Model;
@@ -38,7 +40,7 @@ final class UnlockUser extends UserLifecycleAction
                 'failed_login_count' => 0,
             ]);
 
-            app(AuditRecorder::class)->record('users', 'unlocked', $target, ['status' => $current->value], ['status' => UserStatus::Active->value]);
+            app(AuditRecorder::class)->record('users', 'unlocked', $target, ['status' => $current->value], ['status' => UserStatus::Active->value], [], app(OwnerCounter::class)->isOwner($target) ? Severity::Critical : Severity::Info);
 
             return true;
         });

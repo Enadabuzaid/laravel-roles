@@ -6,6 +6,7 @@ namespace Enadstack\LaravelRoles;
 
 use Enadstack\LaravelRoles\Support\Http\ApiExceptionRenderer;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Auth\Events\Validated;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Debug\ExceptionHandler;
@@ -61,6 +62,7 @@ class RolesServiceProvider extends ServiceProvider
         $this->app->scoped(Audit\AuditRecorder::class);
         $this->app->scoped(Users\Support\HostMfaColumn::class);
         $this->app->scoped(Users\Support\HostUserColumns::class);
+        $this->app->scoped(Users\Support\UserDeletionGuard::class);
         $this->app->scoped(Guardrails\Guardrails::class, fn ($app) => new Guardrails\Guardrails(
             array_map(static fn (string $rule): Guardrails\Guardrail => $app->make($rule), array_values((array) config('roles.guardrails.rules', []))),
         ));
@@ -93,6 +95,7 @@ class RolesServiceProvider extends ServiceProvider
         Event::listen(Validated::class, Users\Listeners\BlockInactiveUser::class);
         Event::listen(Login::class, [Users\Listeners\BlockInactiveUser::class, 'onLogin']);
         Event::listen(Login::class, Users\Listeners\RecordLastLogin::class);
+        Event::listen(PasswordReset::class, Users\Listeners\RecordPasswordChange::class);
 
         RateLimiter::for('access', static function (Request $request): Limit {
             $limit = Http\Support\RoutesRegistrar::rateLimit();
@@ -124,8 +127,10 @@ class RolesServiceProvider extends ServiceProvider
             Http\Support\RoutesRegistrar::register('roles', __DIR__.'/Roles/routes.php');
             Http\Support\RoutesRegistrar::register('permissions', __DIR__.'/Core/routes.php');
             Http\Support\RoutesRegistrar::register('users', __DIR__.'/Users/routes.php');
-            Http\Support\RoutesRegistrar::register('invitations', __DIR__.'/Users/invitation-routes.php');
-            Http\Support\RoutesRegistrar::registerPublic('invitations', __DIR__.'/Users/public-routes.php');
+            if (config('roles.modules.users')) { // invitations need the users module (state rows); the doctor reports the mismatch
+                Http\Support\RoutesRegistrar::register('invitations', __DIR__.'/Users/invitation-routes.php');
+                Http\Support\RoutesRegistrar::registerPublic('invitations', __DIR__.'/Users/public-routes.php');
+            }
         }
 
         if ($this->app->runningInConsole()) {

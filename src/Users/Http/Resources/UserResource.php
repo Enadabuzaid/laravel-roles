@@ -115,7 +115,7 @@ final class UserResource extends JsonResource
             'update' => $cached['update'] && $reason !== 'owner' && $reason !== 'above',
             'suspend' => $cached['suspend'] && $reason === null,
             'delete' => $cached['delete'] && $reason === null,
-            'assign' => $cached['assign'] && $reason !== 'self' && $reason !== 'owner',
+            'assign' => $cached['assign'] && $reason === null,
         ];
     }
 }

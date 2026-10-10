@@ -16,6 +16,7 @@ use Enadstack\LaravelRoles\Users\Models\AccessInvitation;
 use Enadstack\LaravelRoles\Users\Models\SavedView;
 use Enadstack\LaravelRoles\Users\Models\UserAccessState;
 use Enadstack\LaravelRoles\Users\Support\InvitationSweeper;
+use Enadstack\LaravelRoles\Users\Support\UserDeletionGuard;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -58,7 +59,7 @@ final class DeleteUser extends UserLifecycleAction
                 AccessInvitation::query()->where('invited_by', $target->getKey())->update(['invited_by' => null]);
                 UserAccessState::query()->where('invited_by', $target->getKey())->update(['invited_by' => null]);
 
-                $target->delete();
+                app(UserDeletionGuard::class)->viaAction(static fn () => $target->delete());
                 $this->revokeAccessAfterCommit($target);
 
                 app(AuditRecorder::class)->record('users', 'deleted', null, $old, null, ['was_owner' => $isOwner] + InvitationSweeper::auditMeta($swept), Severity::Critical);

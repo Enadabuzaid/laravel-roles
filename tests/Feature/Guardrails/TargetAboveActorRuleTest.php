@@ -135,3 +135,38 @@ it('ignores permissions of another guard', function () {
 
     expect(guardrailCode(new Operation(T::SuspendUser, actor: $actor, target: $target)))->toBeNull();
 });
+
+it('blocks removing or shrinking the roles of a more powerful user but not assigning', function (): void {
+    makeOwner();
+    $actor = userWith('actor@example.test', ['reports.view']);
+    $target = userWith('target@example.test', ['reports.view', 'billing.view']);
+    $role = $target->roles->first();
+
+    expect(guardrailCode(new Operation(T::RemoveRole, actor: $actor, target: $target, removed: [$role])))->toBe('guardrail.target_above_actor')
+        ->and(guardrailCode(new Operation(T::SyncRoles, actor: $actor, target: $target, removed: [$role])))->toBe('guardrail.target_above_actor')
+        ->and(guardrailCode(new Operation(T::SyncRoles, actor: $actor, target: $target, added: [makeRole('plain')])))->toBeNull()
+        ->and(guardrailCode(new Operation(T::AssignRole, actor: $actor, target: $target, added: [makeRole('plain-2')])))->toBeNull();
+});
+
+it('allows removing roles from equal or lesser users, and owners are exempt', function (): void {
+    $owner = makeOwner();
+    $actor = userWith('actor@example.test', ['reports.view']);
+    $peer = userWith('peer@example.test', ['reports.view']);
+    $lesser = userWith('lesser@example.test', []);
+    $strong = userWith('strong@example.test', ['reports.view', 'billing.view']);
+
+    expect(guardrailCode(new Operation(T::RemoveRole, actor: $actor, target: $peer, removed: [$peer->roles->first()])))->toBeNull()
+        ->and(guardrailCode(new Operation(T::RemoveRole, actor: $actor, target: $lesser, removed: [$lesser->roles->first()])))->toBeNull()
+        ->and(guardrailCode(new Operation(T::SyncRoles, actor: $owner, target: $strong, removed: [$strong->roles->first()])))->toBeNull();
+});
+
+it('refuses through HTTP: an assigner cannot empty a more powerful user', function (): void {
+    makeOwner();
+    $actor = usersActor(['access.roles.assign', 'access.users.view', 'reports.view'], 'assigner@example.test');
+    $target = userWith('target@example.test', ['reports.view', 'billing.view']);
+    $role = $target->roles->first();
+
+    $this->actingAs($actor)->deleteJson("/api/access/users/{$target->id}/roles/{$role->id}")->assertForbidden()->assertJsonPath('code', 'guardrail.target_above_actor');
+    $this->actingAs($actor)->putJson("/api/access/users/{$target->id}/roles", ['roles' => []])->assertForbidden()->assertJsonPath('code', 'guardrail.target_above_actor');
+    expect($target->fresh()->roles)->toHaveCount(1);
+});

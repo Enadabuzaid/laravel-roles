@@ -12,7 +12,8 @@ use Enadstack\LaravelRoles\Users\Support\TargetStanding;
 
 /**
  * A non-owner may not manage (suspend, reactivate, deactivate, delete, unlock, force a password reset for)
- * an owner or a user whose effective permissions exceed their own. The system actor and owners skip it.
+ * an owner or a user whose effective permissions exceed their own; the same goes for removing roles from such a user
+ * (remove, or a sync that removes something; assign-only changes are unaffected). The system actor and owners skip it.
  */
 final class TargetAboveActorRule implements Guardrail
 {
@@ -37,7 +38,9 @@ final class TargetAboveActorRule implements Guardrail
             return;
         }
 
-        if (! in_array($operation->type, self::TARGET_OPERATIONS, true) || $operation->actorIsTarget()) {
+        $isRoleRemoval = in_array($operation->type, [OperationType::RemoveRole, OperationType::SyncRoles], true) && $operation->removed !== [];
+
+        if ((! $isRoleRemoval && ! in_array($operation->type, self::TARGET_OPERATIONS, true)) || $operation->actorIsTarget()) {
             return;
         }
 

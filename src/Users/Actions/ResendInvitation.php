@@ -60,7 +60,9 @@ final class ResendInvitation extends Action
                 throw InvitationErrors::pendingExists();
             }
 
+            $resender = app(ActorContext::class)->actor();
             $locked->update([
+                ...($resender === null ? [] : ['invited_by' => $resender->getKey()]),
                 'token_hash' => InvitationToken::hash($token),
                 'expires_at' => now()->addHours(InvitationMailer::ttlHours()),
             ]);

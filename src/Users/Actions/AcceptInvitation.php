@@ -63,6 +63,10 @@ final class AcceptInvitation extends Action
 
         $role = $invitation->role_id === null ? null : Role::query()->where('guard_name', (string) config('roles.guard'))->find($invitation->role_id);
 
+        if ($invitation->role_id !== null && $role === null) {
+            throw InvitationErrors::invalid(); // the invited role was trashed or deleted
+        }
+
         if (! $this->inviterStillAuthorized($invitation, $role)) {
             throw InvitationErrors::invalid();
         }

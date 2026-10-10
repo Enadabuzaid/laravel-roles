@@ -10,51 +10,52 @@ final class Violation
 {
     public static function lastOwner(): AccessException
     {
-        return self::make('guardrail.last_owner', 'At least one Owner must remain.');
+        return self::make('last_owner');
     }
 
     public static function selfRoleChange(): AccessException
     {
-        return self::make('guardrail.self_role_change', "You can't change your own role.");
+        return self::make('self_role_change');
     }
 
     public static function selfDestructive(): AccessException
     {
-        return self::make('guardrail.self_destructive', "You can't suspend, deactivate or delete yourself.");
+        return self::make('self_destructive');
     }
 
     public static function targetAboveActor(): AccessException
     {
-        return self::make('guardrail.target_above_actor', "You can't manage a user with more access than you have.");
+        return self::make('target_above_actor');
     }
 
     public static function escalation(): AccessException
     {
-        return self::make('guardrail.escalation', "You can't grant access higher than your own.");
+        return self::make('escalation');
     }
 
     public static function highRiskConfirmRequired(): AccessException
     {
-        return self::make('guardrail.high_risk_confirm_required', 'This grants high-risk access. Confirm to continue.');
+        return self::make('high_risk_confirm_required');
     }
 
     public static function ownerRoleLocked(): AccessException
     {
-        return self::make('guardrail.owner_role_locked', "The Owner role always has full access and can't be edited.");
+        return self::make('owner_role_locked');
     }
 
     public static function systemRole(): AccessException
     {
-        return self::make('guardrail.system_role', "System roles can't be deleted or renamed.");
+        return self::make('system_role');
     }
 
     public static function confirmationMismatch(): AccessException
     {
-        return self::make('guardrail.confirmation_mismatch', 'Type the exact name to confirm.');
+        return self::make('confirmation_mismatch');
     }
 
-    private static function make(string $code, string $message): AccessException
+    /** The message is the translated `access::guardrail.<key>` of the request locale. */
+    private static function make(string $key): AccessException
     {
-        return new AccessException($message, $code, 403);
+        return new AccessException((string) trans('access::guardrail.'.$key), 'guardrail.'.$key, 403);
     }
 }

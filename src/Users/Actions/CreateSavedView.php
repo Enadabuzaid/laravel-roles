@@ -25,7 +25,7 @@ final class CreateSavedView
 
                 if (SavedViewsQuery::countFor($userId, $page) >= SavedViewsQuery::LIMIT_PER_PAGE) {
                     throw new AccessException(
-                        'You can save up to '.SavedViewsQuery::LIMIT_PER_PAGE.' views per page. Delete one first.',
+                        (string) trans('access::errors.saved_view_limit', ['max' => SavedViewsQuery::LIMIT_PER_PAGE]),
                         'saved_view.limit',
                         422,
                     );

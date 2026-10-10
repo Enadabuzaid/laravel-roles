@@ -130,6 +130,18 @@ final class InvitationSweeper
         return $count;
     }
 
+    /** Revokes every pending invitation to a role that was trashed or deleted; one audit entry when any. */
+    public function revokeForRole(Role $role): int
+    {
+        $count = AccessInvitation::query()->pending()->where('role_id', $role->getKey())->update(['revoked_at' => now()]);
+
+        if ($count > 0) {
+            app(AuditRecorder::class)->record('invitations', 'revoked_role_removed', null, null, null, ['role' => $role->name, 'revoked_invitations' => $count], Severity::Warning);
+        }
+
+        return $count;
+    }
+
     /**
      * Keys of the members of `$role` who have pending invitations (a subquery on the role pivot, so the role's
      * size does not matter). Read it BEFORE the pivot rows go away.

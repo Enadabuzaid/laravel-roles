@@ -9,6 +9,7 @@ use Enadstack\LaravelRoles\Audit\Severity;
 use Enadstack\LaravelRoles\Guardrails\Guardrails;
 use Enadstack\LaravelRoles\Guardrails\Operation;
 use Enadstack\LaravelRoles\Guardrails\OperationType;
+use Enadstack\LaravelRoles\Guardrails\OwnerCounter;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Support\Action;
 use Enadstack\LaravelRoles\Support\ActorContext;
@@ -24,6 +25,7 @@ final class ForceDeleteRole extends Action
         app(ActorContext::class)->assertKnownActor();
 
         $this->transaction(function () use ($role, $confirmation): void {
+            app(OwnerCounter::class)->lockSuperRole(); // documented lock order: the super role first
             $fresh = Role::withTrashed()->lockForUpdate()->whereKey($role->getKey())->firstOrFail();
 
             if (! $fresh->trashed()) {
@@ -47,6 +49,7 @@ final class ForceDeleteRole extends Action
                 ->delete();
             $fresh->forceDelete();
             app(InvitationSweeper::class)->revokeUnauthorizedFor($inviters);
+            app(InvitationSweeper::class)->revokeForRole($fresh);
 
             app(AuditRecorder::class)->record('roles', 'deleted', null, $old, null, $meta, Severity::Critical);
         });

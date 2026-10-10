@@ -8,6 +8,9 @@ use Enadstack\LaravelRoles\Concerns\HasAccess;
 use Enadstack\LaravelRoles\Contracts\AccessUser;
 use Enadstack\LaravelRoles\Roles\Actions\SeedDefaultRoles;
 use Enadstack\LaravelRoles\Support\ActorContext;
+use Enadstack\LaravelRoles\Users\Actions\ReactivateUser;
+use Enadstack\LaravelRoles\Users\Enums\UserStatus;
+use Enadstack\LaravelRoles\Users\Support\SignInGate;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Model;
 
@@ -56,9 +59,39 @@ class OwnerCommand extends Command
             return self::FAILURE;
         }
 
+        if (! $this->makeSignable($user)) {
+            return self::FAILURE;
+        }
+
         app(ActorContext::class)->runAs(null, fn () => $user->assignAccessRole($role, confirmed: true));
         $this->components->info("{$user->getAttribute('email')} is now [{$super}].");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * A suspended or deactivated target is reactivated (audited as the system actor) so the new owner can actually
+     * sign in; an invited or pending-verification target is refused with a clear message.
+     */
+    private function makeSignable(Model $user): bool
+    {
+        if (! app(SignInGate::class)->enabled()) {
+            return true;
+        }
+
+        $status = $user instanceof AccessUser && method_exists($user, 'accessStatus') ? $user->accessStatus() : UserStatus::Active;
+
+        if (in_array($status, [UserStatus::Invited, UserStatus::PendingVerification], true)) {
+            $this->components->error("{$user->getAttribute('email')} is {$status->value}: they must accept the invitation or verify the account first.");
+
+            return false;
+        }
+
+        if (in_array($status, [UserStatus::Suspended, UserStatus::Deactivated], true)) {
+            app(ActorContext::class)->runAs(null, fn () => app(ReactivateUser::class)->handle($user));
+            $this->components->warn("{$user->getAttribute('email')} was {$status->value} and has been reactivated.");
+        }
+
+        return true;
     }
 }

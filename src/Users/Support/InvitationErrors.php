@@ -11,21 +11,21 @@ final class InvitationErrors
     /** One response for every way a token can be unusable (unknown, used, revoked, expired, wrong email). */
     public static function invalid(): AccessException
     {
-        return new AccessException('This invitation is invalid or has expired.', 'invitation.invalid', 410);
+        return new AccessException((string) trans('access::errors.invitation_invalid'), 'invitation.invalid', 410);
     }
 
     public static function userExists(): AccessException
     {
-        return new AccessException('A user with this email already exists.', 'invitation.user_exists', 409);
+        return new AccessException((string) trans('access::errors.invitation_user_exists'), 'invitation.user_exists', 409);
     }
 
     public static function pendingExists(): AccessException
     {
-        return new AccessException('A pending invitation for this email already exists. Resend it instead.', 'invitation.pending_exists', 409);
+        return new AccessException((string) trans('access::errors.invitation_pending_exists'), 'invitation.pending_exists', 409);
     }
 
     public static function notPending(): AccessException
     {
-        return new AccessException('This invitation was already accepted or revoked.', 'invitation.not_pending', 409);
+        return new AccessException((string) trans('access::errors.invitation_not_pending'), 'invitation.not_pending', 409);
     }
 }

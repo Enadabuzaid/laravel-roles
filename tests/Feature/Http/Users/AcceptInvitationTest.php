@@ -189,14 +189,14 @@ it('ignores role, roles and is_admin in the body and assigns only the invited ro
         ->and($user->getAttributes())->not->toHaveKey('is_admin');
 });
 
-it('creates the user without a role when the invited role has been deleted since', function (): void {
+it('answers the generic 410 when the invited role has been trashed since', function (): void {
     $role = makeRole('temp');
     [, $token] = pendingInvitation('norole@example.test', $role);
     $role->delete();
 
-    $this->postJson(ACCEPT_URL, acceptBody($token, 'norole@example.test'))->assertOk();
+    $this->postJson(ACCEPT_URL, acceptBody($token, 'norole@example.test'))->assertStatus(410)->assertJsonPath('code', 'invitation.invalid');
 
-    expect(TestUser::where('email', 'norole@example.test')->sole()->getRoleNames()->all())->toBe([]);
+    expect(TestUser::where('email', 'norole@example.test')->exists())->toBeFalse();
 });
 
 it('grants the owner role when the inviter vetted it, with a critical role audit', function (): void {

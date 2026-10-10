@@ -34,7 +34,7 @@ it('reports self, owner and above locks with the matching abilities', function (
         ->and($rows['owner@example.test'])->toMatchArray(['is_self' => false, 'is_owner' => true, 'locked' => true, 'lock_reason' => 'owner'])
         ->and($rows['owner@example.test']['abilities'])->toBe(['view' => true, 'update' => false, 'suspend' => false, 'delete' => false, 'assign' => false])
         ->and($rows['above@example.test'])->toMatchArray(['is_owner' => false, 'locked' => true, 'lock_reason' => 'above'])
-        ->and($rows['above@example.test']['abilities'])->toBe(['view' => true, 'update' => false, 'suspend' => false, 'delete' => false, 'assign' => true])
+        ->and($rows['above@example.test']['abilities'])->toBe(['view' => true, 'update' => false, 'suspend' => false, 'delete' => false, 'assign' => false])
         ->and($rows['peer@example.test'])->toMatchArray(['locked' => false, 'lock_reason' => null])
         ->and($rows['peer@example.test']['abilities'])->toBe(['view' => true, 'update' => true, 'suspend' => true, 'delete' => true, 'assign' => true])
         ->and($rows['none@example.test']['lock_reason'])->toBeNull();

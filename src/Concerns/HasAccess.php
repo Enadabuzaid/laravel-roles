@@ -10,12 +10,24 @@ use Enadstack\LaravelRoles\Roles\Actions\RemoveRoleFromUser;
 use Enadstack\LaravelRoles\Roles\Actions\SyncUserRoles;
 use Enadstack\LaravelRoles\Users\Enums\UserStatus;
 use Enadstack\LaravelRoles\Users\Models\UserAccessState;
+use Enadstack\LaravelRoles\Users\Support\UserDeletionGuard;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Spatie\Permission\Traits\HasRoles;
 
 trait HasAccess
 {
     use HasRoles;
+
+    /**
+     * Guards direct deletes: refuses removing the last active owner and cleans up access rows plus one audit entry
+     * (see UserDeletionGuard). The DeleteUser Action is unaffected.
+     */
+    public static function bootHasAccess(): void
+    {
+        static::deleting(static fn (Model $user) => app(UserDeletionGuard::class)->deleting($user));
+        static::deleted(static fn (Model $user) => app(UserDeletionGuard::class)->deleted($user));
+    }
 
     public function assignAccessRole(string|Role $role, bool $confirmed = false): static
     {

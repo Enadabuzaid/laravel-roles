@@ -21,8 +21,8 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Users of the configured model LEFT JOINed to their access state; users without a state row count as the
- * configured default status (`active`). The state columns come back as `access_*` aliases so no row needs a
+ * Users of the configured model LEFT JOINed to their access state; users without a state row are always
+ * `active` (`roles.users.default_status` only seeds rows created by `roles:backfill-users`). The state columns come back as `access_*` aliases so no row needs a
  * second query.
  */
 final class UsersQuery

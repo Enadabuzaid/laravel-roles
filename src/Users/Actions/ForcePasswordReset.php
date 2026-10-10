@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Enadstack\LaravelRoles\Users\Actions;
 
 use Enadstack\LaravelRoles\Audit\AuditRecorder;
+use Enadstack\LaravelRoles\Audit\Severity;
 use Enadstack\LaravelRoles\Guardrails\Guardrails;
 use Enadstack\LaravelRoles\Guardrails\Operation;
 use Enadstack\LaravelRoles\Guardrails\OperationType;
+use Enadstack\LaravelRoles\Guardrails\OwnerCounter;
 use Enadstack\LaravelRoles\Support\ActorContext;
 use Enadstack\LaravelRoles\Users\Models\UserAccessState;
 use Illuminate\Auth\Passwords\PasswordBroker;
@@ -47,7 +49,7 @@ final class ForcePasswordReset extends UserLifecycleAction
         });
 
         $status = $this->sendLink($target);
-        app(AuditRecorder::class)->record('users', 'password_reset_forced', $target, null, null, ['broker_status' => $status]);
+        app(AuditRecorder::class)->record('users', 'password_reset_forced', $target, null, null, ['broker_status' => $status], app(OwnerCounter::class)->isOwner($target) ? Severity::Critical : Severity::Info);
 
         return ['link_sent' => $status === Password::RESET_LINK_SENT, 'broker_status' => $status];
     }

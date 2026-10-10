@@ -22,12 +22,6 @@ enum UserStatus: string
         return $this === self::Active;
     }
 
-    /** A final status needs an explicit administrative action to leave. */
-    public function isFinal(): bool
-    {
-        return $this === self::Deactivated;
-    }
-
     /**
      * Whether an owner in this status counts towards `min_owners`. Locked is transient and self-healing, so a locked
      * owner still counts; suspended, deactivated and not-yet-activated owners do not.

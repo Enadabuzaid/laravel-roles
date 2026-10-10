@@ -68,10 +68,6 @@ it('has the sign in truth table', function (UserStatus $status, ?string $lockedU
     'suspended with past lock' => [UserStatus::Suspended, '-1 hour', false, false],
 ]);
 
-it('marks only deactivated as final', function (): void {
-    expect(array_values(array_filter(UserStatus::cases(), fn (UserStatus $s): bool => $s->isFinal())))->toBe([UserStatus::Deactivated]);
-});
-
 it('scopes invitations by lifecycle and reports usability', function (): void {
     $make = fn (string $email, array $attributes) => AccessInvitation::create([
         'email' => $email, 'token_hash' => hash('sha256', $email), 'expires_at' => now()->addDay(), ...$attributes,
