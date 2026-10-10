@@ -16,7 +16,9 @@ it('describes the owner', function (): void {
         ->and($data['permissions'])->toContain('access.roles.view', 'access.permissions.sync')
         ->and($data['abilities']['roles'])->toBe(['view' => true, 'create' => true, 'update' => true, 'delete' => true, 'assign' => true])
         ->and($data['abilities']['permissions'])->toBe(['view' => true, 'sync' => true])
-        ->and($data['abilities']['matrix'])->toBe(['view' => true, 'update' => true]);
+        ->and($data['abilities']['matrix'])->toBe(['view' => true, 'update' => true])
+        ->and($data['abilities']['users'])->toBe(['view' => true, 'update' => true, 'suspend' => true, 'delete' => true])
+        ->and($data['abilities']['invitations'])->toBe(['view' => true, 'create' => true, 'revoke' => true]);
 });
 
 it('describes a limited user', function (): void {
@@ -30,7 +32,29 @@ it('describes a limited user', function (): void {
         ->and($data['permissions'])->toEqualCanonicalizing(['access.roles.view', 'access.permissions.view'])
         ->and($data['abilities']['roles'])->toBe(['view' => true, 'create' => false, 'update' => false, 'delete' => false, 'assign' => false])
         ->and($data['abilities']['permissions'])->toBe(['view' => true, 'sync' => false])
-        ->and($data['abilities']['matrix'])->toBe(['view' => true, 'update' => false]);
+        ->and($data['abilities']['matrix'])->toBe(['view' => true, 'update' => false])
+        ->and($data['abilities']['users'])->toBe(['view' => false, 'update' => false, 'suspend' => false, 'delete' => false])
+        ->and($data['abilities']['invitations'])->toBe(['view' => false, 'create' => false, 'revoke' => false]);
+});
+
+it('reports users and invitations abilities', function (): void {
+    $user = makeUser('members@example.test');
+    $user->assignRole(makeRole('members', ['access.users.view', 'access.invitations.view']));
+
+    $abilities = $this->actingAs($user)->getJson('/api/access/me')->assertOk()->json('data.abilities');
+
+    expect($abilities['users'])->toBe(['view' => true, 'update' => false, 'suspend' => false, 'delete' => false])
+        ->and($abilities['invitations'])->toBe(['view' => true, 'create' => false, 'revoke' => false]);
+});
+
+it('reports all invitations abilities false when the invitations module is off', function (): void {
+    config(['roles.modules.invitations' => false]);
+    $owner = makeOwner();
+
+    $abilities = $this->actingAs($owner)->getJson('/api/access/me')->assertOk()->json('data.abilities');
+
+    expect($abilities['invitations'])->toBe(['view' => false, 'create' => false, 'revoke' => false])
+        ->and($abilities['users']['view'])->toBeTrue();
 });
 
 it('answers 403 with the envelope for a user without any access permission', function (): void {

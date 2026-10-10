@@ -14,7 +14,7 @@ final class MeQuery
     /**
      * What the current user may do with the package, for the UI to enable or hide controls.
      *
-     * @return array{permissions: list<string>, is_owner: bool, role_ids: list<int>, abilities: array{roles: array<string, bool>, permissions: array<string, bool>, matrix: array<string, bool>}}
+     * @return array{permissions: list<string>, is_owner: bool, role_ids: list<int>, abilities: array{roles: array<string, bool>, permissions: array<string, bool>, matrix: array<string, bool>, users: array<string, bool>, invitations: array<string, bool>}}
      */
     public static function get(Request $request): array
     {
@@ -38,6 +38,9 @@ final class MeQuery
         $permissionModel = (string) config('permission.models.permission');
         $live = $actor['live'];
         sort($live);
+        $usersOn = (bool) config('roles.modules.users');
+        $invitationsOn = $usersOn && (bool) config('roles.modules.invitations');
+        $can = static fn (bool $on, string $ability): bool => $on && $gate->allows($ability);
 
         return [
             'permissions' => $held,
@@ -58,6 +61,17 @@ final class MeQuery
                 'matrix' => [
                     'view' => $gate->allows('viewAny', $permissionModel),
                     'update' => $gate->allows('update', $roleModel),
+                ],
+                'users' => [
+                    'view' => $can($usersOn, 'access.users.view'),
+                    'update' => $can($usersOn, 'access.users.update'),
+                    'suspend' => $can($usersOn, 'access.users.suspend'),
+                    'delete' => $can($usersOn, 'access.users.delete'),
+                ],
+                'invitations' => [
+                    'view' => $can($invitationsOn, 'access.invitations.view'),
+                    'create' => $can($invitationsOn, 'access.invitations.create'),
+                    'revoke' => $can($invitationsOn, 'access.invitations.revoke'),
                 ],
             ],
         ];

@@ -53,6 +53,9 @@ final class MatrixQuery
 
         $roleRows = array_values($roles->map(function (Role $role) use ($grants, $heldRoleIds, $actorIsOwner, $canUpdate): array {
             $isOwner = RoleRisk::isOwnerRole($role);
+            $lockReason = $isOwner
+                ? 'owner'
+                : (! $canUpdate ? 'no_permission' : ((! $actorIsOwner && isset($heldRoleIds[(int) $role->getKey()])) ? 'held' : null));
 
             return [
                 'id' => $role->getKey(),
@@ -61,7 +64,8 @@ final class MatrixQuery
                 'color' => $role->getAttribute('color'),
                 'is_system' => (bool) $role->is_system,
                 'is_owner' => $isOwner,
-                'locked' => $isOwner || ! $canUpdate || (! $actorIsOwner && isset($heldRoleIds[(int) $role->getKey()])),
+                'locked' => $lockReason !== null,
+                'lock_reason' => $lockReason,
                 'permission_ids' => $grants[(int) $role->getKey()] ?? [],
             ];
         })->all());

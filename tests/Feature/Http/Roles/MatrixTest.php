@@ -73,6 +73,51 @@ it('flags the owner role, held roles and non-editable viewers as locked', functi
     expect($locked($viewer)->every(fn (bool $flag) => $flag))->toBeTrue();
 });
 
+it('explains each lock with a lock_reason in priority order', function () {
+    $roles = fn ($user) => collect($this->actingAs($user)->getJson('/api/access/matrix')->json('data.roles'))->keyBy('name');
+    $consistent = fn ($rows) => $rows->every(fn (array $row) => $row['locked'] === ($row['lock_reason'] !== null));
+
+    $owner = makeOwner();
+    $rows = $roles($owner->fresh());
+    expect($rows['owner']['lock_reason'])->toBe('owner')->and($rows['one']['lock_reason'])->toBeNull()
+        ->and($rows['two']['lock_reason'])->toBeNull()->and($consistent($rows))->toBeTrue();
+
+    $viewer = matrixActor(['access.permissions.view']);
+    $rows = $roles($viewer);
+    expect($rows['owner']['lock_reason'])->toBe('owner')->and($rows['one']['lock_reason'])->toBe('no_permission')
+        ->and($rows['two']['lock_reason'])->toBe('no_permission')->and($consistent($rows))->toBeTrue();
+
+    $actor = matrixActor();
+    $actor->assignRole($this->one);
+    $rows = $roles($actor->fresh());
+    expect($rows['owner']['lock_reason'])->toBe('owner')->and($rows['one']['lock_reason'])->toBe('held')
+        ->and($rows['two']['lock_reason'])->toBeNull()->and($consistent($rows))->toBeTrue();
+});
+
+it('keeps the matrix query count independent of lock reasons', function () {
+    $count = function (TestUser $user): int {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->actingAs($user)->getJson('/api/access/matrix')->assertOk();
+        $total = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        return $total;
+    };
+
+    $actor = matrixActor();
+    $actor->assignRole($this->one);
+    $actor = $actor->fresh();
+    $count($actor); // warm caches
+    $before = $count($actor);
+    foreach (range(1, 5) as $i) {
+        makeRole("more{$i}");
+    }
+    $count($actor); // warm the permission cache that creating roles flushed
+
+    expect($count($actor))->toBe($before);
+});
+
 it('lets an owner hold and edit other roles but never the owner column', function () {
     $owner = makeOwner();
     $owner->assignRole($this->one);

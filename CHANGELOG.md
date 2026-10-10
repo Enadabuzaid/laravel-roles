@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 2.0.0-alpha.8 — 2026-10-10
+
+### Added
+- `lock_reason` on `GET matrix` roles: `owner`, `no_permission` (the user may not update roles), `held` (a role the user holds and is not an Owner) or null, in that priority. `locked` stays exactly `lock_reason !== null`.
+- `users` (`view`, `update`, `suspend`, `delete`) and `invitations` (`view`, `create`, `revoke`) ability groups in `GET me`; all false when the matching module is off.
+
 ## 2.0.0-alpha.7 — 2026-10-10
 
 ### Added

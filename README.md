@@ -150,7 +150,7 @@ Role-permission edits go through `Roles\Actions\UpdateRolePermissions` (one role
 
 | Endpoint | Permission | Notes |
 | --- | --- | --- |
-| `GET matrix` | `access.permissions.view` | `{modules, roles, summary}` in three queries; each role has `permission_ids`, `is_owner` and `locked` (owner role, a role you hold unless you are an owner, or every role if you may not update roles) |
+| `GET matrix` | `access.permissions.view` | `{modules, roles, summary}` in three queries; each role has `permission_ids`, `is_owner`, `locked` and `lock_reason` (`owner`, `no_permission`, `held` or null, in that priority; `locked` is `lock_reason` not null) |
 | `PUT matrix` | `access.roles.update` | Body `{changes: {"<roleId>": {grant: [...], revoke: [...]}}, confirm?: bool}`; max 200 roles and 500 entries per list. Returns `{roles: {"<roleId>": {added, removed}}, summary: {granted, revoked, roles_changed, high_risk_granted}}` |
 | `PUT roles/{role}/permissions` | `access.roles.update` | Body `{grant?: [...], revoke?: [...], confirm?: bool}`; entries are permission ids (integers) or names (strings). Returns `{role, added, removed}`; a trashed role is 404 |
 
@@ -260,10 +260,10 @@ These flags are computed without per-role queries (one query for the current use
 
 **Matrix** (`GET matrix`): `{modules, roles, summary}`.
 - `modules`: `[{key, label, permissions: [{id, name, label_text, label, risk, deprecated}]}]`. Active permissions plus deprecated ones a live role still holds.
-- `roles`: `[{id, name, label_text, color, is_system, is_owner, locked, permission_ids}]`; `locked` is true for the Owner role, a role you hold (unless you are an Owner) and every role when you may not update roles.
+- `roles`: `[{id, name, label_text, color, is_system, is_owner, locked, lock_reason, permission_ids}]`; `lock_reason` is `owner` (the super role), then `no_permission` (you may not update roles, so every other role), then `held` (a role you hold unless you are an Owner), else null; `locked` is true exactly when `lock_reason` is not null.
 - `summary`: `{roles, permissions, grants}`.
 
-**Me** (`GET me`): `{permissions, is_owner, role_ids, abilities}`. `permissions` are the package permission names (`access.*`) the user holds (all of them for an Owner); `role_ids` are the live roles the user holds; `abilities` is `{roles: {view, create, update, delete, assign}, permissions: {view, sync}, matrix: {view, update}}`. The route needs the `access:any` middleware (alias registered by the package; `any` is the only supported argument, anything else throws an `InvalidArgumentException` at request time; only non-deprecated permissions of the configured guard count): the user must be an Owner or hold at least one `access.*` permission, otherwise 403 `forbidden`.
+**Me** (`GET me`): `{permissions, is_owner, role_ids, abilities}`. `permissions` are the package permission names (`access.*`) the user holds (all of them for an Owner); `role_ids` are the live roles the user holds; `abilities` is `{roles: {view, create, update, delete, assign}, permissions: {view, sync}, matrix: {view, update}, users: {view, update, suspend, delete}, invitations: {view, create, revoke}}`; the `users` group is all false when `roles.modules.users` is off and the `invitations` group when `roles.modules.invitations` (or users) is off. The route needs the `access:any` middleware (alias registered by the package; `any` is the only supported argument, anything else throws an `InvalidArgumentException` at request time; only non-deprecated permissions of the configured guard count): the user must be an Owner or hold at least one `access.*` permission, otherwise 403 `forbidden`.
 
 **Overview payloads.**
 - Roles (`GET roles/overview`): `total_roles` (includes trashed), `active_roles`, `system_roles`, `custom_roles`, `trashed_roles` (`active_roles` + `trashed_roles` = `total_roles`; `system_roles` + `custom_roles` = `active_roles`), `members_with_role`, `members_without_role` (users of `roles.user_model` holding at least one / no role of the configured guard), `avg_permissions_per_role`.
