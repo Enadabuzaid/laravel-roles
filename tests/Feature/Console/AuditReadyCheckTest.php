@@ -55,3 +55,28 @@ it('passes when the audit module is disabled', function () {
 it('is registered in the doctor checks', function () {
     expect(config('roles.doctor.checks'))->toContain(AuditReadyCheck::class);
 });
+
+it('fails when the label columns of action logger 1.2 are missing', function () {
+    config(['action-logger.immutable' => true]);
+    Schema::dropIfExists('action_logs');
+    Schema::create('action_logs', function ($table) {
+        $table->id();
+        $table->string('module')->nullable();
+        $table->string('severity')->nullable();
+        $table->string('request_id')->nullable();
+    });
+
+    $result = (new AuditReadyCheck)->run();
+
+    expect($result->status)->toBe(CheckStatus::Fail)
+        ->and($result->message)->toContain('subject_label')->and($result->message)->toContain('actor_label');
+});
+
+it('warns with the immutability hint and passes once enabled', function () {
+    config(['action-logger.immutable' => false]);
+    $warn = (new AuditReadyCheck)->run();
+    config(['action-logger.immutable' => true]);
+
+    expect($warn->status)->toBe(CheckStatus::Warn)->and($warn->message)->toContain('ACTION_LOGGER_IMMUTABLE=true')
+        ->and((new AuditReadyCheck)->run()->status)->toBe(CheckStatus::Pass);
+});

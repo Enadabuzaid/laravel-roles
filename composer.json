@@ -7,7 +7,7 @@
     "php": "^8.3",
     "illuminate/support": "^13.0",
     "spatie/laravel-permission": "^8.0",
-    "enadstack/laravel-action-logger": "^1.1"
+    "enadstack/laravel-action-logger": "^1.2"
   },
   "require-dev": {
     "larastan/larastan": "^3.0",

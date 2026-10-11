@@ -46,7 +46,7 @@ it('protects every access route with a permission middleware, a 401 envelope and
 
         expect(array_filter($middleware, static fn (string $m): bool => str_starts_with($m, 'can:') || str_starts_with($m, 'access:')))->not->toBeEmpty("{$name} has no can:/access: middleware");
 
-        $uri = '/'.str_replace(['{role}', '{permission}', '{user}', '{view}', '{invitation}'], [(string) $role->id, (string) $permission->id, (string) $target->id, '1', (string) $invitation->id], $route->uri());
+        $uri = '/'.str_replace(['{role}', '{permission}', '{user}', '{view}', '{invitation}', '{entry}'], [(string) $role->id, (string) $permission->id, (string) $target->id, '1', (string) $invitation->id, '1'], $route->uri());
         $method = $route->methods()[0];
 
         auth()->forgetGuards();

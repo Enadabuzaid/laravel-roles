@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 2.0.0-alpha.10 — 2026-10-11
+
+### Added
+- Read-only audit API (module `audit`, `can:access.audit.view`): `GET audit` (filters `filter[module][]`, `filter[severity]`, `filter[actor]`, `filter[subject]`, `filter[user]`, `filter[event]`, `range`, `from`, `to`, `search`), `GET audit/overview`, `GET audit/actors`, `GET audit/{entry}` with a server-computed `changes` diff, redacted `meta` and `user_agent`.
+- `GET audit/export`: streamed CSV (BOM, RFC 4180, formula-injection safe cells, localized headers) capped by `roles.audit.export_max_rows`, 422 `export.too_large`; needs `access.audit.view` and `access.reports.export` and writes one `audit.exported` entry.
+- `audit` abilities (`view`, `export`) in `GET me`; `roles.audit.modules`, `roles.audit.redact`, `roles.audit.export_max_rows` config; `access::audit` texts (en, ar); `AuditPolicy` on the action log model.
+- Entries now carry `subject_label` / `actor_label` snapshots (from the default-locale label, name or email; deletes label from the old values) and secrets are redacted before storage.
+- `audit-ready` doctor check also requires the label columns.
+
+### Changed
+- Requires `enadstack/laravel-action-logger` ^1.2 (publish and run its new migration).
+
 ## 2.0.0-alpha.9 — 2026-10-10
 
 ### Added

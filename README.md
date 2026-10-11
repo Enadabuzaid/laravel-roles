@@ -212,6 +212,11 @@ All paths are relative to `roles.routes.prefix` (default `api/access`) and run u
 | PUT/PATCH | `permissions/{permission}` | `access.permissions.sync` | Manual permissions only (registry ones are 409 `permission.registry_managed`). Lowering `risk` from `high` is refused with 409 `permission.in_use` while any role or user holds the permission, and is audited as a warning otherwise |
 | DELETE | `permissions/{permission}` | `access.permissions.sync` | Manual only, unheld only (409 `permission.in_use`); `confirmation` (exact name); 204 |
 | POST | `permissions/sync` | `access.permissions.sync` | `dry_run`, `prune`; returns a SyncResult; a dry run writes and audits nothing |
+| GET | `audit` | `access.audit.view` | Paginated audit entries, newest first (`created_at`, then `id`). Filters: `filter[module][]` (repeatable; whitelist `roles.audit.modules`, others ignored), `filter[severity]` (`info`/`warning`/`critical`), `filter[actor]` (user id, or `system`), `filter[subject]` (`user:<id>`, `role:<id>`, `permission:<id>`, `invitation:<id>`), `filter[user]` (subject OR actor is that user), `filter[event]` (exact key, e.g. `users.suspended`), `range` (`24h`, `7d`, `30d` default, `all`), `from` / `to` (`YYYY-MM-DD`, inclusive, win over `range`), `search` (event, subject label, actor label; literal LIKE), `page`, `per_page`. Garbage values are ignored, never an error. Rows: see AuditEntry |
+| GET | `audit/overview` | `access.audit.view` | `{total, by_severity, by_module, actors}` of the same filters minus `filter[severity]`, in one aggregate query |
+| GET | `audit/actors` | `access.audit.view` | Distinct actors of the same filters minus severity, most active first (max 50): `[{id, type, label, count}]`, the system actor is `{id: null, type: 'system'}` |
+| GET | `audit/export` | `access.audit.view` + `access.reports.export` | Streamed CSV of the same filters; see Audit export |
+| GET | `audit/{entry}` | `access.audit.view` | One entry with `changes`, redacted `meta` and `user_agent`; see AuditEntryDetail. Non numeric ids and unknown entries are 404 |
 | GET | `matrix` | `access.permissions.view` | Matrix payload |
 | PUT | `matrix` | `access.roles.update` | Atomic multi-role grant/revoke |
 
@@ -277,6 +282,29 @@ These flags are computed without per-role queries (one query for the current use
 
 All roles and permissions are scoped to `roles.guard`: rows of another guard are 404 on `{role}` / `{permission}` routes and never appear in lists, overviews, modules, the matrix or the access check.
 
+#### Audit payloads
+
+The audit API is read-only: only `GET` routes exist under `audit`. Values are redacted server side (keys of `roles.audit.redact`, default `action-logger.redact`, at any depth become `"[redacted]"`) in the list, the detail, `changes` and the CSV.
+
+**AuditEntry** (list row):
+```json
+{
+  "id": 41, "event": "users.suspended", "module": "users", "severity": "warning",
+  "created_at": "2026-10-11T09:30:00+00:00", "ip_address": "10.0.0.1", "request_id": "b2a1...",
+  "actor":   {"type": "user", "id": 1, "label": "Owner A", "exists": true},
+  "subject": {"type": "user", "id": 7, "label": "Target T", "exists": true},
+  "summary": {"key": "access.audit.events.users.suspended", "params": {"actor": "Owner A", "subject": "Target T", "reason": "Spam"}},
+  "changes_count": 1
+}
+```
+`actor.type` is `user`, `other` or `system` (`{id: null, label: null, exists: true}`); `subject.type` is `user`, `role`, `permission`, `invitation`, `other` or null (subject-less events and deleted subjects: the id and label snapshot stay, `exists` is false). `label` is the snapshot written with the entry (null for entries written before action-logger 1.2). `summary.key` is `access.audit.events.<event>` for the keys below and `access.audit.events.generic` (with `params.event`) otherwise; `params` hold `actor`, `subject` and, when present, `role`, `reason`, `count`, all strings. The package's own texts live in `access::audit.events.*` (en, ar).
+
+**AuditEntryDetail** = AuditEntry plus `changes: [{field, from, to, kind}]`, `meta` (redacted object or null) and `user_agent`. `changes` diffs top-level keys of `old_values` / `new_values`, sorted by field: `kind` is `added` (absent before), `removed` (absent after) or `changed`. A list of scalars (e.g. role permissions) is diffed as a set: `from` holds the removed items, `to` the added ones. A changed secret still appears as a change with both sides `"[redacted]"`.
+
+**AuditOverview**: `{total, by_severity: {info, warning, critical}, by_module: {<module>: n}, actors}`; `by_module` lists every module of `roles.audit.modules`; `actors` counts distinct actors plus one when any entry has no actor.
+
+**Audit export.** `GET audit/export` takes the same filters as `audit`. It answers `text/csv; charset=UTF-8` with a BOM (Excel and Arabic), RFC 4180 quoting, `Content-Disposition: attachment; filename="audit-<module|all>-<YYYYMMDD-HHmm>.csv"` (the module when exactly one `filter[module]` is set) and streams newest first in constant memory. Columns (headers translated in the request locale): `Time` (ISO 8601 UTC), `Actor`, `Module`, `Action` (the event key), `Summary` (translated server side), `Target`, `Severity`, `IP`, `Changes` (`field: from → to; ...`, redacted). Every cell starting with `=`, `+`, `-`, `@`, TAB or CR is prefixed with `'` so spreadsheets read it as text. More than `roles.audit.export_max_rows` (default 50000) matching rows answers 422 `export.too_large` with `errors.count` and `errors.max`; the queued variant is a later phase. A successful export writes one `audit.exported` entry (`info`) whose `meta` holds the normalized `filters` and the `rows` count, never the rows, and the file never contains that entry.
+
 ### Error codes
 
 Errors are `{success: false, message, code, errors}`. `errors` is a field map for validation failures and an empty object otherwise.
@@ -319,6 +347,7 @@ Errors are `{success: false, message, code, errors}`. `errors` is a field map fo
 | `permission.conflicting_changes` | 422 | The same permission in `grant` and `revoke` |
 | `permission.registry_managed` | 409 | Editing or deleting a registry permission |
 | `permission.in_use` | 409 | Deleting a held permission, or lowering the risk of a held high-risk one |
+| `export.too_large` | 422 | The audit export matches more than `roles.audit.export_max_rows` rows; `errors.count` and `errors.max` |
 | `registry.invalid` | 422 | The registry file failed validation during `permissions/sync` |
 
 ### Invitations
@@ -361,7 +390,7 @@ With session authentication send the `X-XSRF-TOKEN` header (the value of the `XS
 
 ## Audit
 
-Writes go to `enadstack/laravel-action-logger` (^1.1), module `roles`, `permissions` or `users`. Each effective write is one entry; no-ops, refusals and rollbacks write none.
+Writes go to `enadstack/laravel-action-logger` (^1.2, snapshot labels and redaction before storage), module `roles`, `permissions` or `users`. Each effective write is one entry; no-ops, refusals and rollbacks write none.
 
 | Event | Module | Severity | Subject | When |
 | --- | --- | --- | --- | --- |
@@ -392,6 +421,7 @@ Writes go to `enadstack/laravel-action-logger` (^1.1), module `roles`, `permissi
 | `permissions.created` | permissions | `info` | the permission | |
 | `permissions.updated` | permissions | `info` (`warning` when a high risk was lowered) | the permission | Changed attributes only |
 | `permissions.deleted` | permissions | `warning` | none | `meta` holds `id` and `name` |
+| `audit.exported` | audit | `info` | none | `meta.filters`, `meta.rows`; one entry per CSV export |
 | `permissions.synced` | permissions | `info` (`warning` when permissions were deprecated or pruned) | none | A non-dry-run sync changed something; counts per change type plus names (capped at 200 per list) |
 
 Role write events (`roles.created`, `roles.updated`, `roles.trashed`, `roles.restored`, `roles.deleted`) are written once per effective change; a no-op update writes nothing. Moving `is_default` records `default_cleared_from` in `meta`.

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Enadstack\LaravelRoles;
 
+use Enadstack\ActionLogger\Models\ActionLog;
 use Enadstack\LaravelRoles\Support\Http\ApiExceptionRenderer;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\PasswordReset;
@@ -117,6 +118,7 @@ class RolesServiceProvider extends ServiceProvider
         Gate::policy((string) config('permission.models.role'), Roles\Policies\RolePolicy::class);
         Gate::policy(Users\Models\AccessInvitation::class, Users\Policies\InvitationPolicy::class);
         Gate::policy((string) config('permission.models.permission'), Core\Policies\PermissionPolicy::class);
+        Gate::policy(ActionLog::class, Audit\Policies\AuditPolicy::class);
 
         $userModel = (string) config('roles.user_model');
         if ($userModel !== '' && class_exists($userModel) && Gate::getPolicyFor($userModel) === null) {
@@ -131,6 +133,7 @@ class RolesServiceProvider extends ServiceProvider
                 Http\Support\RoutesRegistrar::register('invitations', __DIR__.'/Users/invitation-routes.php');
                 Http\Support\RoutesRegistrar::registerPublic('invitations', __DIR__.'/Users/public-routes.php');
             }
+            Http\Support\RoutesRegistrar::register('audit', __DIR__.'/Audit/routes.php');
         }
 
         if ($this->app->runningInConsole()) {

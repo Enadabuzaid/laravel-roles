@@ -91,3 +91,27 @@ it('captures the actor at record() time, not at commit time', function () {
 
     expect(ActionLog::sole()->actor_id)->toBe($actor->id);
 });
+
+it('snapshots subject and actor labels, preferring the default-locale label of translated models', function () {
+    $actor = makeUser('actor@example.test');
+    $role = makeRole('editor', [], ['label' => ['en' => 'Editors', 'ar' => 'المحررون']]);
+
+    app(ActorContext::class)->runAs($actor, fn () => app(AuditRecorder::class)->record('roles', 'updated', $role));
+
+    $log = ActionLog::sole();
+    expect($log->subject_label)->toBe('Editors')->and($log->actor_label)->toBe('A');
+});
+
+it('labels a deleted subject from its old values', function () {
+    app(AuditRecorder::class)->record('users', 'deleted', null, ['name' => 'Gone Person', 'email' => 'gone@example.test']);
+    app(AuditRecorder::class)->record('roles', 'deleted', null, ['label' => ['en' => 'Old role', 'ar' => 'x']]);
+
+    expect(ActionLog::query()->orderBy('id')->pluck('subject_label')->all())->toBe(['Gone Person', 'Old role']);
+});
+
+it('never stores secrets passed in values or meta', function () {
+    app(AuditRecorder::class)->record('users', 'updated', makeUser('s@example.test'), ['password' => 'a'], ['password' => 'b'], ['token_hash' => 'c']);
+
+    $log = ActionLog::sole();
+    expect($log->old_values)->toBe(['password' => '[redacted]'])->and($log->meta)->toBe(['token_hash' => '[redacted]']);
+});

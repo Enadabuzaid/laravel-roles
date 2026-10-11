@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Enadstack\ActionLogger\Models\ActionLog;
 use Enadstack\LaravelRoles\Guardrails\Guardrails;
 use Enadstack\LaravelRoles\Guardrails\Operation;
 use Enadstack\LaravelRoles\Models\Permission;
@@ -133,4 +134,42 @@ function createSessionsTable(): void
 function insertSession(string $id, ?int $userId): void
 {
     DB::table('sessions')->insert(['id' => $id, 'user_id' => $userId, 'payload' => 'x', 'last_activity' => time()]);
+}
+
+/**
+ * Writes one audit row directly (bypassing the recorder) with sensible defaults.
+ *
+ * @param  array<string, mixed>  $attributes
+ */
+function makeAuditEntry(array $attributes = []): ActionLog
+{
+    $log = new ActionLog;
+    $log->forceFill([
+        'event' => 'users.updated',
+        'module' => 'users',
+        'severity' => 'info',
+        'created_at' => now(),
+        'updated_at' => now(),
+        ...$attributes,
+    ])->save();
+
+    return $log;
+}
+
+/** A signed-in user holding exactly these package permissions. */
+function auditActor(array $permissions = ['access.audit.view'], string $email = 'auditor@example.test'): TestUser
+{
+    $user = makeUser($email);
+    $user->assignRole(makeRole('auditor-'.uniqid(), $permissions));
+
+    return $user;
+}
+
+/** An owner whose own setup entries are cleared, so a test sees only the rows it writes. */
+function auditOwner(string $email = 'owner@example.test'): TestUser
+{
+    $owner = makeOwner($email);
+    ActionLog::query()->delete();
+
+    return $owner;
 }

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "4d6327d0743de20e4f9c1db80da0f0af",
+    "content-hash": "73837084c763b565ac233873cf8cd99e",
     "packages": [
         {
             "name": "brick/math",
@@ -517,7 +517,7 @@
             "dist": {
                 "type": "path",
                 "url": "../laravel-action-logger",
-                "reference": "2b212ee81c88b7451aab73577d4471bb35605aef"
+                "reference": "c3810885284ca53515095a42e38dad2cb5e92458"
             },
             "require": {
                 "illuminate/contracts": "^11.0|^12.0|^13.0",

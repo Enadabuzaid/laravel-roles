@@ -40,7 +40,12 @@ return [
         'invitations' => true,
     ],
 
-    'audit' => ['enabled' => true],
+    'audit' => [
+        'enabled' => true,
+        'modules' => ['users', 'invitations', 'roles', 'permissions', 'auth', 'reports', 'audit'], // whitelist for filter[module]; others are ignored
+        'redact' => null, // null uses action-logger.redact; otherwise a list of keys shown as [redacted] on read
+        'export_max_rows' => 50000, // larger exports answer 422 export.too_large
+    ],
 
     'routes' => [
         'prefix' => 'api/access',

@@ -20,7 +20,7 @@ it('has an Arabic text for every English guardrail and error key', function (str
     };
 
     expect($keys($ar))->toEqualCanonicalizing($keys($en));
-})->with(['guardrail', 'errors', 'invitation', 'user', 'auth']);
+})->with(['guardrail', 'errors', 'invitation', 'user', 'auth', 'audit']);
 
 it('renders guardrail messages in the request locale', function (string $method, string $key): void {
     app()->setLocale('en');

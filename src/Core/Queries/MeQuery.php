@@ -14,7 +14,7 @@ final class MeQuery
     /**
      * What the current user may do with the package, for the UI to enable or hide controls.
      *
-     * @return array{permissions: list<string>, is_owner: bool, role_ids: list<int>, abilities: array{roles: array<string, bool>, permissions: array<string, bool>, matrix: array<string, bool>, users: array<string, bool>, invitations: array<string, bool>}}
+     * @return array{permissions: list<string>, is_owner: bool, role_ids: list<int>, abilities: array{roles: array<string, bool>, permissions: array<string, bool>, matrix: array<string, bool>, users: array<string, bool>, invitations: array<string, bool>, audit: array<string, bool>}}
      */
     public static function get(Request $request): array
     {
@@ -40,6 +40,8 @@ final class MeQuery
         sort($live);
         $usersOn = (bool) config('roles.modules.users');
         $invitationsOn = $usersOn && (bool) config('roles.modules.invitations');
+        $auditOn = (bool) config('roles.modules.audit');
+        $auditView = $auditOn && $gate->allows('access.audit.view');
         $can = static fn (bool $on, string $ability): bool => $on && $gate->allows($ability);
 
         return [
@@ -72,6 +74,10 @@ final class MeQuery
                     'view' => $can($invitationsOn, 'access.invitations.view'),
                     'create' => $can($invitationsOn, 'access.invitations.create'),
                     'revoke' => $can($invitationsOn, 'access.invitations.revoke'),
+                ],
+                'audit' => [
+                    'view' => $auditView,
+                    'export' => $auditView && $gate->allows('access.reports.export'),
                 ],
             ],
         ];

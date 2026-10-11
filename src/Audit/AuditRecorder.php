@@ -47,10 +47,64 @@ final class AuditRecorder
                     $meta === [] ? null : $meta,
                     module: $module,
                     severity: $severity->value,
+                    subjectLabel: $this->labelOf($subject) ?? $this->labelFromValues($old),
+                    actorLabel: $this->labelOf($actor),
                 );
             } catch (Throwable $e) {
                 report($e);
             }
         });
+    }
+
+    /** The human label snapshot of a model in the default locale: translated label, then name, then email. */
+    private function labelOf(?Model $model): ?string
+    {
+        if ($model === null) {
+            return null;
+        }
+
+        $candidates = [];
+
+        if (method_exists($model, 'translated') && is_array($model->getAttribute('label'))) {
+            $candidates[] = $model->translated('label', (string) config('roles.default_locale', 'en'));
+        }
+
+        $candidates[] = $model->getAttribute('name');
+        $candidates[] = $model->getAttribute('email');
+
+        return $this->firstString($candidates);
+    }
+
+    /**
+     * The label of a subject that is gone (deletes record no subject): from the values it had.
+     *
+     * @param  array<string, mixed>|null  $values
+     */
+    private function labelFromValues(?array $values): ?string
+    {
+        if ($values === null) {
+            return null;
+        }
+
+        $label = $values['label'] ?? null;
+        $locale = (string) config('roles.default_locale', 'en');
+
+        return $this->firstString([
+            is_array($label) ? ($label[$locale] ?? null) : $label,
+            $values['name'] ?? null,
+            $values['email'] ?? null,
+        ]);
+    }
+
+    /** @param  list<mixed>  $candidates */
+    private function firstString(array $candidates): ?string
+    {
+        foreach ($candidates as $candidate) {
+            if (is_string($candidate) && trim($candidate) !== '') {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 }

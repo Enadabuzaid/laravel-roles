@@ -90,3 +90,24 @@ it('uses a constant number of queries', function (): void {
 
     expect($count())->toBe($small);
 });
+
+it('reports the audit abilities exactly for owner, audit-only and export-only users', function (): void {
+    $owner = makeOwner();
+    $auditOnly = auditActor(['access.audit.view'], 'audit-only@example.test');
+    $exportOnly = auditActor(['access.reports.export', 'access.roles.view'], 'export-only@example.test');
+    $both = auditActor(['access.audit.view', 'access.reports.export'], 'both@example.test');
+
+    $abilities = fn ($user) => $this->actingAs($user)->getJson('/api/access/me')->assertOk()->json('data.abilities.audit');
+
+    expect($abilities($owner))->toBe(['view' => true, 'export' => true])
+        ->and($abilities($auditOnly))->toBe(['view' => true, 'export' => false])
+        ->and($abilities($exportOnly))->toBe(['view' => false, 'export' => false])
+        ->and($abilities($both))->toBe(['view' => true, 'export' => true]);
+});
+
+it('reports every audit ability false when the audit module is off', function (): void {
+    config(['roles.modules.audit' => false]);
+    $owner = makeOwner();
+
+    $this->actingAs($owner)->getJson('/api/access/me')->assertOk()->assertJsonPath('data.abilities.audit', ['view' => false, 'export' => false]);
+});

@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Schema;
 
 final class AuditReadyCheck implements Check
 {
-    private const REQUIRED_COLUMNS = ['module', 'severity', 'request_id'];
+    private const REQUIRED_COLUMNS = ['module', 'severity', 'request_id', 'subject_label', 'actor_label'];
 
     public function name(): string
     {
