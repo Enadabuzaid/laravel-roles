@@ -16,7 +16,6 @@ use Illuminate\Database\Eloquent\Scope;
 /** @implements Scope<Model> */
 final class TeamScope implements Scope
 {
-    /** @param  Builder<Model>  $builder */
     public function apply(Builder $builder, Model $model): void
     {
         if (! TeamContext::enabled()) {
