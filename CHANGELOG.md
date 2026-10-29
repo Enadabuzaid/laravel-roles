@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+- Spatie teams support: `roles:install --teams=1 --team-key=<column>`, `TeamContext` helper, `access.team` middleware, `roles.team_resolver`, team-scoped `Role` queries (current team + global roles), `roles:seed --team=`. Boost guideline in `resources/boost/guidelines/core.blade.php`.
+
+### Changed
+- `roles:doctor` config check now requires `roles.teams` and `permission.teams` to agree and the team column to exist, instead of failing whenever teams are on. Default (`teams=false`) behaves as before.
+
 ## 2.0.0-alpha.10 — 2026-10-11
 
 ### Added

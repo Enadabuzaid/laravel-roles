@@ -23,7 +23,7 @@ php artisan roles:seed               # default roles (owner, admin, manager, vie
 php artisan roles:owner you@example.com
 ```
 
-`roles:install` accepts `--force`. It also accepts `--teams=0` and `--id-type=int`, but any other value is rejected with a non-zero exit: teams, `uuid` and `ulid` keys are not supported in 2.0-alpha and arrive in a later phase. `roles:doctor` fails if `roles.teams` / `permission.teams` is enabled or `roles.id_type` is not `int`.
+`roles:install` accepts `--force`, `--teams=0|1` and `--team-key=<column>` (default `team_id`); `--id-type` must be `int` (uuid and ulid are not supported in 2.0-alpha). `roles:doctor` fails if `roles.teams` and `permission.teams` disagree, the team column is missing, or `roles.id_type` is not `int`.
 
 ### Migrations are published, not auto-loaded
 
@@ -51,7 +51,8 @@ class User extends Authenticatable implements AccessUser
 |---|---|---|
 | `user_model` | `App\Models\User` (`ROLES_USER_MODEL`) | User model; needs `HasAccess` + `AccessUser` |
 | `guard` | `web` (`ROLES_GUARD`) | Guard for roles and permissions |
-| `teams` | `false` | Multi-tenant roles (unsupported in 2.0-alpha; must stay `false`) |
+| `teams` | `false` | Multi-tenant roles; must match `permission.teams` (see Multi-tenant (teams)) |
+| `team_resolver` | `null` | Optional `callable(Request)` for the `access.team` middleware |
 | `id_type` | `int` | Must stay `int` in 2.0-alpha (`uuid` / `ulid` planned for a later phase) |
 | `super_role` | `owner` | Role that bypasses permission checks |
 | `default_locale` / `fallback_locale` / `locales` | `en` / `en` / `['en','ar']` | Label translations |
@@ -64,6 +65,20 @@ class User extends Authenticatable implements AccessUser
 | `pagination` | `default 15`, `max 100` | List defaults |
 | `default_roles` | owner, admin, manager, viewer | Seeded by `roles:seed` |
 | `doctor.checks` | 9 built-in checks (incl. `audit-ready`) | Classes implementing `Core\Doctor\Check` |
+
+## Multi-tenant (teams)
+
+Single database, one team per tenant (Spatie `teams`). Backward compatible: nothing changes unless you opt in.
+
+```bash
+php artisan roles:install --teams=1 --team-key=tenant_id   # sets permission.teams + roles.teams and the team key
+php artisan migrate                                         # Spatie migration adds tenant_id to roles and the pivots
+```
+
+- Set the tenant for the request from your own tenant middleware: `TeamContext::set($tenantId)` (`Enadstack\LaravelRoles\Support\TeamContext`), or add the `access.team` middleware (uses `roles.team_resolver`, else the authenticated user's team key attribute).
+- Roles with a null team key are global (platform `admin`); `Role` queries return the current team's roles plus global ones, never another team's. With no current team only global roles are visible.
+- Seed per tenant: `TeamContext::run($tenantId, fn () => app(SeedDefaultRoles::class)->handle())` or `php artisan roles:seed --team=<id>`.
+- Queues and commands do not inherit the team; wrap work in `TeamContext::run()`.
 
 ## Permission registry
 

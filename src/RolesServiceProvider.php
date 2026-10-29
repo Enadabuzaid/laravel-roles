@@ -90,6 +90,7 @@ class RolesServiceProvider extends ServiceProvider
     {
         $router = $this->app->make(Router::class);
         $router->aliasMiddleware('access', Http\Middleware\RequireAccess::class);
+        $router->aliasMiddleware('access.team', Http\Middleware\SetPermissionsTeam::class);
         $router->aliasMiddleware('access.active', Users\Http\Middleware\EnsureUserIsActive::class);
 
         $this->loadTranslationsFrom(__DIR__.'/../resources/lang', 'access');

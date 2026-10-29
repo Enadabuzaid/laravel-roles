@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Enadstack\LaravelRoles\Models;
 
 use Enadstack\LaravelRoles\Concerns\HasTranslations;
+use Enadstack\LaravelRoles\Models\Scopes\TeamScope;
+use Enadstack\LaravelRoles\Support\TeamContext;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Permission\Models\Role as SpatieRole;
@@ -17,6 +19,17 @@ class Role extends SpatieRole
 {
     use HasTranslations;
     use SoftDeletes;
+
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new TeamScope);
+
+        static::creating(function (self $role): void {
+            if (TeamContext::enabled() && ! array_key_exists(TeamContext::key(), $role->getAttributes())) {
+                $role->setAttribute(TeamContext::key(), TeamContext::get());
+            }
+        });
+    }
 
     /** @return array<string, string> */
     protected function casts(): array

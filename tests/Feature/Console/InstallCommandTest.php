@@ -44,9 +44,37 @@ it('rejects unsupported teams and id-type options with a clear error and publish
         @unlink($config);
     }
 })->with([
-    'teams 1' => ['--teams=1', 'not supported in 2.0-alpha'],
-    'teams true' => ['--teams=true', 'not supported in 2.0-alpha'],
+    'bad team key' => ['--teams=1 --team-key=Tenant-Id', 'snake_case'],
     'uuid' => ['--id-type=uuid', 'not supported in 2.0-alpha'],
     'ulid' => ['--id-type=ulid', 'not supported in 2.0-alpha'],
     'garbage id type' => ['--id-type=banana', 'not supported in 2.0-alpha'],
 ]);
+
+it('enables teams in both configs with a custom team key', function () {
+    $config = config_path('roles.php');
+    $spatieConfig = config_path('permission.php');
+    $hadSpatieConfig = file_exists($spatieConfig);
+    $originalSpatieConfig = $hadSpatieConfig ? file_get_contents($spatieConfig) : null;
+    $migrations = glob(database_path('migrations/*_create_permission_tables.php')) ?: [];
+    @unlink($config);
+
+    try {
+        $this->artisan('roles:install --teams=1 --team-key=tenant_id --no-interaction')->assertExitCode(0);
+
+        expect(file_get_contents($config))->toContain("'teams' => true,")
+            ->and(file_get_contents($spatieConfig))->toContain("'teams' => true")->toContain("'team_foreign_key' => 'tenant_id'");
+    } finally {
+        @unlink($config);
+        @unlink(base_path('access/permissions.php'));
+        if ($originalSpatieConfig === null) {
+            @unlink($spatieConfig);
+        } else {
+            file_put_contents($spatieConfig, $originalSpatieConfig);
+        }
+        foreach (glob(database_path('migrations/*_create_permission_tables.php')) ?: [] as $file) {
+            if (! in_array($file, $migrations, true)) {
+                @unlink($file);
+            }
+        }
+    }
+});

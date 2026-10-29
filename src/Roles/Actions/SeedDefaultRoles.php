@@ -7,6 +7,7 @@ namespace Enadstack\LaravelRoles\Roles\Actions;
 use Enadstack\LaravelRoles\Audit\AuditRecorder;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Support\Action;
+use Enadstack\LaravelRoles\Support\TeamContext;
 use Illuminate\Support\Collection;
 
 final class SeedDefaultRoles extends Action
@@ -32,10 +33,20 @@ final class SeedDefaultRoles extends Action
                     continue;
                 }
 
-                $role = Role::withTrashed()->where('name', $name)->where('guard_name', $guard)->first();
+                $role = Role::withTrashed()->where('name', $name)->where('guard_name', $guard)
+                    ->when(TeamContext::enabled(), fn ($query) => $query->where(
+                        (new Role)->qualifyColumn(TeamContext::key()),
+                        TeamContext::get(),
+                    ))
+                    ->first();
 
                 if ($role === null) {
-                    $role = Role::query()->create(['name' => $name, 'guard_name' => $guard, ...$template]);
+                    $role = Role::query()->create([
+                        'name' => $name,
+                        'guard_name' => $guard,
+                        ...(TeamContext::enabled() ? [TeamContext::key() => TeamContext::get()] : []),
+                        ...$template,
+                    ]);
                     $created[] = $name;
                 } elseif ($role->trashed()) {
                     $role->restore();

@@ -26,7 +26,8 @@ use Enadstack\LaravelRoles\Guardrails\Rules\TargetAboveActorRule;
 return [
     'user_model' => env('ROLES_USER_MODEL', 'App\\Models\\User'),
     'guard' => env('ROLES_GUARD', 'web'),
-    'teams' => false, // unsupported in 2.0-alpha: must stay false (doctor fails otherwise)
+    'teams' => false, // multi-tenant roles: keep in sync with permission.teams (roles:install --teams=1 sets both)
+    'team_resolver' => null, // optional callable(Request): int|string|null used by the `access.team` middleware; default reads the user's team key attribute
     'id_type' => 'int', // unsupported in 2.0-alpha: must stay int (uuid | ulid planned)
     'super_role' => 'owner',
 

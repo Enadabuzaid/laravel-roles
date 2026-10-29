@@ -93,8 +93,8 @@ it('fails the config consistency check for teams and non-int id types', function
 
     expect($result->status)->toBe(CheckStatus::Fail)->and($result->message)->toContain(explode('.', $key)[1]);
 })->with([
-    'roles.teams' => ['roles.teams', true],
-    'permission.teams' => ['permission.teams', true],
+    'roles.teams without permission.teams' => ['roles.teams', true],
+    'permission.teams without roles.teams' => ['permission.teams', true],
     'uuid' => ['roles.id_type', 'uuid'],
     'ulid' => ['roles.id_type', 'ulid'],
 ]);
