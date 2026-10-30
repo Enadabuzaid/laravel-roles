@@ -7,6 +7,7 @@ namespace Enadstack\LaravelRoles\Roles\Http\Resources;
 use Enadstack\LaravelRoles\Models\Role;
 use Enadstack\LaravelRoles\Roles\Support\ActorRoles;
 use Enadstack\LaravelRoles\Roles\Support\RoleRisk;
+use Enadstack\LaravelRoles\Support\TeamContext;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Gate;
@@ -30,6 +31,7 @@ final class RoleResource extends JsonResource
             'is_system' => $role->is_system,
             'is_default' => $role->getAttribute('is_default'),
             'sort_order' => $role->getAttribute('sort_order'),
+            'team_id' => $this->when(TeamContext::enabled(), fn (): int|string|null => $role->getAttribute(TeamContext::key())),
             'members_count' => $this->when($role->getAttribute('members_count') !== null, fn (): int => (int) $role->getAttribute('members_count')),
             'permissions_count' => $this->when($role->getAttribute('permissions_count') !== null, fn (): int => (int) $role->getAttribute('permissions_count')),
             'permissions' => $this->whenLoaded('permissions', fn (): array => $role->permissions->map(fn ($permission): array => [

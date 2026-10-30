@@ -75,3 +75,32 @@ it('keeps teams off by default', function () {
     expect(TeamContext::enabled())->toBeFalse()
         ->and(app(ConfigConsistencyCheck::class)->run()->status)->toBe(CheckStatus::Pass);
 });
+
+it('sends team_id on roles over the API: null for global, the id for a tenant role, no other tenant', function () {
+    Role::create(['name' => 'platform', 'guard_name' => 'web']);
+    TeamContext::run(2, fn () => Role::create(['name' => 'other-cashier', 'guard_name' => 'web']));
+    TeamContext::set(1);
+    $viewer = makeRole('viewer', ['access.roles.view']);
+    makeRole('cashier');
+    $user = makeUser();
+    $user->assignRole($viewer);
+
+    $rows = collect($this->actingAs($user)->getJson('/api/access/roles?per_page=50')->assertOk()->json('data'))->pluck('team_id', 'name');
+
+    expect($rows->has('other-cashier'))->toBeFalse()
+        ->and($rows['platform'])->toBeNull()
+        ->and($rows['cashier'])->toBe(1)
+        ->and($rows['viewer'])->toBe(1)
+        ->and($rows->has('platform'))->toBeTrue();
+});
+
+it('omits team_id from role responses when teams are off', function () {
+    TeamContext::set(1);
+    $user = makeUser();
+    $user->assignRole(makeRole('viewer', ['access.roles.view']));
+    config(['permission.teams' => false, 'roles.teams' => false]);
+
+    $row = collect($this->actingAs($user)->getJson('/api/access/roles')->assertOk()->json('data'))->firstWhere('name', 'viewer');
+
+    expect($row)->not->toHaveKey('team_id');
+});

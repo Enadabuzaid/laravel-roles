@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
+- `RoleResource` sends `team_id` (read from the configured team key, `null` for a global role) when teams are on; the key is absent when teams are off. No existing key changed.
 - Spatie teams support: `roles:install --teams=1 --team-key=<column>`, `TeamContext` helper, `access.team` middleware, `roles.team_resolver`, team-scoped `Role` queries (current team + global roles), `roles:seed --team=`. Boost guideline in `resources/boost/guidelines/core.blade.php`.
 
 ### Changed

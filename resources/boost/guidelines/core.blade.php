@@ -12,5 +12,6 @@ Roles, permissions, guardrails and an audit API on top of spatie/laravel-permiss
 - Enable with `php artisan roles:install --teams=1 --team-key=tenant_id` (sets `permission.teams` and `roles.teams`, key = `permission.team_foreign_key`), then migrate. `roles:doctor` verifies both flags and the column.
 - Set the tenant per request: `Enadstack\LaravelRoles\Support\TeamContext::set($tenantId)` from your tenant middleware, or use the `access.team` alias (reads `roles.team_resolver` or the user's team key attribute).
 - Roles with a null team key are global (platform admin); `Role` queries show the current team's roles plus global ones, never another team's.
+- The roles API sends `team_id` per role (`null` = global) only while teams are on; UIs use it for the Global/tenant badge.
 - Seed per tenant: `TeamContext::run($tenantId, fn () => app(SeedDefaultRoles::class)->handle())` or `php artisan roles:seed --team=<id>`.
 - In queues and commands the team is not carried over: wrap the work in `TeamContext::run()`.
